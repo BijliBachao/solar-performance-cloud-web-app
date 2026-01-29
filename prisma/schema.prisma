@@ -1,0 +1,157 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model users {
+  id              String         @id
+  clerk_user_id   String         @unique @db.VarChar(50)
+  organization_id String?        @db.VarChar(50)
+  email           String         @db.VarChar(255)
+  first_name      String?        @db.VarChar(50)
+  last_name       String?        @db.VarChar(50)
+  role            String         @default("ORG_USER") @db.VarChar(20)
+  status          String         @default("PENDING_ASSIGNMENT") @db.VarChar(20)
+  last_login_at   DateTime?
+  created_at      DateTime       @default(now())
+  updated_at      DateTime       @updatedAt
+  organizations   organizations? @relation(fields: [organization_id], references: [id])
+
+  @@index([clerk_user_id])
+  @@index([email])
+  @@index([organization_id, role])
+}
+
+model organizations {
+  id                String              @id
+  name              String              @db.VarChar(100)
+  email             String?             @db.VarChar(255)
+  phone             String?             @db.VarChar(20)
+  address           String?
+  status            String              @default("ACTIVE") @db.VarChar(20)
+  created_at        DateTime            @default(now())
+  updated_at        DateTime            @updatedAt
+  users             users[]
+  plant_assignments plant_assignments[]
+
+  @@index([status])
+}
+
+model plants {
+  id                String              @id
+  plant_name        String              @db.VarChar(255)
+  capacity_kw       Decimal?            @db.Decimal(10, 2)
+  address           String?
+  latitude          Decimal?            @db.Decimal(10, 6)
+  longitude         Decimal?            @db.Decimal(10, 6)
+  health_state      Int?
+  last_synced       DateTime?
+  created_at        DateTime            @default(now())
+  updated_at        DateTime            @updatedAt
+  devices           devices[]
+  plant_assignments plant_assignments[]
+
+  @@index([health_state])
+}
+
+model plant_assignments {
+  id              String        @id @default(uuid())
+  plant_id        String        @db.VarChar(50)
+  organization_id String        @db.VarChar(50)
+  assigned_at     DateTime      @default(now())
+  assigned_by     String?       @db.VarChar(50)
+  plants          plants        @relation(fields: [plant_id], references: [id])
+  organizations   organizations @relation(fields: [organization_id], references: [id])
+
+  @@unique([plant_id, organization_id])
+  @@index([organization_id])
+  @@index([plant_id])
+}
+
+model devices {
+  id                  String                @id
+  plant_id            String                @db.VarChar(50)
+  device_name         String?               @db.VarChar(255)
+  device_type_id      Int
+  model               String?               @db.VarChar(100)
+  max_strings         Int?
+  last_synced         DateTime?
+  created_at          DateTime              @default(now())
+  plants              plants                @relation(fields: [plant_id], references: [id])
+  string_measurements string_measurements[]
+
+  @@index([plant_id])
+  @@index([device_type_id])
+}
+
+model string_measurements {
+  id            Int      @id @default(autoincrement())
+  device_id     String   @db.VarChar(50)
+  plant_id      String   @db.VarChar(50)
+  timestamp     DateTime @default(now())
+  string_number Int
+  voltage       Decimal? @db.Decimal(10, 2)
+  current       Decimal? @db.Decimal(10, 3)
+  power         Decimal? @db.Decimal(10, 2)
+  devices       devices  @relation(fields: [device_id], references: [id])
+
+  @@index([device_id, timestamp(sort: Desc)])
+  @@index([plant_id, timestamp(sort: Desc)])
+  @@index([device_id, string_number, timestamp(sort: Desc)])
+}
+
+model string_hourly {
+  id            String   @id @default(uuid())
+  device_id     String   @db.VarChar(50)
+  plant_id      String   @db.VarChar(50)
+  hour          DateTime @db.Timestamp(6)
+  string_number Int
+  avg_voltage   Decimal? @db.Decimal(10, 2)
+  avg_current   Decimal? @db.Decimal(10, 3)
+  avg_power     Decimal? @db.Decimal(10, 2)
+  min_current   Decimal? @db.Decimal(10, 3)
+  max_current   Decimal? @db.Decimal(10, 3)
+
+  @@unique([device_id, string_number, hour])
+  @@index([plant_id, hour(sort: Desc)])
+}
+
+model string_daily {
+  id            String   @id @default(uuid())
+  device_id     String   @db.VarChar(50)
+  plant_id      String   @db.VarChar(50)
+  date          DateTime @db.Date
+  string_number Int
+  avg_voltage   Decimal? @db.Decimal(10, 2)
+  avg_current   Decimal? @db.Decimal(10, 3)
+  avg_power     Decimal? @db.Decimal(10, 2)
+  min_current   Decimal? @db.Decimal(10, 3)
+  max_current   Decimal? @db.Decimal(10, 3)
+  health_score  Decimal? @db.Decimal(5, 2)
+
+  @@unique([device_id, string_number, date])
+  @@index([plant_id, date(sort: Desc)])
+}
+
+model alerts {
+  id             Int       @id @default(autoincrement())
+  device_id      String    @db.VarChar(50)
+  plant_id       String    @db.VarChar(50)
+  string_number  Int
+  severity       String    @db.VarChar(20)
+  message        String
+  expected_value Decimal?  @db.Decimal(10, 3)
+  actual_value   Decimal?  @db.Decimal(10, 3)
+  gap_percent    Decimal?  @db.Decimal(5, 1)
+  created_at     DateTime  @default(now())
+  resolved_at    DateTime?
+  resolved_by    String?   @db.VarChar(50)
+
+  @@index([plant_id, severity])
+  @@index([plant_id, created_at(sort: Desc)])
+  @@index([resolved_at])
+}
