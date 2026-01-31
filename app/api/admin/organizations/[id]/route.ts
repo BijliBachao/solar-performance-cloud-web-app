@@ -82,6 +82,31 @@ export async function DELETE(
     const userContext = await getUserFromRequest()
     requireRole(userContext, ['SUPER_ADMIN'])
 
+    const org = await prisma.organizations.findUnique({
+      where: { id: params.id },
+      include: {
+        _count: { select: { users: true, plant_assignments: true } },
+      },
+    })
+
+    if (!org) {
+      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+    }
+
+    if (org._count.users > 0) {
+      return NextResponse.json(
+        { error: `Cannot delete: ${org._count.users} user${org._count.users !== 1 ? 's' : ''} still assigned. Remove all users first.` },
+        { status: 400 }
+      )
+    }
+
+    if (org._count.plant_assignments > 0) {
+      return NextResponse.json(
+        { error: `Cannot delete: ${org._count.plant_assignments} plant${org._count.plant_assignments !== 1 ? 's' : ''} still assigned. Unassign all plants first.` },
+        { status: 400 }
+      )
+    }
+
     await prisma.organizations.update({
       where: { id: params.id },
       data: { status: 'INACTIVE' },

@@ -5,7 +5,11 @@ import { prisma } from '@/lib/prisma'
 export async function GET(request: NextRequest) {
   try {
     const userContext = await getUserFromRequest()
-    requireOrganization(userContext)
+
+    // SUPER_ADMIN can access any alerts; org users need org check
+    if (userContext.role !== 'SUPER_ADMIN') {
+      requireOrganization(userContext)
+    }
 
     const searchParams = request.nextUrl.searchParams
     const severity = searchParams.get('severity')

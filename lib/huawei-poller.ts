@@ -233,7 +233,7 @@ async function generateAlerts(
 
   if (avgCurrent <= 0) return
 
-  for (const measurement of measurements) {
+  for (const measurement of activeStrings) {
     const current = Number(measurement.current)
     const gapPercent = ((avgCurrent - current) / avgCurrent) * 100
 

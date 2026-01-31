@@ -8,9 +8,10 @@ export async function GET(
 ) {
   try {
     const userContext = await getUserFromRequest()
-    requireOrganization(userContext)
 
+    // SUPER_ADMIN can access any plant; org users need assignment check
     if (userContext.role !== 'SUPER_ADMIN') {
+      requireOrganization(userContext)
       const assignment = await prisma.plant_assignments.findFirst({
         where: {
           plant_id: params.code,

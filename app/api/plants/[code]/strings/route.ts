@@ -8,10 +8,10 @@ export async function GET(
 ) {
   try {
     const userContext = await getUserFromRequest()
-    requireOrganization(userContext)
 
-    // Verify access
+    // SUPER_ADMIN can access any plant; org users need assignment check
     if (userContext.role !== 'SUPER_ADMIN') {
+      requireOrganization(userContext)
       const assignment = await prisma.plant_assignments.findFirst({
         where: {
           plant_id: params.code,
@@ -50,23 +50,32 @@ export async function GET(
               activeStrings.length
             : 0
 
+        // Return ALL strings; mark inactive ones as OFFLINE
         const strings = latestMeasurements.map((m) => {
           const current = Number(m.current)
-          const gapPercent =
-            avgCurrent > 0
-              ? ((avgCurrent - current) / avgCurrent) * 100
-              : 0
+          const voltage = Number(m.voltage)
+          const isActive = current > 0.1
 
-          let status: 'OK' | 'WARNING' | 'CRITICAL' = 'OK'
-          if (gapPercent > 50) status = 'CRITICAL'
-          else if (gapPercent > 25) status = 'WARNING'
+          // Gap is only meaningful for active strings
+          const gapPercent = isActive && avgCurrent > 0
+            ? ((avgCurrent - current) / avgCurrent) * 100
+            : 0
+
+          let status: 'OK' | 'WARNING' | 'CRITICAL' | 'OFFLINE' = 'OK'
+          if (!isActive) {
+            status = 'OFFLINE'
+          } else if (gapPercent > 50) {
+            status = 'CRITICAL'
+          } else if (gapPercent > 25) {
+            status = 'WARNING'
+          }
 
           return {
             string_number: m.string_number,
-            voltage: Number(m.voltage),
+            voltage,
             current,
             power: Number(m.power),
-            gap_percent: Math.round(gapPercent * 10) / 10,
+            gap_percent: isActive ? Math.round(gapPercent * 10) / 10 : 0,
             status,
           }
         })

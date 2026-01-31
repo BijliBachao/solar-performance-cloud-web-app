@@ -38,7 +38,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen bg-gray-50">
       <Sidebar role="admin" />
       <div className="ml-64">
-        <TopBar title="Admin Dashboard" />
+        <TopBar />
         <main>{children}</main>
       </div>
     </div>

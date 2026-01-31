@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils'
 
 interface StatusBadgeProps {
-  status: 'OK' | 'WARNING' | 'CRITICAL' | 'DISCONNECTED'
+  status: 'OK' | 'WARNING' | 'CRITICAL' | 'DISCONNECTED' | 'OFFLINE'
 }
 
 const statusConfig = {
@@ -9,6 +9,7 @@ const statusConfig = {
   WARNING: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Warning' },
   CRITICAL: { bg: 'bg-red-100', text: 'text-red-700', label: 'Critical' },
   DISCONNECTED: { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Disconnected' },
+  OFFLINE: { bg: 'bg-gray-100', text: 'text-gray-500', label: 'Offline' },
 }
 
 export function StatusBadge({ status }: StatusBadgeProps) {

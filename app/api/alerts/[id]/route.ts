@@ -8,7 +8,6 @@ export async function PATCH(
 ) {
   try {
     const userContext = await getUserFromRequest()
-    requireOrganization(userContext)
 
     const alertId = parseInt(params.id)
     if (isNaN(alertId)) {
@@ -23,8 +22,9 @@ export async function PATCH(
       return NextResponse.json({ error: 'Alert not found' }, { status: 404 })
     }
 
-    // Verify access
+    // Verify access - SUPER_ADMIN can resolve any alert
     if (userContext.role !== 'SUPER_ADMIN') {
+      requireOrganization(userContext)
       const assignment = await prisma.plant_assignments.findFirst({
         where: {
           plant_id: alert.plant_id,

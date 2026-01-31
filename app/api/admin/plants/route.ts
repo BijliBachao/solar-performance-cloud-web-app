@@ -1,13 +1,23 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest, requireRole, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const userContext = await getUserFromRequest()
     requireRole(userContext, ['SUPER_ADMIN'])
 
+    const searchParams = request.nextUrl.searchParams
+    const search = searchParams.get('search') || ''
+    const status = searchParams.get('status') || 'ALL'
+
+    const where: any = {}
+    if (search) {
+      where.plant_name = { contains: search, mode: 'insensitive' }
+    }
+
     const plants = await prisma.plants.findMany({
+      where,
       include: {
         plant_assignments: {
           include: {
@@ -25,7 +35,24 @@ export async function GET() {
       device_count: p._count.devices,
     }))
 
-    return NextResponse.json({ plants: formatted })
+    // Filter by assignment status after formatting
+    const filtered = status === 'ALL'
+      ? formatted
+      : status === 'ASSIGNED'
+        ? formatted.filter(p => p.assigned_org !== null)
+        : formatted.filter(p => p.assigned_org === null)
+
+    // Stats from full dataset (before status filter)
+    const stats = {
+      total: formatted.length,
+      assigned: formatted.filter(p => p.assigned_org !== null).length,
+      unassigned: formatted.filter(p => p.assigned_org === null).length,
+      healthy: formatted.filter(p => p.health_state === 3).length,
+      faulty: formatted.filter(p => p.health_state === 2).length,
+      disconnected: formatted.filter(p => p.health_state !== 3 && p.health_state !== 2).length,
+    }
+
+    return NextResponse.json({ plants: filtered, stats })
   } catch (error) {
     if (error instanceof ApiAuthError) return createErrorResponse(error)
     console.error('[Admin Plants GET]', error)

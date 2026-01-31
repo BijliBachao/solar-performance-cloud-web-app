@@ -8,18 +8,19 @@ export async function GET(
 ) {
   try {
     const userContext = await getUserFromRequest()
-    requireOrganization(userContext)
 
-    // Verify plant is assigned to user's org
-    const assignment = await prisma.plant_assignments.findFirst({
-      where: {
-        plant_id: params.code,
-        organization_id: userContext.organizationId!,
-      },
-    })
-
-    if (!assignment && userContext.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Plant not found or not assigned' }, { status: 404 })
+    // SUPER_ADMIN can access any plant; org users need assignment check
+    if (userContext.role !== 'SUPER_ADMIN') {
+      requireOrganization(userContext)
+      const assignment = await prisma.plant_assignments.findFirst({
+        where: {
+          plant_id: params.code,
+          organization_id: userContext.organizationId!,
+        },
+      })
+      if (!assignment) {
+        return NextResponse.json({ error: 'Plant not found or not assigned' }, { status: 404 })
+      }
     }
 
     const plant = await prisma.plants.findUnique({
