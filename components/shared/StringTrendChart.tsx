@@ -32,9 +32,9 @@ export function StringTrendChart({ data }: StringTrendChartProps) {
   if (!data || data.length === 0) return null
 
   // Get unique string numbers
-  const stringNumbers = Array.from(
-    new Set(data.flatMap((d) => d.strings.map((s) => s.string_number)))
-  ).sort((a, b) => a - b)
+  const stringNumbers = [
+    ...new Set(data.flatMap((d) => d.strings.map((s) => s.string_number))),
+  ].sort((a, b) => a - b)
 
   // Transform data for Recharts
   const chartData = data.map((point) => {
