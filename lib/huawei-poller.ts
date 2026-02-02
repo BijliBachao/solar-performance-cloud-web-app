@@ -23,7 +23,10 @@ export async function pollAll(): Promise<void> {
       lastDeviceSync = now
     }
 
-    // Step 3: Fetch real-time string data (every poll)
+    // Step 3: Update plant health state (every poll)
+    await syncPlantHealth()
+
+    // Step 4: Fetch real-time string data (every poll)
     await fetchStringData()
 
     console.log('[Poller] Poll cycle complete.')
@@ -62,6 +65,24 @@ async function syncPlants(): Promise<void> {
   }
 
   console.log(`[Poller] Synced ${plants.length} plants`)
+}
+
+async function syncPlantHealth(): Promise<void> {
+  const plants = await prisma.plants.findMany({ select: { id: true } })
+  const plantCodes = plants.map((p) => p.id)
+  if (plantCodes.length === 0) return
+
+  try {
+    const kpis = await huaweiClient.getPlantRealKpi(plantCodes)
+    for (const kpi of kpis) {
+      await prisma.plants.update({
+        where: { id: kpi.stationCode },
+        data: { health_state: kpi.healthState },
+      })
+    }
+  } catch (error) {
+    console.error('[Poller] Failed to sync plant health:', error)
+  }
 }
 
 async function syncDevices(): Promise<void> {

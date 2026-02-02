@@ -290,6 +290,21 @@ class HuaweiClient {
     }))
   }
 
+  async getPlantRealKpi(stationCodes: string[]): Promise<Array<{ stationCode: string; healthState: number; dayPower: number; totalPower: number }>> {
+    const data = await this.request(
+      '/thirdData/getStationRealKpi',
+      { stationCodes: stationCodes.join(',') },
+      `plantKpi_${stationCodes.sort().join(',')}`,
+      5 * 60 * 1000 // 5 min cache
+    )
+    return (data || []).map((p: any) => ({
+      stationCode: p.stationCode,
+      healthState: p.dataItemMap?.real_health_state ?? null,
+      dayPower: p.dataItemMap?.day_power ?? 0,
+      totalPower: p.dataItemMap?.total_power ?? 0,
+    }))
+  }
+
   async getActiveAlarms(stationCodes: string[]): Promise<Alarm[]> {
     const data = await this.request('/thirdData/getAlarmList', {
       stationCodes: stationCodes.join(','),
