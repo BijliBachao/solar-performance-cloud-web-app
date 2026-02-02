@@ -20,6 +20,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <ClerkProvider
       appearance={clerkAppearance}
       telemetry={false}
+      standardBrowser={true}
+      touchSession={false}
       signInUrl="/sign-in"
       signUpUrl="/sign-up"
       afterSignUpUrl="/auth-redirect"
