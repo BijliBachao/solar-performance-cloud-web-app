@@ -8,7 +8,7 @@ export default function SignUpPage() {
           Solar Performance Cloud
         </h1>
         <p className="text-gray-600 mb-6">Create your account</p>
-        <SignUp afterSignUpUrl="/pending-assignment" signInUrl="/sign-in" />
+        <SignUp afterSignUpUrl="/auth-redirect" signInUrl="/sign-in" />
       </div>
     </div>
   )
