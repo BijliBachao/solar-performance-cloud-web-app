@@ -1,3 +1,5 @@
+'use client'
+
 import { SignIn } from '@clerk/nextjs'
 
 export default function SignInPage() {
@@ -8,7 +10,12 @@ export default function SignInPage() {
           Solar Performance Cloud
         </h1>
         <p className="text-gray-600 mb-6">Sign in to your account</p>
-        <SignIn afterSignInUrl="/auth-redirect" signUpUrl="/sign-up" />
+        <SignIn
+          afterSignInUrl="/auth-redirect"
+          signUpUrl="/sign-up"
+          routing="path"
+          path="/sign-in"
+        />
       </div>
     </div>
   )

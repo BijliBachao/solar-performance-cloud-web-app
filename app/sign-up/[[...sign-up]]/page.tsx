@@ -1,4 +1,4 @@
-import { SignUp } from '@clerk/nextjs'
+import ClientSignUp from './client-page'
 
 export default function SignUpPage() {
   return (
@@ -8,7 +8,7 @@ export default function SignUpPage() {
           Solar Performance Cloud
         </h1>
         <p className="text-gray-600 mb-6">Create your account</p>
-        <SignUp afterSignUpUrl="/auth-redirect" signInUrl="/sign-in" />
+        <ClientSignUp />
       </div>
     </div>
   )
