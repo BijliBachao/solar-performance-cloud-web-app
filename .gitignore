@@ -26,8 +26,9 @@ yarn-error.log*
 .env*.local
 .env
 
-# credentials
+# credentials & deployment (contains tokens, passwords, API keys)
 CREDENTIALS.md
+deploy-to-ec2.sh
 
 # vercel
 .vercel

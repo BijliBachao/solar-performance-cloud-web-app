@@ -9,7 +9,7 @@ import { CurrentDeviationChart } from '@/components/shared/CurrentDeviationChart
 import { StringComparisonTable } from '@/components/shared/StringComparisonTable'
 import { StringTrendChart } from '@/components/shared/StringTrendChart'
 import { AlertPanel } from '@/components/shared/AlertPanel'
-import { MonthlyHealthReport } from '@/components/shared/MonthlyHealthReport'
+import { MonthlyHealthReport, MonthlyHealthData } from '@/components/shared/MonthlyHealthReport'
 import { FaultDiagnosisPanel } from '@/components/shared/FaultDiagnosisPanel'
 import {
   Activity, AlertTriangle, TrendingUp, CalendarDays,
@@ -37,12 +37,17 @@ interface AlertData {
   gap_percent?: number | null
 }
 
-interface MonthlyHealthData {
-  string_number: number
-  avg_health_score: number
-  avg_current: number
-  days_critical: number
-  days_warning: number
+interface MonthlyHealthResponse {
+  month: string
+  device_id: string
+  inverter_avg_current: number
+  data: MonthlyHealthData[]
+  summary: {
+    healthy_strings: number
+    warning_strings: number
+    critical_strings: number
+    offline_strings: number
+  }
 }
 
 interface DeviceInfo {
@@ -145,7 +150,7 @@ export function InverterDetailSection({
 
   const [trendPeriod, setTrendPeriod] = useState<TrendPeriod>('24h')
   const [trendData, setTrendData] = useState<any[]>(dummyTrendData || [])
-  const [monthlyHealth, setMonthlyHealth] = useState<MonthlyHealthData[]>([])
+  const [monthlyHealth, setMonthlyHealth] = useState<MonthlyHealthResponse | null>(null)
 
   // ─── Derived Data ──────────────────────────────────────────
 
@@ -226,55 +231,14 @@ export function InverterDetailSection({
   const fetchMonthly = useCallback(async () => {
     if (dummyTrendData) return
     try {
-      const now = new Date()
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
       const res = await fetch(
-        `/api/plants/${plantCode}/history?period=daily&from=${monthStart.toISOString()}&to=${now.toISOString()}&device_id=${device.id}`,
+        `/api/plants/${plantCode}/monthly-health?device_id=${device.id}`,
         { credentials: 'include' }
       )
       if (!res.ok) return
 
-      const data = await res.json()
-      if (!data.data || data.data.length === 0) return
-
-      const stringMap = new Map<number, {
-        healthScores: number[]
-        currents: number[]
-        daysCritical: Set<string>
-        daysWarning: Set<string>
-      }>()
-
-      for (const row of data.data) {
-        const sn = row.string_number
-        if (!stringMap.has(sn)) {
-          stringMap.set(sn, { healthScores: [], currents: [], daysCritical: new Set(), daysWarning: new Set() })
-        }
-        const entry = stringMap.get(sn)!
-        if (row.health_score != null) entry.healthScores.push(Number(row.health_score))
-        if (row.avg_current != null) entry.currents.push(Number(row.avg_current))
-
-        const dateKey = String(row.date)
-        const hs = Number(row.health_score || 100)
-        if (hs < 50) entry.daysCritical.add(dateKey)
-        else if (hs < 75) entry.daysWarning.add(dateKey)
-      }
-
-      const monthly: MonthlyHealthData[] = []
-      stringMap.forEach((val, sn) => {
-        monthly.push({
-          string_number: sn,
-          avg_health_score: val.healthScores.length > 0
-            ? val.healthScores.reduce((a, b) => a + b, 0) / val.healthScores.length
-            : 100,
-          avg_current: val.currents.length > 0
-            ? val.currents.reduce((a, b) => a + b, 0) / val.currents.length
-            : 0,
-          days_critical: val.daysCritical.size,
-          days_warning: val.daysWarning.size,
-        })
-      })
-      monthly.sort((a, b) => a.string_number - b.string_number)
-      setMonthlyHealth(monthly)
+      const data: MonthlyHealthResponse = await res.json()
+      setMonthlyHealth(data)
     } catch { /* silent */ }
   }, [plantCode, device.id, dummyTrendData])
 
@@ -381,23 +345,48 @@ export function InverterDetailSection({
                 </span>
               )}
             </div>
+            {/* Status Legend */}
+            <div className="mb-3 p-2.5 bg-gray-50 rounded-lg border border-gray-100">
+              <p className="text-[10px] font-medium text-gray-500 mb-1.5">Status Guide</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-gray-600">
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <span><strong>OK</strong> — Normal</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                  <span><strong>Warning</strong> — 25-50% below avg</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                  <span><strong>Critical</strong> — &gt;50% below avg</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-gray-300"></span>
+                  <span><strong>Offline</strong> — No current (&lt;0.1A)</span>
+                </span>
+              </div>
+            </div>
             <div className="overflow-x-auto">
               <StringComparisonTable strings={strings} />
             </div>
           </div>
         )}
 
-        {/* ── Current Deviation Chart ──────────────────────────── */}
+        {/* ── Performance vs Average Chart ─────────────────────── */}
         {strings.length > 0 && (
           <div className="py-4 border-t border-gray-100">
             <div className="flex items-center justify-between mb-1">
               <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                Current Deviation from Average
+                Performance vs Average
               </h4>
               <span className="text-[10px] text-gray-400">
                 Avg: {avgCurrent.toFixed(2)}A
               </span>
             </div>
+            <p className="text-[10px] text-gray-400 mb-2">
+              Positive (+) = above average, Negative (-) = below average
+            </p>
             <CurrentDeviationChart strings={strings} avgCurrent={avgCurrent} />
           </div>
         )}
@@ -469,8 +458,11 @@ export function InverterDetailSection({
           title="Monthly Health Report"
           icon={CalendarDays}
         >
-          {monthlyHealth.length > 0 ? (
-            <MonthlyHealthReport data={monthlyHealth} />
+          {monthlyHealth && monthlyHealth.data.length > 0 ? (
+            <MonthlyHealthReport
+              data={monthlyHealth.data}
+              inverterAvgCurrent={monthlyHealth.inverter_avg_current}
+            />
           ) : (
             <div className="text-center py-6 text-gray-400">
               <CalendarDays className="w-5 h-5 mx-auto mb-1.5 text-gray-300" />

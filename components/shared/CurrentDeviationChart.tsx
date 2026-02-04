@@ -24,24 +24,26 @@ interface CurrentDeviationChartProps {
   avgCurrent: number
 }
 
-function getDeviationColor(deviation: number): string {
-  if (deviation >= 0) return '#10b981' // emerald-500
-  if (deviation > -10) return '#10b981' // still fine
-  if (deviation > -25) return '#f59e0b' // amber-500
-  if (deviation > -50) return '#f97316' // orange-500
-  return '#ef4444' // red-500
+function getPerformanceColor(performance: number): string {
+  // Positive = above average (good), Negative = below average (bad)
+  if (performance >= 0) return '#10b981' // emerald-500 - above avg
+  if (performance > -10) return '#22c55e' // green-500 - slightly below, still ok
+  if (performance > -25) return '#f59e0b' // amber-500 - warning zone
+  if (performance > -50) return '#f97316' // orange-500 - concerning
+  return '#ef4444' // red-500 - critical
 }
 
 export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationChartProps) {
-  // Only chart active strings — OFFLINE strings have no meaningful deviation
+  // Only chart active strings — OFFLINE strings have no meaningful data
   const activeStrings = strings.filter(s => s.status !== 'OFFLINE')
   const data = activeStrings.map((s) => {
-    const deviation = avgCurrent > 0
+    // Performance: positive = above average (good), negative = below average (bad)
+    const performance = avgCurrent > 0
       ? ((s.current - avgCurrent) / avgCurrent) * 100
       : 0
     return {
       name: `PV${s.string_number}`,
-      deviation: Number(deviation.toFixed(1)),
+      performance: Number(performance.toFixed(1)),
       current: s.current,
       avg: avgCurrent,
       status: s.status,
@@ -78,12 +80,13 @@ export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationC
             }}
             formatter={(value: number, _name: string, props: any) => {
               const entry = props.payload
+              const label = value >= 0 ? 'Above avg' : 'Below avg'
               return [
                 <span key="val">
                   <strong>{value > 0 ? '+' : ''}{value}%</strong>
-                  {' '} ({entry.current.toFixed(2)}A vs {entry.avg.toFixed(2)}A avg)
+                  {' '}({label}) — {entry.current.toFixed(2)}A vs {entry.avg.toFixed(2)}A avg
                 </span>,
-                'Deviation',
+                'Performance',
               ]
             }}
           />
@@ -99,14 +102,14 @@ export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationC
             }}
           />
           <Bar
-            dataKey="deviation"
+            dataKey="performance"
             radius={[4, 4, 4, 4]}
             maxBarSize={40}
           >
             {data.map((entry, index) => (
               <Cell
                 key={`cell-${index}`}
-                fill={getDeviationColor(entry.deviation)}
+                fill={getPerformanceColor(entry.performance)}
               />
             ))}
           </Bar>
