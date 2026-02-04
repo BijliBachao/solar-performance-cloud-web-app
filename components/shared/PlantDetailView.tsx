@@ -3,10 +3,12 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { PlantHeader } from '@/components/shared/PlantHeader'
 import { InverterDetailSection } from '@/components/shared/InverterDetailSection'
+import { AlertHistoryLog } from '@/components/shared/AlertHistoryLog'
 import {
-  Loader2, AlertTriangle, RefreshCw, ArrowLeft, Activity,
+  Loader2, AlertTriangle, RefreshCw, ArrowLeft, Activity, ClipboardList,
 } from 'lucide-react'
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -214,36 +216,63 @@ export function PlantDetailView({
         onRefresh={handleRefresh}
       />
 
-      <div className="px-4 sm:px-6 py-5 space-y-5 max-w-[1400px] mx-auto">
-        {/* Per-Inverter Sections */}
-        {plant.devices.map((device, index) => {
-          const deviceStrings = stringData.find(d => d.device_id === device.id)?.strings || []
-          const deviceAlerts = alerts
-            .filter(a => a.device_id === device.id)
-            .map(a => ({ ...a, device_name: device.device_name || device.id }))
+      <div className="px-4 sm:px-6 py-5 max-w-[1400px] mx-auto">
+        <Tabs defaultValue="overview" className="w-full">
+          <TabsList className="mb-5">
+            <TabsTrigger value="overview" className="flex items-center gap-1.5">
+              <Activity className="w-4 h-4" />
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center gap-1.5">
+              <ClipboardList className="w-4 h-4" />
+              Alert History
+            </TabsTrigger>
+          </TabsList>
 
-          return (
-            <InverterDetailSection
-              key={device.id}
-              device={device}
-              strings={deviceStrings}
-              alerts={deviceAlerts}
-              plantCode={plantCode}
-              showResolveAlerts={showResolveAlerts}
-              onResolveAlert={handleResolveAlert}
-              colorIndex={index}
-            />
-          )
-        })}
+          {/* Overview Tab - Existing Content */}
+          <TabsContent value="overview" className="space-y-5">
+            {/* Per-Inverter Sections */}
+            {plant.devices.map((device, index) => {
+              const deviceStrings = stringData.find(d => d.device_id === device.id)?.strings || []
+              const deviceAlerts = alerts
+                .filter(a => a.device_id === device.id)
+                .map(a => ({ ...a, device_name: device.device_name || device.id }))
 
-        {/* Empty state if no inverters */}
-        {plant.devices.length === 0 && (
-          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-            <Activity className="w-8 h-8 text-gray-300 mx-auto mb-3" />
-            <p className="text-sm text-gray-500">No inverters found for this plant.</p>
-            <p className="text-xs text-gray-400 mt-1">Devices will appear once the poller syncs from SmartPVMS.</p>
-          </div>
-        )}
+              return (
+                <InverterDetailSection
+                  key={device.id}
+                  device={device}
+                  strings={deviceStrings}
+                  alerts={deviceAlerts}
+                  plantCode={plantCode}
+                  showResolveAlerts={showResolveAlerts}
+                  onResolveAlert={handleResolveAlert}
+                  colorIndex={index}
+                />
+              )
+            })}
+
+            {/* Empty state if no inverters */}
+            {plant.devices.length === 0 && (
+              <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+                <Activity className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+                <p className="text-sm text-gray-500">No inverters found for this plant.</p>
+                <p className="text-xs text-gray-400 mt-1">Devices will appear once the poller syncs from SmartPVMS.</p>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Alert History Tab */}
+          <TabsContent value="history">
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Alert History</h2>
+              <AlertHistoryLog
+                plantId={plantCode}
+                showResolveButton={showResolveAlerts}
+              />
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )
