@@ -53,6 +53,7 @@ export async function GET() {
       plant_name: pa.plants.plant_name,
       capacity_kw: pa.plants.capacity_kw,
       health_state: pa.plants.health_state,
+      provider: pa.plants.provider,
       device_count: pa.plants._count.devices,
       alert_count: alertCountMap.get(pa.plant_id) || 0,
     }))

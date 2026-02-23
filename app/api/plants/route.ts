@@ -26,6 +26,7 @@ export async function GET() {
       latitude: pa.plants.latitude,
       longitude: pa.plants.longitude,
       health_state: pa.plants.health_state,
+      provider: pa.plants.provider,
       last_synced: pa.plants.last_synced,
       device_count: pa.plants._count.devices,
     }))

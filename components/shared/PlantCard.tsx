@@ -11,8 +11,14 @@ interface PlantCardProps {
     health_state: number | null
     device_count: number
     alert_count: number
+    provider?: string
   }
   basePath?: string
+}
+
+const providerBadge: Record<string, { label: string; className: string }> = {
+  huawei: { label: 'Huawei', className: 'bg-blue-50 text-blue-700 border-blue-200' },
+  solis: { label: 'Solis', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
 }
 
 const healthColors: Record<number, string> = {
@@ -37,7 +43,17 @@ export function PlantCard({ plant, basePath = '/dashboard/plants' }: PlantCardPr
     >
       <div className="flex items-start justify-between mb-4">
         <div>
-          <h3 className="font-semibold text-gray-900">{plant.plant_name}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-gray-900">{plant.plant_name}</h3>
+            {plant.provider && providerBadge[plant.provider] && (
+              <span className={cn(
+                'inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded border',
+                providerBadge[plant.provider].className
+              )}>
+                {providerBadge[plant.provider].label}
+              </span>
+            )}
+          </div>
           {plant.capacity_kw && (
             <span className="inline-flex items-center mt-1 text-xs font-medium text-primary-700 bg-primary-50 px-2 py-0.5 rounded-full">
               {Number(plant.capacity_kw).toFixed(1)} kW

@@ -8,7 +8,7 @@ import { Zap, AlertTriangle, Activity, Clock } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
 interface DashboardData {
-  plants: Array<{ id: string; plant_name: string; capacity_kw: number | null; health_state: number | null; device_count: number; alert_count: number }>
+  plants: Array<{ id: string; plant_name: string; capacity_kw: number | null; health_state: number | null; provider?: string; device_count: number; alert_count: number }>
   stats: { totalPlants: number; activeAlerts: number; avgStringHealth: number; lastUpdate: string | null }
   recentAlerts: any[]
 }

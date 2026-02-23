@@ -153,7 +153,7 @@ export default function LandingPage() {
           <div className="flex items-center justify-center gap-6 text-sm text-gray-500">
             <div className="flex items-center gap-2">
               <Shield className="w-4 h-4 text-orange-500" />
-              <span>Huawei SmartPVMS</span>
+              <span>Huawei &amp; SolisCloud</span>
             </div>
             <div className="flex items-center gap-2">
               <Activity className="w-4 h-4 text-orange-500" />
@@ -258,7 +258,7 @@ export default function LandingPage() {
               {
                 icon: BarChart3,
                 title: 'Real-time Monitoring',
-                description: 'Track PV string voltage, current, and power every 5 minutes from Huawei SmartPVMS.',
+                description: 'Track PV string voltage, current, and power every 5 minutes from Huawei and SolisCloud inverters.',
                 color: 'orange',
               },
               {
@@ -322,7 +322,7 @@ export default function LandingPage() {
                 step: '01',
                 icon: Eye,
                 title: 'Connect',
-                description: 'We connect to your Huawei FusionSolar / SmartPVMS account. No hardware needed.',
+                description: 'We connect to your Huawei FusionSolar or SolisCloud account. No hardware needed.',
               },
               {
                 step: '02',

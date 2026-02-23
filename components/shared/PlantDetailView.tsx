@@ -19,6 +19,7 @@ interface PlantData {
   capacity_kw: number | null
   address: string | null
   health_state: number | null
+  provider?: string
   last_synced: string | null
   devices: Array<{
     id: string
@@ -207,6 +208,7 @@ export function PlantDetailView({
         address={plant.address}
         deviceCount={plant.devices.length}
         lastSynced={plant.last_synced}
+        provider={plant.provider}
         stringSummary={stringSummary}
         backPath={backPath}
         backLabel={backLabel}
@@ -257,7 +259,7 @@ export function PlantDetailView({
               <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
                 <Activity className="w-8 h-8 text-gray-300 mx-auto mb-3" />
                 <p className="text-sm text-gray-500">No inverters found for this plant.</p>
-                <p className="text-xs text-gray-400 mt-1">Devices will appear once the poller syncs from SmartPVMS.</p>
+                <p className="text-xs text-gray-400 mt-1">Devices will appear once the poller syncs from your inverter provider.</p>
               </div>
             )}
           </TabsContent>

@@ -7,6 +7,16 @@ import {
   ArrowLeft, Zap, MapPin, Activity, Clock, Cpu, RefreshCw,
 } from 'lucide-react'
 
+const providerLabels: Record<string, string> = {
+  huawei: 'Huawei FusionSolar',
+  solis: 'SolisCloud',
+}
+
+const providerColors: Record<string, string> = {
+  huawei: 'bg-blue-50 text-blue-700 border-blue-200',
+  solis: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+}
+
 interface PlantHeaderProps {
   plantName: string
   healthState: number | null
@@ -14,6 +24,7 @@ interface PlantHeaderProps {
   address: string | null
   deviceCount: number
   lastSynced: string | null
+  provider?: string
   stringSummary: { total: number; ok: number; warning: number; critical: number }
   backPath: string
   backLabel: string
@@ -30,6 +41,7 @@ export function PlantHeader({
   address,
   deviceCount,
   lastSynced,
+  provider,
   stringSummary,
   backPath,
   backLabel,
@@ -69,6 +81,11 @@ export function PlantHeader({
             <Zap className="w-5 h-5 text-yellow-500 flex-shrink-0" />
             <h1 className="text-lg font-semibold text-gray-900 truncate">{plantName}</h1>
             <Badge variant={health.variant}>{health.label}</Badge>
+            {provider && providerLabels[provider] && (
+              <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded border ${providerColors[provider] || ''}`}>
+                {providerLabels[provider]}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button

@@ -49,6 +49,7 @@ model plants {
   latitude          Decimal?            @db.Decimal(10, 6)
   longitude         Decimal?            @db.Decimal(10, 6)
   health_state      Int?
+  provider          String              @default("huawei") @db.VarChar(20)
   last_synced       DateTime?
   created_at        DateTime            @default(now())
   updated_at        DateTime            @updatedAt
@@ -56,6 +57,7 @@ model plants {
   plant_assignments plant_assignments[]
 
   @@index([health_state])
+  @@index([provider])
 }
 
 model plant_assignments {
@@ -79,6 +81,7 @@ model devices {
   device_type_id      Int
   model               String?               @db.VarChar(100)
   max_strings         Int?
+  provider            String                @default("huawei") @db.VarChar(20)
   last_synced         DateTime?
   created_at          DateTime              @default(now())
   plants              plants                @relation(fields: [plant_id], references: [id])
@@ -86,6 +89,7 @@ model devices {
 
   @@index([plant_id])
   @@index([device_type_id])
+  @@index([provider])
 }
 
 model string_measurements {

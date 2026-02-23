@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest, requireOrganization, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
+import { INVERTER_DEVICE_TYPE_IDS } from '@/lib/constants'
 
 export async function GET(
   request: NextRequest,
@@ -24,7 +25,7 @@ export async function GET(
     }
 
     const devices = await prisma.devices.findMany({
-      where: { plant_id: params.code, device_type_id: { in: [1, 38] } },
+      where: { plant_id: params.code, device_type_id: { in: INVERTER_DEVICE_TYPE_IDS } },
       select: { id: true, device_name: true, max_strings: true },
     })
 

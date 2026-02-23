@@ -3,12 +3,27 @@ import dotenv from 'dotenv'
 
 dotenv.config()
 
-async function main() {
-  const { pollAll } = await import('../lib/huawei-poller')
+async function pollAll() {
+  const { pollHuawei } = await import('../lib/huawei-poller')
+  const { pollSolis } = await import('../lib/solis-poller')
 
-  console.log('[Poller] Starting Huawei API poller...')
+  const results = await Promise.allSettled([
+    pollHuawei(),
+    pollSolis(),
+  ])
+
+  results.forEach((r, i) => {
+    const name = ['Huawei', 'Solis'][i]
+    if (r.status === 'rejected') console.error(`[${name}] Poll failed:`, r.reason)
+    else console.log(`[${name}] Poll complete`)
+  })
+}
+
+async function main() {
+  console.log('[Poller] Starting multi-provider poller...')
   console.log(`[Poller] Database URL: ${process.env.DATABASE_URL ? 'SET' : 'NOT SET'}`)
   console.log(`[Poller] Huawei API URL: ${process.env.HUAWEI_API_URL || 'NOT SET'}`)
+  console.log(`[Poller] Solis API ID: ${process.env.SOLIS_API_ID ? 'SET' : 'NOT SET'}`)
 
   // Run immediately on start
   try {

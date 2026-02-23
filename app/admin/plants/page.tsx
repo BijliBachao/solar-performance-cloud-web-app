@@ -24,9 +24,15 @@ interface Plant {
   plant_name: string
   capacity_kw: number | null
   health_state: number | null
+  provider?: string
   last_synced: string | null
   assigned_org: { id: string; name: string } | null
   device_count: number
+}
+
+const providerLabel: Record<string, { text: string; className: string }> = {
+  huawei: { text: 'Huawei', className: 'bg-blue-50 text-blue-700 border-blue-200' },
+  solis: { text: 'Solis', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
 }
 
 interface Organization {
@@ -318,6 +324,11 @@ export default function AdminPlantsPage() {
                           <div className="font-medium text-gray-900 text-sm flex items-center gap-1.5">
                             <Zap className="w-3.5 h-3.5 text-yellow-500 shrink-0" />
                             {plant.plant_name}
+                            {plant.provider && providerLabel[plant.provider] && (
+                              <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded border ${providerLabel[plant.provider].className}`}>
+                                {providerLabel[plant.provider].text}
+                              </span>
+                            )}
                           </div>
                           <div className="sm:hidden text-xs text-gray-500 mt-0.5">
                             {plant.capacity_kw ? `${Number(plant.capacity_kw).toFixed(1)} kW` : 'N/A'}

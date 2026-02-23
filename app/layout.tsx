@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'Solar Performance Cloud - Bijli Bachao',
-  description: 'PV String Monitoring Dashboard for Huawei SmartPVMS',
+  description: 'PV String Monitoring Dashboard for Huawei and SolisCloud inverters',
 }
 
 export default function RootLayout({
