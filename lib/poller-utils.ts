@@ -16,15 +16,26 @@ export async function generateAlerts(
   )
   if (activeStrings.length < 2) return
 
-  const avgCurrent =
-    activeStrings.reduce((sum, m) => sum + Number(m.current), 0) /
-    activeStrings.length
+  const totalCurrent = activeStrings.reduce((sum, m) => sum + Number(m.current), 0)
 
-  if (avgCurrent <= 0) return
+  // Skip alert generation during low-light conditions (Fix #18)
+  const avgCurrentAll = totalCurrent / activeStrings.length
+  if (avgCurrentAll < 1) return
+
+  // Build a map of string_number -> current severity for this cycle
+  const currentSeverities = new Map<number, { severity: string; gapPercent: number }>()
 
   for (const measurement of activeStrings) {
     const current = Number(measurement.current)
-    const gapPercent = ((avgCurrent - current) / avgCurrent) * 100
+    // Compute average EXCLUDING the string being tested (Fix #13)
+    const othersTotal = totalCurrent - current
+    const othersCount = activeStrings.length - 1
+    if (othersCount <= 0) continue
+    const othersAvg = othersTotal / othersCount
+
+    if (othersAvg <= 0) continue
+
+    const gapPercent = ((othersAvg - current) / othersAvg) * 100
 
     let severity: string | null = null
     if (gapPercent > 50) severity = 'CRITICAL'
@@ -32,218 +43,245 @@ export async function generateAlerts(
     else if (gapPercent > 10) severity = 'INFO'
 
     if (severity) {
-      const existingAlert = await prisma.alerts.findFirst({
-        where: {
-          device_id: deviceId,
-          string_number: measurement.string_number,
-          severity,
-          resolved_at: null,
-        },
-      })
-
-      if (!existingAlert) {
-        await prisma.alerts.create({
-          data: {
-            device_id: deviceId,
-            plant_id: plantId,
-            string_number: measurement.string_number,
-            severity,
-            message: `String ${measurement.string_number} is ${gapPercent.toFixed(1)}% below average`,
-            expected_value: new Decimal(avgCurrent.toFixed(3)),
-            actual_value: measurement.current,
-            gap_percent: new Decimal(gapPercent.toFixed(1)),
-          },
-        })
-      }
+      currentSeverities.set(measurement.string_number, { severity, gapPercent })
     }
   }
+
+  // Fetch all open alerts for this device
+  const openAlerts = await prisma.alerts.findMany({
+    where: {
+      device_id: deviceId,
+      resolved_at: null,
+    },
+  })
+
+  // Track which string+severity combos need a new alert
+  const resolvedSet = new Set<string>() // "stringNumber:severity" keys that were resolved
+
+  // Resolve alerts for strings that have recovered or changed severity
+  for (const alert of openAlerts) {
+    const currentState = currentSeverities.get(alert.string_number)
+    if (!currentState || currentState.severity !== alert.severity) {
+      // String recovered (gap < 10%) or severity changed — resolve
+      await prisma.alerts.update({
+        where: { id: alert.id },
+        data: { resolved_at: new Date() },
+      })
+      resolvedSet.add(`${alert.string_number}:${alert.severity}`)
+    }
+  }
+
+  // Create new alerts where needed
+  for (const measurement of activeStrings) {
+    const currentState = currentSeverities.get(measurement.string_number)
+    if (!currentState) continue
+
+    // Skip if an open alert with the same severity already exists and wasn't resolved
+    const alreadyOpen = openAlerts.some(
+      (a) =>
+        a.string_number === measurement.string_number &&
+        a.severity === currentState.severity &&
+        !resolvedSet.has(`${a.string_number}:${a.severity}`)
+    )
+    if (alreadyOpen) continue
+
+    const current = Number(measurement.current)
+    const othersTotal = totalCurrent - current
+    const othersCount = activeStrings.length - 1
+    const othersAvg = othersTotal / othersCount
+
+    await prisma.alerts.create({
+      data: {
+        device_id: deviceId,
+        plant_id: plantId,
+        string_number: measurement.string_number,
+        severity: currentState.severity,
+        message: `String ${measurement.string_number} is ${currentState.gapPercent.toFixed(1)}% below average`,
+        expected_value: new Decimal(othersAvg.toFixed(3)),
+        actual_value: measurement.current,
+        gap_percent: new Decimal(currentState.gapPercent.toFixed(1)),
+      },
+    })
+  }
 }
+
+// Pakistan timezone offset (UTC+5)
+const PKT_OFFSET_MS = 5 * 60 * 60 * 1000
+
+function getPKTHourStart(): Date {
+  const nowPKT = new Date(Date.now() + PKT_OFFSET_MS)
+  const hourStart = new Date(Date.UTC(
+    nowPKT.getUTCFullYear(),
+    nowPKT.getUTCMonth(),
+    nowPKT.getUTCDate(),
+    nowPKT.getUTCHours(),
+    0, 0, 0
+  ))
+  // Convert back to UTC for DB query
+  hourStart.setTime(hourStart.getTime() - PKT_OFFSET_MS)
+  return hourStart
+}
+
+function getPKTDayStart(): Date {
+  const nowPKT = new Date(Date.now() + PKT_OFFSET_MS)
+  const dayStart = new Date(Date.UTC(
+    nowPKT.getUTCFullYear(),
+    nowPKT.getUTCMonth(),
+    nowPKT.getUTCDate(),
+    0, 0, 0, 0
+  ))
+  // Convert back to UTC for DB query
+  dayStart.setTime(dayStart.getTime() - PKT_OFFSET_MS)
+  return dayStart
+}
+
+const avg = (arr: number[]) =>
+  arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
+
+const safeMin = (arr: number[]) =>
+  arr.length > 0 ? arr.reduce((a, b) => Math.min(a, b), Infinity) : null
+
+const safeMax = (arr: number[]) =>
+  arr.length > 0 ? arr.reduce((a, b) => Math.max(a, b), -Infinity) : null
 
 export async function updateHourlyAggregates(
   deviceId: string,
   plantId: string,
-  maxStrings: number
+  _maxStrings: number
 ): Promise<void> {
-  const now = new Date()
-  const hourStart = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    now.getHours(),
-    0,
-    0,
-    0
-  )
+  const hourStart = getPKTHourStart()
 
-  for (let s = 1; s <= maxStrings; s++) {
-    const measurements = await prisma.string_measurements.findMany({
-      where: {
-        device_id: deviceId,
-        string_number: s,
-        timestamp: { gte: hourStart },
-      },
-      select: { voltage: true, current: true, power: true },
-    })
+  // Fetch ALL measurements for this device in one query
+  const allMeasurements = await prisma.string_measurements.findMany({
+    where: {
+      device_id: deviceId,
+      timestamp: { gte: hourStart },
+    },
+    select: { string_number: true, voltage: true, current: true, power: true },
+  })
 
-    if (measurements.length === 0) continue
+  if (allMeasurements.length === 0) return
 
-    const voltages = measurements
-      .map((m) => Number(m.voltage))
-      .filter((v) => v > 0)
-    const currents = measurements
-      .map((m) => Number(m.current))
-      .filter((c) => c > 0)
-    const powers = measurements
-      .map((m) => Number(m.power))
-      .filter((p) => p > 0)
-
-    const avg = (arr: number[]) =>
-      arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
-
-    await prisma.string_hourly.upsert({
-      where: {
-        device_id_string_number_hour: {
-          device_id: deviceId,
-          string_number: s,
-          hour: hourStart,
-        },
-      },
-      update: {
-        avg_voltage: new Decimal(avg(voltages).toFixed(2)),
-        avg_current: new Decimal(avg(currents).toFixed(3)),
-        avg_power: new Decimal(avg(powers).toFixed(2)),
-        min_current:
-          currents.length > 0
-            ? new Decimal(Math.min(...currents).toFixed(3))
-            : null,
-        max_current:
-          currents.length > 0
-            ? new Decimal(Math.max(...currents).toFixed(3))
-            : null,
-      },
-      create: {
-        device_id: deviceId,
-        plant_id: plantId,
-        string_number: s,
-        hour: hourStart,
-        avg_voltage: new Decimal(avg(voltages).toFixed(2)),
-        avg_current: new Decimal(avg(currents).toFixed(3)),
-        avg_power: new Decimal(avg(powers).toFixed(2)),
-        min_current:
-          currents.length > 0
-            ? new Decimal(Math.min(...currents).toFixed(3))
-            : null,
-        max_current:
-          currents.length > 0
-            ? new Decimal(Math.max(...currents).toFixed(3))
-            : null,
-      },
-    })
+  // Group by string_number
+  const byString = new Map<number, typeof allMeasurements>()
+  for (const m of allMeasurements) {
+    const group = byString.get(m.string_number) || []
+    group.push(m)
+    byString.set(m.string_number, group)
   }
+
+  // Batch upserts
+  const upserts = []
+  for (const [stringNumber, measurements] of byString) {
+    const voltages = measurements.map((m) => Number(m.voltage)).filter((v) => v > 0)
+    const currents = measurements.map((m) => Number(m.current)).filter((c) => c > 0)
+    const powers = measurements.map((m) => Number(m.power)).filter((p) => p > 0)
+
+    const data = {
+      avg_voltage: new Decimal(avg(voltages).toFixed(2)),
+      avg_current: new Decimal(avg(currents).toFixed(3)),
+      avg_power: new Decimal(avg(powers).toFixed(2)),
+      min_current: safeMin(currents) !== null ? new Decimal(safeMin(currents)!.toFixed(3)) : null,
+      max_current: safeMax(currents) !== null ? new Decimal(safeMax(currents)!.toFixed(3)) : null,
+    }
+
+    upserts.push(
+      prisma.string_hourly.upsert({
+        where: {
+          device_id_string_number_hour: {
+            device_id: deviceId,
+            string_number: stringNumber,
+            hour: hourStart,
+          },
+        },
+        update: data,
+        create: {
+          device_id: deviceId,
+          plant_id: plantId,
+          string_number: stringNumber,
+          hour: hourStart,
+          ...data,
+        },
+      })
+    )
+  }
+
+  await prisma.$transaction(upserts)
 }
 
 export async function updateDailyAggregates(
   deviceId: string,
   plantId: string,
-  maxStrings: number
+  _maxStrings: number
 ): Promise<void> {
-  const now = new Date()
-  const dayStart = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    0,
-    0,
-    0,
-    0
-  )
+  const dayStart = getPKTDayStart()
 
-  const allDeviceMeasurements = await prisma.string_measurements.findMany({
+  // Fetch ALL measurements for this device today in one query
+  const allMeasurements = await prisma.string_measurements.findMany({
     where: {
       device_id: deviceId,
       timestamp: { gte: dayStart },
-      current: { gt: 0 },
     },
-    select: { current: true },
+    select: { string_number: true, voltage: true, current: true, power: true },
   })
 
-  const inverterAvgCurrent =
-    allDeviceMeasurements.length > 0
-      ? allDeviceMeasurements.reduce((sum, m) => sum + Number(m.current), 0) /
-        allDeviceMeasurements.length
-      : 0
+  if (allMeasurements.length === 0) return
 
-  for (let s = 1; s <= maxStrings; s++) {
-    const measurements = await prisma.string_measurements.findMany({
-      where: {
-        device_id: deviceId,
-        string_number: s,
-        timestamp: { gte: dayStart },
-      },
-      select: { voltage: true, current: true, power: true },
-    })
+  // Compute inverter-wide average current (for health score)
+  const allCurrents = allMeasurements
+    .map((m) => Number(m.current))
+    .filter((c) => c > 0)
+  const inverterAvgCurrent = avg(allCurrents)
 
-    if (measurements.length === 0) continue
+  // Group by string_number
+  const byString = new Map<number, typeof allMeasurements>()
+  for (const m of allMeasurements) {
+    const group = byString.get(m.string_number) || []
+    group.push(m)
+    byString.set(m.string_number, group)
+  }
 
-    const voltages = measurements
-      .map((m) => Number(m.voltage))
-      .filter((v) => v > 0)
-    const currents = measurements
-      .map((m) => Number(m.current))
-      .filter((c) => c > 0)
-    const powers = measurements
-      .map((m) => Number(m.power))
-      .filter((p) => p > 0)
-
-    const avg = (arr: number[]) =>
-      arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
+  // Batch upserts
+  const upserts = []
+  for (const [stringNumber, measurements] of byString) {
+    const voltages = measurements.map((m) => Number(m.voltage)).filter((v) => v > 0)
+    const currents = measurements.map((m) => Number(m.current)).filter((c) => c > 0)
+    const powers = measurements.map((m) => Number(m.power)).filter((p) => p > 0)
 
     const stringAvgCurrent = avg(currents)
-    const healthScore =
-      inverterAvgCurrent > 0
-        ? (stringAvgCurrent / inverterAvgCurrent) * 100
-        : 100
+    const healthScore = inverterAvgCurrent > 0
+      ? Math.min((stringAvgCurrent / inverterAvgCurrent) * 100, 100)
+      : 100
 
-    await prisma.string_daily.upsert({
-      where: {
-        device_id_string_number_date: {
-          device_id: deviceId,
-          string_number: s,
-          date: dayStart,
+    const data = {
+      avg_voltage: new Decimal(avg(voltages).toFixed(2)),
+      avg_current: new Decimal(avg(currents).toFixed(3)),
+      avg_power: new Decimal(avg(powers).toFixed(2)),
+      min_current: safeMin(currents) !== null ? new Decimal(safeMin(currents)!.toFixed(3)) : null,
+      max_current: safeMax(currents) !== null ? new Decimal(safeMax(currents)!.toFixed(3)) : null,
+      health_score: new Decimal(healthScore.toFixed(2)),
+    }
+
+    upserts.push(
+      prisma.string_daily.upsert({
+        where: {
+          device_id_string_number_date: {
+            device_id: deviceId,
+            string_number: stringNumber,
+            date: dayStart,
+          },
         },
-      },
-      update: {
-        avg_voltage: new Decimal(avg(voltages).toFixed(2)),
-        avg_current: new Decimal(avg(currents).toFixed(3)),
-        avg_power: new Decimal(avg(powers).toFixed(2)),
-        min_current:
-          currents.length > 0
-            ? new Decimal(Math.min(...currents).toFixed(3))
-            : null,
-        max_current:
-          currents.length > 0
-            ? new Decimal(Math.max(...currents).toFixed(3))
-            : null,
-        health_score: new Decimal(healthScore.toFixed(2)),
-      },
-      create: {
-        device_id: deviceId,
-        plant_id: plantId,
-        string_number: s,
-        date: dayStart,
-        avg_voltage: new Decimal(avg(voltages).toFixed(2)),
-        avg_current: new Decimal(avg(currents).toFixed(3)),
-        avg_power: new Decimal(avg(powers).toFixed(2)),
-        min_current:
-          currents.length > 0
-            ? new Decimal(Math.min(...currents).toFixed(3))
-            : null,
-        max_current:
-          currents.length > 0
-            ? new Decimal(Math.max(...currents).toFixed(3))
-            : null,
-        health_score: new Decimal(healthScore.toFixed(2)),
-      },
-    })
+        update: data,
+        create: {
+          device_id: deviceId,
+          plant_id: plantId,
+          string_number: stringNumber,
+          date: dayStart,
+          ...data,
+        },
+      })
+    )
   }
+
+  await prisma.$transaction(upserts)
 }

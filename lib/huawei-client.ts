@@ -239,21 +239,37 @@ class HuaweiClient {
   }
 
   async getPlantList(): Promise<Plant[]> {
-    const data = await this.request(
-      '/thirdData/stations',
-      { pageNo: 1, pageSize: 100 },
-      'plantList',
-      60 * 60 * 1000 // 1 hour cache
-    )
-    return (data?.list || []).map((p: any) => ({
-      plantCode: p.plantCode,
-      plantName: p.plantName,
-      capacity: p.capacity,
-      plantAddress: p.plantAddress,
-      latitude: p.latitude,
-      longitude: p.longitude,
-      healthState: p.healthState,
-    }))
+    const allPlants: Plant[] = []
+    let pageNo = 1
+    const pageSize = 100
+
+    while (true) {
+      const data = await this.request(
+        '/thirdData/stations',
+        { pageNo, pageSize },
+        `plantList_p${pageNo}`,
+        60 * 60 * 1000 // 1 hour cache
+      )
+
+      const list = data?.list || []
+      for (const p of list) {
+        allPlants.push({
+          plantCode: p.plantCode,
+          plantName: p.plantName,
+          capacity: p.capacity,
+          plantAddress: p.plantAddress,
+          latitude: p.latitude,
+          longitude: p.longitude,
+          healthState: p.healthState,
+        })
+      }
+
+      // If we got fewer than pageSize, we've reached the last page
+      if (list.length < pageSize) break
+      pageNo++
+    }
+
+    return allPlants
   }
 
   async getDeviceList(stationCodes: string[]): Promise<Device[]> {

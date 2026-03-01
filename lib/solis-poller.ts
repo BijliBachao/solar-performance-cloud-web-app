@@ -32,9 +32,12 @@ export async function pollSolis(): Promise<void> {
   const now = Date.now()
 
   try {
+    let plantsSyncedThisCycle = false
+
     if (now - lastPlantSync > HOUR_MS) {
       await syncSolisPlants(client)
       lastPlantSync = now
+      plantsSyncedThisCycle = true
     }
 
     if (now - lastDeviceSync > HOUR_MS) {
@@ -42,7 +45,11 @@ export async function pollSolis(): Promise<void> {
       lastDeviceSync = now
     }
 
-    await syncSolisPlantHealth(client)
+    // Only fetch plant health separately if syncSolisPlants didn't already run this cycle
+    if (!plantsSyncedThisCycle) {
+      await syncSolisPlantHealth(client)
+    }
+
     await fetchSolisStringData(client)
 
     console.log('[Solis] Poll cycle complete.')
@@ -55,26 +62,28 @@ async function syncSolisPlants(client: SolisClient): Promise<void> {
   console.log('[Solis] Syncing plants...')
   const stations = await client.getStationList()
 
-  for (const station of stations) {
-    await prisma.plants.upsert({
-      where: { id: station.id },
-      update: {
-        plant_name: station.stationName,
-        capacity_kw: station.capacity ? new Decimal(station.capacity) : null,
-        health_state: mapSolisHealthState(station.state),
-        provider: PROVIDERS.SOLIS,
-        last_synced: new Date(),
-      },
-      create: {
-        id: station.id,
-        plant_name: station.stationName,
-        capacity_kw: station.capacity ? new Decimal(station.capacity) : null,
-        health_state: mapSolisHealthState(station.state),
-        provider: PROVIDERS.SOLIS,
-        last_synced: new Date(),
-      },
-    })
-  }
+  await prisma.$transaction(
+    stations.map((station) =>
+      prisma.plants.upsert({
+        where: { id: station.id },
+        update: {
+          plant_name: station.stationName,
+          capacity_kw: station.capacity ? new Decimal(station.capacity) : null,
+          health_state: mapSolisHealthState(station.state),
+          provider: PROVIDERS.SOLIS,
+          last_synced: new Date(),
+        },
+        create: {
+          id: station.id,
+          plant_name: station.stationName,
+          capacity_kw: station.capacity ? new Decimal(station.capacity) : null,
+          health_state: mapSolisHealthState(station.state),
+          provider: PROVIDERS.SOLIS,
+          last_synced: new Date(),
+        },
+      })
+    )
+  )
 
   console.log(`[Solis] Synced ${stations.length} plants`)
 }
@@ -117,28 +126,33 @@ async function syncSolisDevices(client: SolisClient): Promise<void> {
   for (const plant of plants) {
     const inverters = await client.getInverterList(plant.id)
 
-    for (const inv of inverters) {
-      const maxStrings = (inv.dcInputType ?? 0) + 1
-
-      await prisma.devices.upsert({
-        where: { id: inv.id },
-        update: {
-          device_name: inv.sn,
-          max_strings: maxStrings,
-          provider: PROVIDERS.SOLIS,
-          last_synced: new Date(),
-        },
-        create: {
-          id: inv.id,
-          plant_id: plant.id,
-          device_name: inv.sn,
-          device_type_id: DEVICE_TYPE_IDS.SOLIS_INVERTER,
-          max_strings: maxStrings,
-          provider: PROVIDERS.SOLIS,
-          last_synced: new Date(),
-        },
-      })
-      totalInverters++
+    if (inverters.length > 0) {
+      await prisma.$transaction(
+        inverters.map((inv) => {
+          const maxStrings = (inv.dcInputType ?? 0) + 1
+          return prisma.devices.upsert({
+            where: { id: inv.id },
+            update: {
+              device_name: inv.sn,
+              plant_id: plant.id,
+              device_type_id: DEVICE_TYPE_IDS.SOLIS_INVERTER,
+              max_strings: maxStrings,
+              provider: PROVIDERS.SOLIS,
+              last_synced: new Date(),
+            },
+            create: {
+              id: inv.id,
+              plant_id: plant.id,
+              device_name: inv.sn,
+              device_type_id: DEVICE_TYPE_IDS.SOLIS_INVERTER,
+              max_strings: maxStrings,
+              provider: PROVIDERS.SOLIS,
+              last_synced: new Date(),
+            },
+          })
+        })
+      )
+      totalInverters += inverters.length
     }
   }
 

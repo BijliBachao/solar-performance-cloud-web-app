@@ -36,32 +36,34 @@ async function syncPlants(): Promise<void> {
   console.log('[Huawei] Syncing plants...')
   const plants = await huaweiClient.getPlantList()
 
-  for (const plant of plants) {
-    await prisma.plants.upsert({
-      where: { id: plant.plantCode },
-      update: {
-        plant_name: plant.plantName,
-        capacity_kw: plant.capacity ? new Decimal(plant.capacity) : null,
-        address: plant.plantAddress || null,
-        latitude: plant.latitude ? new Decimal(plant.latitude) : null,
-        longitude: plant.longitude ? new Decimal(plant.longitude) : null,
-        health_state: plant.healthState ?? null,
-        provider: PROVIDERS.HUAWEI,
-        last_synced: new Date(),
-      },
-      create: {
-        id: plant.plantCode,
-        plant_name: plant.plantName,
-        capacity_kw: plant.capacity ? new Decimal(plant.capacity) : null,
-        address: plant.plantAddress || null,
-        latitude: plant.latitude ? new Decimal(plant.latitude) : null,
-        longitude: plant.longitude ? new Decimal(plant.longitude) : null,
-        health_state: plant.healthState ?? null,
-        provider: PROVIDERS.HUAWEI,
-        last_synced: new Date(),
-      },
-    })
-  }
+  await prisma.$transaction(
+    plants.map((plant) =>
+      prisma.plants.upsert({
+        where: { id: plant.plantCode },
+        update: {
+          plant_name: plant.plantName,
+          capacity_kw: plant.capacity ? new Decimal(plant.capacity) : null,
+          address: plant.plantAddress || null,
+          latitude: plant.latitude ? new Decimal(plant.latitude) : null,
+          longitude: plant.longitude ? new Decimal(plant.longitude) : null,
+          health_state: plant.healthState ?? null,
+          provider: PROVIDERS.HUAWEI,
+          last_synced: new Date(),
+        },
+        create: {
+          id: plant.plantCode,
+          plant_name: plant.plantName,
+          capacity_kw: plant.capacity ? new Decimal(plant.capacity) : null,
+          address: plant.plantAddress || null,
+          latitude: plant.latitude ? new Decimal(plant.latitude) : null,
+          longitude: plant.longitude ? new Decimal(plant.longitude) : null,
+          health_state: plant.healthState ?? null,
+          provider: PROVIDERS.HUAWEI,
+          last_synced: new Date(),
+        },
+      })
+    )
+  )
 
   console.log(`[Huawei] Synced ${plants.length} plants`)
 }
@@ -105,26 +107,30 @@ async function syncDevices(): Promise<void> {
     (d) => d.devTypeId === 1 || d.devTypeId === 38
   )
 
-  for (const device of inverters) {
-    await prisma.devices.upsert({
-      where: { id: String(device.id) },
-      update: {
-        device_name: device.devName,
-        provider: PROVIDERS.HUAWEI,
-        last_synced: new Date(),
-      },
-      create: {
-        id: String(device.id),
-        plant_id: device.stationCode,
-        device_name: device.devName,
-        device_type_id: device.devTypeId,
-        model: device.softwareVersion || null,
-        max_strings: null,
-        provider: PROVIDERS.HUAWEI,
-        last_synced: new Date(),
-      },
-    })
-  }
+  await prisma.$transaction(
+    inverters.map((device) =>
+      prisma.devices.upsert({
+        where: { id: String(device.id) },
+        update: {
+          device_name: device.devName,
+          plant_id: device.stationCode,
+          device_type_id: device.devTypeId,
+          provider: PROVIDERS.HUAWEI,
+          last_synced: new Date(),
+        },
+        create: {
+          id: String(device.id),
+          plant_id: device.stationCode,
+          device_name: device.devName,
+          device_type_id: device.devTypeId,
+          model: device.softwareVersion || null,
+          max_strings: null,
+          provider: PROVIDERS.HUAWEI,
+          last_synced: new Date(),
+        },
+      })
+    )
+  )
 
   console.log(
     `[Huawei] Synced ${inverters.length} inverters out of ${devices.length} total devices`
@@ -172,52 +178,56 @@ async function fetchStringData(): Promise<void> {
         const device = typeDevices.find((d) => d.id === data.devId)
         if (!device) continue
 
-        const maxStrings = device.max_strings || detectMaxStrings(data.dataItemMap)
-        if (maxStrings > 0 && !device.max_strings) {
-          await prisma.devices.update({
-            where: { id: device.id },
-            data: { max_strings: maxStrings },
-          })
-        }
-
-        const measurements: Array<{
-          device_id: string
-          plant_id: string
-          string_number: number
-          voltage: Decimal
-          current: Decimal
-          power: Decimal
-        }> = []
-
-        for (let s = 1; s <= maxStrings; s++) {
-          const voltage = data.dataItemMap[`pv${s}_u`] || 0
-          const current = data.dataItemMap[`pv${s}_i`] || 0
-          const power = voltage * current
-
-          if (voltage > 0 || current > 0) {
-            measurements.push({
-              device_id: device.id,
-              plant_id: device.plant_id,
-              string_number: s,
-              voltage: new Decimal(voltage.toFixed(2)),
-              current: new Decimal(current.toFixed(3)),
-              power: new Decimal(power.toFixed(2)),
+        try {
+          const maxStrings = device.max_strings || detectMaxStrings(data.dataItemMap)
+          if (maxStrings > 0 && !device.max_strings) {
+            await prisma.devices.update({
+              where: { id: device.id },
+              data: { max_strings: maxStrings },
             })
           }
-        }
 
-        if (measurements.length > 0) {
-          await prisma.string_measurements.createMany({
-            data: measurements.map((m) => ({
-              ...m,
-              timestamp: new Date(),
-            })),
-          })
-        }
+          const measurements: Array<{
+            device_id: string
+            plant_id: string
+            string_number: number
+            voltage: Decimal
+            current: Decimal
+            power: Decimal
+          }> = []
 
-        await generateAlerts(device.id, device.plant_id, measurements)
-        await updateHourlyAggregates(device.id, device.plant_id, maxStrings)
-        await updateDailyAggregates(device.id, device.plant_id, maxStrings)
+          for (let s = 1; s <= maxStrings; s++) {
+            const voltage = data.dataItemMap[`pv${s}_u`] || 0
+            const current = data.dataItemMap[`pv${s}_i`] || 0
+            const power = voltage * current
+
+            if (voltage > 0 || current > 0) {
+              measurements.push({
+                device_id: device.id,
+                plant_id: device.plant_id,
+                string_number: s,
+                voltage: new Decimal(voltage.toFixed(2)),
+                current: new Decimal(current.toFixed(3)),
+                power: new Decimal(power.toFixed(2)),
+              })
+            }
+          }
+
+          if (measurements.length > 0) {
+            await prisma.string_measurements.createMany({
+              data: measurements.map((m) => ({
+                ...m,
+                timestamp: new Date(),
+              })),
+            })
+          }
+
+          await generateAlerts(device.id, device.plant_id, measurements)
+          await updateHourlyAggregates(device.id, device.plant_id, maxStrings)
+          await updateDailyAggregates(device.id, device.plant_id, maxStrings)
+        } catch (error) {
+          console.error(`[Huawei] Failed to process device ${device.id}:`, error)
+        }
       }
     }
   }

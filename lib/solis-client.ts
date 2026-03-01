@@ -104,39 +104,65 @@ export class SolisClient {
   }
 
   async getStationList(): Promise<SolisStation[]> {
-    const data = await this.request<any>('/v1/api/userStationList', {
-      pageNo: 1,
-      pageSize: 100,
-    })
-    const records = data?.page?.records || []
-    return records.map((s: any) => ({
-      id: String(s.id),
-      stationName: s.stationName,
-      capacity: s.capacity || 0,
-      capacityStr: s.capacityStr || '',
-      state: s.state,
-      power: s.power || 0,
-      dayEnergy: s.dayEnergy || 0,
-      allEnergy: s.allEnergy || 0,
-    }))
+    const allStations: SolisStation[] = []
+    let pageNo = 1
+    const pageSize = 100
+
+    while (true) {
+      const data = await this.request<any>('/v1/api/userStationList', {
+        pageNo,
+        pageSize,
+      })
+      const records = data?.page?.records || []
+      for (const s of records) {
+        allStations.push({
+          id: String(s.id),
+          stationName: s.stationName,
+          capacity: s.capacity || 0,
+          capacityStr: s.capacityStr || '',
+          state: s.state,
+          power: s.power || 0,
+          dayEnergy: s.dayEnergy || 0,
+          allEnergy: s.allEnergy || 0,
+        })
+      }
+
+      if (records.length < pageSize) break
+      pageNo++
+    }
+
+    return allStations
   }
 
   async getInverterList(stationId: string): Promise<SolisInverter[]> {
-    const data = await this.request<any>('/v1/api/inverterList', {
-      pageNo: 1,
-      pageSize: 100,
-      stationId,
-    })
-    const records = data?.page?.records || []
-    return records.map((inv: any) => ({
-      id: String(inv.id),
-      sn: inv.sn,
-      stationId: String(inv.stationId || stationId),
-      state: inv.state,
-      pac: inv.pac || 0,
-      eToday: inv.eToday || 0,
-      dcInputType: inv.dcInputType ?? 0,
-    }))
+    const allInverters: SolisInverter[] = []
+    let pageNo = 1
+    const pageSize = 100
+
+    while (true) {
+      const data = await this.request<any>('/v1/api/inverterList', {
+        pageNo,
+        pageSize,
+        stationId,
+      })
+      const records = data?.page?.records || []
+      for (const inv of records) {
+        allInverters.push({
+          id: String(inv.id),
+          sn: inv.sn,
+          stationId: String(inv.stationId || stationId),
+          state: inv.state,
+          pac: inv.pac || 0,
+          eToday: inv.eToday || 0,
+          dcInputType: inv.dcInputType ?? 0,
+        })
+      }
+
+      if (records.length < pageSize) break
+      pageNo++
+    }
+
+    return allInverters
   }
 
   async getInverterDetail(id: string): Promise<SolisInverterDetail> {
