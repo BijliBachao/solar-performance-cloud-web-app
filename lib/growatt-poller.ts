@@ -238,11 +238,15 @@ async function fetchStringData(client: GrowattClient): Promise<void> {
     try {
       const maxSns = maxDevices.map(d => d.id)
       const maxData = await client.getLastData(maxSns, 'max')
+      console.log(`[Growatt] MAX batch: ${maxData.length} responses for ${maxSns.length} devices`)
 
       for (const deviceData of maxData) {
-        const sn = deviceData.deviceSn || deviceData.sn
+        const sn = deviceData.serialNum || deviceData.deviceSn || deviceData.sn
         const device = maxDevices.find(d => d.id === sn)
-        if (!device) continue
+        if (!device) {
+          console.warn(`[Growatt] MAX device SN "${sn}" not found in DB (keys: ${Object.keys(deviceData).filter(k => k.toLowerCase().includes('sn') || k.toLowerCase().includes('serial')).join(', ')})`)
+          continue
+        }
 
         try {
           await processDeviceData(device, deviceData, 'max')
@@ -260,11 +264,15 @@ async function fetchStringData(client: GrowattClient): Promise<void> {
     try {
       const sphSns = sphDevices.map(d => d.id)
       const sphData = await client.getLastData(sphSns, 'sph-s')
+      console.log(`[Growatt] SPH-S batch: ${sphData.length} responses for ${sphSns.length} devices`)
 
       for (const deviceData of sphData) {
-        const sn = deviceData.deviceSn || deviceData.sn
+        const sn = deviceData.serialNum || deviceData.deviceSn || deviceData.sn
         const device = sphDevices.find(d => d.id === sn)
-        if (!device) continue
+        if (!device) {
+          console.warn(`[Growatt] SPH-S device SN "${sn}" not found in DB (keys: ${Object.keys(deviceData).filter(k => k.toLowerCase().includes('sn') || k.toLowerCase().includes('serial')).join(', ')})`)
+          continue
+        }
 
         try {
           await processDeviceData(device, deviceData, 'sph-s')
