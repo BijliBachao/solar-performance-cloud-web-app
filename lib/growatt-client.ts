@@ -148,8 +148,16 @@ export class GrowattClient {
     const json: any = await this.v4Post('/v4/new-api/queryDeviceList', {})
 
     const devices: GrowattDevice[] = []
-    const data = json.data || []
-    for (const d of data) {
+    const data = json.data || {}
+
+    // V4 API returns data grouped by device type: { max: [...], "sph-s": [...], min: [...] }
+    // Flatten all device type arrays into one list
+    const allDevices: any[] = Array.isArray(data)
+      ? data
+      : Object.values(data).flat()
+
+    for (const d of allDevices) {
+      if (!d || !d.deviceSn) continue
       devices.push({
         deviceSn: d.deviceSn,
         deviceType: d.deviceType,
