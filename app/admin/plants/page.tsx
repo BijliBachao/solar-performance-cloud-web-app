@@ -65,6 +65,8 @@ export default function AdminPlantsPage() {
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
+  const [providerFilter, setProviderFilter] = useState('ALL')
+  const [providers, setProviders] = useState<Array<{ provider: string; count: number }>>([])
   const [stats, setStats] = useState<PlantStats>({ total: 0, assigned: 0, unassigned: 0, healthy: 0, faulty: 0, disconnected: 0 })
 
   // Assign modal
@@ -88,18 +90,20 @@ export default function AdminPlantsPage() {
       const params = new URLSearchParams()
       if (search) params.set('search', search)
       if (statusFilter !== 'ALL') params.set('status', statusFilter)
+      if (providerFilter !== 'ALL') params.set('provider', providerFilter)
 
       const res = await fetch(`/api/admin/plants?${params}`, { credentials: 'include' })
       if (!res.ok) throw new Error('Failed to fetch plants')
       const data = await res.json()
       setPlants(data.plants)
       setStats(data.stats)
+      if (data.providers) setProviders(data.providers)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
       setLoading(false)
     }
-  }, [search, statusFilter])
+  }, [search, statusFilter, providerFilter])
 
   useEffect(() => { fetchPlants() }, [fetchPlants])
 
@@ -268,12 +272,28 @@ export default function AdminPlantsPage() {
                 className="pl-9 h-9"
               />
             </div>
+            <Select value={providerFilter} onValueChange={setProviderFilter}>
+              <SelectTrigger className="w-full sm:w-[160px] h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Providers</SelectItem>
+                {providers.map(({ provider, count }) => {
+                  const badge = getProviderBadge(provider)
+                  return (
+                    <SelectItem key={provider} value={provider}>
+                      {badge?.text || provider} ({count})
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-full sm:w-[160px] h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ALL">All Plants</SelectItem>
+                <SelectItem value="ALL">All Status</SelectItem>
                 <SelectItem value="ASSIGNED">Assigned</SelectItem>
                 <SelectItem value="UNASSIGNED">Unassigned</SelectItem>
               </SelectContent>
