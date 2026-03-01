@@ -19,6 +19,13 @@ import {
   Search, Loader2, ArrowLeft, CheckCircle, Building2, Zap, ChevronRight,
 } from 'lucide-react'
 
+interface AlertCounts {
+  critical: number
+  warning: number
+  info: number
+  total: number
+}
+
 interface Plant {
   id: string
   plant_name: string
@@ -28,6 +35,8 @@ interface Plant {
   last_synced: string | null
   assigned_org: { id: string; name: string } | null
   device_count: number
+  alerts_today: AlertCounts
+  alerts_unresolved: AlertCounts
 }
 
 const providerStyles: Record<string, string> = {
@@ -56,6 +65,7 @@ interface PlantStats {
   healthy: number
   faulty: number
   disconnected: number
+  plants_with_alerts: number
 }
 
 export default function AdminPlantsPage() {
@@ -67,7 +77,7 @@ export default function AdminPlantsPage() {
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [providerFilter, setProviderFilter] = useState('ALL')
   const [providers, setProviders] = useState<Array<{ provider: string; count: number }>>([])
-  const [stats, setStats] = useState<PlantStats>({ total: 0, assigned: 0, unassigned: 0, healthy: 0, faulty: 0, disconnected: 0 })
+  const [stats, setStats] = useState<PlantStats>({ total: 0, assigned: 0, unassigned: 0, healthy: 0, faulty: 0, disconnected: 0, plants_with_alerts: 0 })
 
   // Assign modal
   const [assignPlant, setAssignPlant] = useState<Plant | null>(null)
@@ -254,6 +264,12 @@ export default function AdminPlantsPage() {
                   <span className="w-2 h-2 rounded-full bg-red-500"></span>
                   <span className="text-gray-500">{stats.faulty} faulty</span>
                 </div>
+                {stats.plants_with_alerts > 0 && (
+                  <div className="flex items-center gap-1.5 whitespace-nowrap">
+                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                    <span className="text-gray-500">{stats.plants_with_alerts} with alerts</span>
+                  </div>
+                )}
               </div>
             </div>
             <Button variant="ghost" size="sm" onClick={() => router.push('/admin')}>
@@ -323,6 +339,7 @@ export default function AdminPlantsPage() {
                 <TableHead className="whitespace-nowrap">Plant</TableHead>
                 <TableHead className="whitespace-nowrap hidden sm:table-cell">Capacity</TableHead>
                 <TableHead className="whitespace-nowrap text-center">Health</TableHead>
+                <TableHead className="whitespace-nowrap hidden md:table-cell">Issues</TableHead>
                 <TableHead className="whitespace-nowrap hidden sm:table-cell">Organization</TableHead>
                 <TableHead className="whitespace-nowrap text-center hidden md:table-cell">Devices</TableHead>
                 <TableHead className="whitespace-nowrap hidden md:table-cell">Last Synced</TableHead>
@@ -332,7 +349,7 @@ export default function AdminPlantsPage() {
             <TableBody>
               {plants.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-gray-500 py-12 text-sm">
+                  <TableCell colSpan={8} className="text-center text-gray-500 py-12 text-sm">
                     No plants found
                   </TableCell>
                 </TableRow>
@@ -373,6 +390,38 @@ export default function AdminPlantsPage() {
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge variant={health.variant}>{health.label}</Badge>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {plant.alerts_unresolved.total === 0 && plant.alerts_today.total === 0 ? (
+                          <span className="text-gray-300">—</span>
+                        ) : (
+                          <div className="flex items-center gap-2 text-xs">
+                            {plant.alerts_today.critical > 0 && (
+                              <span className="flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-red-500" />
+                                <span className="text-gray-700">{plant.alerts_today.critical}</span>
+                              </span>
+                            )}
+                            {plant.alerts_today.warning > 0 && (
+                              <span className="flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                                <span className="text-gray-700">{plant.alerts_today.warning}</span>
+                              </span>
+                            )}
+                            {plant.alerts_today.info > 0 && (
+                              <span className="flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-blue-500" />
+                                <span className="text-gray-700">{plant.alerts_today.info}</span>
+                              </span>
+                            )}
+                            {plant.alerts_unresolved.total > 0 && (
+                              <>
+                                {plant.alerts_today.total > 0 && <span className="text-gray-300">·</span>}
+                                <span className="text-gray-500">{plant.alerts_unresolved.total} open</span>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="hidden sm:table-cell">
                         {plant.assigned_org ? (

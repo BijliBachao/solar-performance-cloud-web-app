@@ -27,6 +27,7 @@ interface PlantHeaderProps {
   address: string | null
   deviceCount: number
   lastSynced: string | null
+  lastDataAt?: string | null
   provider?: string
   stringSummary: { total: number; ok: number; warning: number; critical: number }
   backPath: string
@@ -44,6 +45,7 @@ export function PlantHeader({
   address,
   deviceCount,
   lastSynced,
+  lastDataAt,
   provider,
   stringSummary,
   backPath,
@@ -134,7 +136,7 @@ export function PlantHeader({
           </div>
           <div className="flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5" />
-            <span>Synced {formatDate(lastSynced)}</span>
+            <span>Last data {formatDate(lastDataAt ?? lastSynced)}</span>
           </div>
           {stringSummary.total > 0 && (
             <>

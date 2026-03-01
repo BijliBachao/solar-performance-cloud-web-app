@@ -43,7 +43,17 @@ export async function GET(
       return NextResponse.json({ error: 'Plant not found' }, { status: 404 })
     }
 
-    return NextResponse.json(plant)
+    // Most recent string measurement timestamp (updated every ~5 min by poller)
+    const latestMeasurement = await prisma.string_measurements.findFirst({
+      where: { plant_id: params.code },
+      orderBy: { timestamp: 'desc' },
+      select: { timestamp: true },
+    })
+
+    return NextResponse.json({
+      ...plant,
+      last_data_at: latestMeasurement?.timestamp || null,
+    })
   } catch (error) {
     if (error instanceof ApiAuthError) return createErrorResponse(error)
     console.error('[Plant Detail GET]', error)

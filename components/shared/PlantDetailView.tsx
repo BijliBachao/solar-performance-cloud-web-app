@@ -21,6 +21,7 @@ interface PlantData {
   health_state: number | null
   provider?: string
   last_synced: string | null
+  last_data_at: string | null
   devices: Array<{
     id: string
     device_name: string | null
@@ -208,6 +209,7 @@ export function PlantDetailView({
         address={plant.address}
         deviceCount={plant.devices.length}
         lastSynced={plant.last_synced}
+        lastDataAt={plant.last_data_at}
         provider={plant.provider}
         stringSummary={stringSummary}
         backPath={backPath}
