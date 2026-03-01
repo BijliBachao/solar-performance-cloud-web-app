@@ -87,6 +87,23 @@ export async function GET(request: NextRequest) {
         ? formatted.filter(p => p.assigned_org !== null)
         : formatted.filter(p => p.assigned_org === null)
 
+    // Sort: open issues desc → assigned first → worst health first → capacity desc
+    filtered.sort((a, b) => {
+      // 1. Most unresolved alerts first
+      const alertDiff = b.alerts_unresolved.total - a.alerts_unresolved.total
+      if (alertDiff !== 0) return alertDiff
+      // 2. Assigned orgs first
+      const aAssigned = a.assigned_org ? 0 : 1
+      const bAssigned = b.assigned_org ? 0 : 1
+      if (aAssigned !== bAssigned) return aAssigned - bAssigned
+      // 3. Worst health first (lower health_state = worse)
+      const aHealth = a.health_state ?? 0
+      const bHealth = b.health_state ?? 0
+      if (aHealth !== bHealth) return aHealth - bHealth
+      // 4. Higher capacity first
+      return (Number(b.capacity_kw) || 0) - (Number(a.capacity_kw) || 0)
+    })
+
     // Provider counts (from search-filtered but before status/provider filter)
     const allForCounts = await prisma.plants.groupBy({
       by: ['provider'],
