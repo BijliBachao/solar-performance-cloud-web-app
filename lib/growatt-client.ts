@@ -110,26 +110,13 @@ export class GrowattClient {
 
   async getPlantList(): Promise<GrowattPlant[]> {
     const allPlants: GrowattPlant[] = []
+    const pageSize = 20 // Growatt V1 default page size
+    let page = 1
 
-    // First page to get total count and pages
-    const page1: any = await this.v1Get('/v1/plant/list?page=1')
-    const plants1 = page1.data?.plants || []
-    const totalPages = page1.data?.pages || 1
-
-    for (const p of plants1) {
-      allPlants.push({
-        plant_id: p.plant_id,
-        name: p.name,
-        peak_power: p.peak_power || 0,
-        city: p.city || '',
-        status: p.status,
-      })
-    }
-
-    // Fetch remaining pages
-    for (let page = 2; page <= totalPages; page++) {
+    while (true) {
       const pageData: any = await this.v1Get(`/v1/plant/list?page=${page}`)
       const plants = pageData.data?.plants || []
+
       for (const p of plants) {
         allPlants.push({
           plant_id: p.plant_id,
@@ -139,6 +126,9 @@ export class GrowattClient {
           status: p.status,
         })
       }
+
+      if (plants.length < pageSize) break
+      page++
     }
 
     return allPlants
