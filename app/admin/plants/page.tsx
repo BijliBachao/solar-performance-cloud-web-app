@@ -30,9 +30,17 @@ interface Plant {
   device_count: number
 }
 
-const providerLabel: Record<string, { text: string; className: string }> = {
-  huawei: { text: 'Huawei', className: 'bg-blue-50 text-blue-700 border-blue-200' },
-  solis: { text: 'Solis', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+const providerStyles: Record<string, string> = {
+  huawei: 'bg-blue-50 text-blue-700 border-blue-200',
+  solis: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  growatt: 'bg-orange-50 text-orange-700 border-orange-200',
+}
+
+function getProviderBadge(provider?: string): { text: string; className: string } | null {
+  if (!provider) return null
+  const style = providerStyles[provider] || 'bg-gray-50 text-gray-700 border-gray-200'
+  const text = provider.charAt(0).toUpperCase() + provider.slice(1)
+  return { text, className: style }
 }
 
 interface Organization {
@@ -324,11 +332,14 @@ export default function AdminPlantsPage() {
                           <div className="font-medium text-gray-900 text-sm flex items-center gap-1.5">
                             <Zap className="w-3.5 h-3.5 text-yellow-500 shrink-0" />
                             {plant.plant_name}
-                            {plant.provider && providerLabel[plant.provider] && (
-                              <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded border ${providerLabel[plant.provider].className}`}>
-                                {providerLabel[plant.provider].text}
-                              </span>
-                            )}
+                            {(() => {
+                              const badge = getProviderBadge(plant.provider)
+                              return badge ? (
+                                <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded border ${badge.className}`}>
+                                  {badge.text}
+                                </span>
+                              ) : null
+                            })()}
                           </div>
                           <div className="sm:hidden text-xs text-gray-500 mt-0.5">
                             {plant.capacity_kw ? `${Number(plant.capacity_kw).toFixed(1)} kW` : 'N/A'}

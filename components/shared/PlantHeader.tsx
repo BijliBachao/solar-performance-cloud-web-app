@@ -7,14 +7,17 @@ import {
   ArrowLeft, Zap, MapPin, Activity, Clock, Cpu, RefreshCw,
 } from 'lucide-react'
 
-const providerLabels: Record<string, string> = {
-  huawei: 'Huawei FusionSolar',
-  solis: 'SolisCloud',
+const providerStyles: Record<string, { label: string; className: string }> = {
+  huawei: { label: 'Huawei FusionSolar', className: 'bg-blue-50 text-blue-700 border-blue-200' },
+  solis: { label: 'SolisCloud', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  growatt: { label: 'Growatt', className: 'bg-orange-50 text-orange-700 border-orange-200' },
 }
 
-const providerColors: Record<string, string> = {
-  huawei: 'bg-blue-50 text-blue-700 border-blue-200',
-  solis: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+function getProviderBadge(provider?: string): { label: string; className: string } | null {
+  if (!provider) return null
+  const known = providerStyles[provider]
+  if (known) return known
+  return { label: provider.charAt(0).toUpperCase() + provider.slice(1), className: 'bg-gray-50 text-gray-700 border-gray-200' }
 }
 
 interface PlantHeaderProps {
@@ -81,11 +84,14 @@ export function PlantHeader({
             <Zap className="w-5 h-5 text-yellow-500 flex-shrink-0" />
             <h1 className="text-lg font-semibold text-gray-900 truncate">{plantName}</h1>
             <Badge variant={health.variant}>{health.label}</Badge>
-            {provider && providerLabels[provider] && (
-              <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded border ${providerColors[provider] || ''}`}>
-                {providerLabels[provider]}
-              </span>
-            )}
+            {(() => {
+              const badge = getProviderBadge(provider)
+              return badge ? (
+                <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded border ${badge.className}`}>
+                  {badge.label}
+                </span>
+              ) : null
+            })()}
           </div>
           <div className="flex items-center gap-2">
             <button
