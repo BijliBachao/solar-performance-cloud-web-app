@@ -1,4 +1,4 @@
-export const PROVIDERS = { HUAWEI: 'huawei', SOLIS: 'solis', GROWATT: 'growatt' } as const
+export const PROVIDERS = { HUAWEI: 'huawei', SOLIS: 'solis', GROWATT: 'growatt', SUNGROW: 'sungrow' } as const
 export type Provider = typeof PROVIDERS[keyof typeof PROVIDERS]
 
 export const DEVICE_TYPE_IDS = {
@@ -7,6 +7,7 @@ export const DEVICE_TYPE_IDS = {
   SOLIS_INVERTER: 100,
   GROWATT_MAX_INVERTER: 200,
   GROWATT_SPHS_INVERTER: 201,
+  SUNGROW_INVERTER: 300,
 } as const
 
-export const INVERTER_DEVICE_TYPE_IDS = [1, 38, 100, 200, 201]
+export const INVERTER_DEVICE_TYPE_IDS = [1, 38, 100, 200, 201, 300]

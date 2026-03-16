@@ -9,15 +9,17 @@ async function pollAll() {
   const { pollHuawei } = await import('../lib/huawei-poller')
   const { pollSolis } = await import('../lib/solis-poller')
   const { pollGrowatt } = await import('../lib/growatt-poller')
+  const { pollSungrow } = await import('../lib/sungrow-poller')
 
   const results = await Promise.allSettled([
     pollHuawei(),
     pollSolis(),
     pollGrowatt(),
+    pollSungrow(),
   ])
 
   results.forEach((r, i) => {
-    const name = ['Huawei', 'Solis', 'Growatt'][i]
+    const name = ['Huawei', 'Solis', 'Growatt', 'Sungrow'][i]
     if (r.status === 'rejected') console.error(`[${name}] Poll failed:`, r.reason)
     else console.log(`[${name}] Poll complete`)
   })
@@ -29,6 +31,7 @@ async function main() {
   console.log(`[Poller] Huawei API URL: ${process.env.HUAWEI_API_URL || 'NOT SET'}`)
   console.log(`[Poller] Solis API ID: ${process.env.SOLIS_API_ID ? 'SET' : 'NOT SET'}`)
   console.log(`[Poller] Growatt API Token: ${process.env.GROWATT_API_TOKEN ? 'SET' : 'NOT SET'}`)
+  console.log(`[Poller] Sungrow App Key: ${process.env.SUNGROW_APP_KEY ? 'SET' : 'NOT SET'}`)
 
   // Run immediately on start
   try {

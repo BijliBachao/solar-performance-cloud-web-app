@@ -11,6 +11,7 @@ const providerStyles: Record<string, { label: string; className: string }> = {
   huawei: { label: 'Huawei FusionSolar', className: 'bg-blue-50 text-blue-700 border-blue-200' },
   solis: { label: 'SolisCloud', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   growatt: { label: 'Growatt', className: 'bg-orange-50 text-orange-700 border-orange-200' },
+  sungrow: { label: 'Sungrow iSolarCloud', className: 'bg-purple-50 text-purple-700 border-purple-200' },
 }
 
 function getProviderBadge(provider?: string): { label: string; className: string } | null {
