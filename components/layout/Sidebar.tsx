@@ -10,6 +10,7 @@ import {
   Bell,
   Settings,
   Sun,
+  BarChart3,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -21,6 +22,7 @@ const adminNav = [
   { href: '/admin/organizations', label: 'Organizations', icon: Building2 },
   { href: '/admin/users', label: 'Users', icon: Users },
   { href: '/admin/plants', label: 'Plants', icon: Zap },
+  { href: '/admin/analysis', label: 'Analysis', icon: BarChart3 },
 ]
 
 const userNav = [
