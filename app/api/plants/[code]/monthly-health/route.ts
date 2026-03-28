@@ -37,7 +37,7 @@ function detectShadingPattern(
   const hourlyByHour = new Map<number, { total: number; count: number; byString: Map<number, number[]> }>()
 
   for (const row of hourlyData) {
-    const hourOfDay = new Date(row.hour).getHours()
+    const hourOfDay = (new Date(row.hour).getUTCHours() + 5) % 24  // Convert UTC → PKT hour
     if (!daylightHours.includes(hourOfDay)) continue
     if (Number(row.avg_current || 0) < 0.1) continue // Skip inactive hours
 

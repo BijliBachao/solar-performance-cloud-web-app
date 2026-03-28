@@ -29,13 +29,19 @@ export async function GET() {
         orderBy: { created_at: 'desc' },
         take: 5,
       }),
-      prisma.string_daily.findMany({
-        where: {
-          plant_id: { in: plantIds },
-          date: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
-        },
-        select: { health_score: true },
-      }),
+      // Use PKT date (UTC+5) so "today" is correct regardless of server timezone
+      (() => {
+        const PKT_OFFSET_MS = 5 * 60 * 60 * 1000
+        const nowPKT = new Date(Date.now() + PKT_OFFSET_MS)
+        const todayPKT = new Date(Date.UTC(nowPKT.getUTCFullYear(), nowPKT.getUTCMonth(), nowPKT.getUTCDate()))
+        return prisma.string_daily.findMany({
+          where: {
+            plant_id: { in: plantIds },
+            date: { gte: todayPKT },
+          },
+          select: { health_score: true },
+        })
+      })(),
     ])
 
     // Calculate per-plant alert counts

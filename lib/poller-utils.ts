@@ -135,6 +135,20 @@ function getPKTDayStart(): Date {
   return dayStart
 }
 
+// Returns PKT date as UTC midnight — safe for PostgreSQL DATE column storage.
+// getPKTDayStart() returns e.g. 2026-03-27T19:00:00Z (Mar 28 midnight PKT in UTC),
+// which PostgreSQL DATE truncates to 2026-03-27 (wrong). This function returns
+// 2026-03-28T00:00:00Z so DATE truncation gives the correct PKT date.
+function getPKTDateForDB(): Date {
+  const nowPKT = new Date(Date.now() + PKT_OFFSET_MS)
+  return new Date(Date.UTC(
+    nowPKT.getUTCFullYear(),
+    nowPKT.getUTCMonth(),
+    nowPKT.getUTCDate(),
+    0, 0, 0, 0
+  ))
+}
+
 const avg = (arr: number[]) =>
   arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
 
@@ -215,6 +229,7 @@ export async function updateDailyAggregates(
   _maxStrings: number
 ): Promise<void> {
   const dayStart = getPKTDayStart()
+  const pktDate = getPKTDateForDB()
 
   // Fetch ALL measurements for this device today in one query
   const allMeasurements = await prisma.string_measurements.findMany({
@@ -268,7 +283,7 @@ export async function updateDailyAggregates(
           device_id_string_number_date: {
             device_id: deviceId,
             string_number: stringNumber,
-            date: dayStart,
+            date: pktDate,
           },
         },
         update: data,
@@ -276,7 +291,7 @@ export async function updateDailyAggregates(
           device_id: deviceId,
           plant_id: plantId,
           string_number: stringNumber,
-          date: dayStart,
+          date: pktDate,
           ...data,
         },
       })
