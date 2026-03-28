@@ -7,6 +7,7 @@ import { generateAlerts, updateHourlyAggregates, updateDailyAggregates } from '@
 let lastPlantSync = 0
 let lastDeviceSync = 0
 const HOUR_MS = 60 * 60 * 1000
+const warnedUnmappedDevices = new Set<string>()
 
 // Growatt plant status -> our DB health_state
 // Growatt: 1=online, 3=bat online (SPH-S), 0=waiting, 4=offline, 2=fault
@@ -150,7 +151,10 @@ async function syncDevices(client: GrowattClient): Promise<void> {
   for (const device of devices) {
     const plantId = devicePlantMap.get(device.deviceSn)
     if (!plantId) {
-      console.warn(`[Growatt] No plant mapping for device ${device.deviceSn}, skipping`)
+      if (!warnedUnmappedDevices.has(device.deviceSn)) {
+        console.warn(`[Growatt] No plant mapping for device ${device.deviceSn} (type: ${device.deviceType}), skipping — will not warn again this session`)
+        warnedUnmappedDevices.add(device.deviceSn)
+      }
       continue
     }
 

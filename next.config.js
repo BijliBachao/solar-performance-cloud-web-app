@@ -1,5 +1,14 @@
+const { execSync } = require('child_process')
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  generateBuildId: async () => {
+    try {
+      return execSync('git rev-parse --short HEAD').toString().trim()
+    } catch {
+      return `build-${Date.now()}`
+    }
+  },
   images: {
     domains: ['localhost', 'img.clerk.com'],
   },
