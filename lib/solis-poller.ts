@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { SolisClient } from '@/lib/solis-client'
 import { PROVIDERS, DEVICE_TYPE_IDS } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat } from '@/lib/poller-utils'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
@@ -98,11 +98,15 @@ async function syncSolisPlantHealth(client: SolisClient): Promise<void> {
 
   try {
     const stations = await client.getStationList()
-    for (const station of stations) {
-      await prisma.plants.update({
-        where: { id: station.id },
-        data: { health_state: mapSolisHealthState(station.state) },
-      })
+    if (stations.length > 0) {
+      await prisma.$transaction(
+        stations.map((station) =>
+          prisma.plants.update({
+            where: { id: station.id },
+            data: { health_state: mapSolisHealthState(station.state) },
+          })
+        )
+      )
     }
   } catch (error) {
     console.error('[Solis] Failed to sync plant health:', error)
@@ -200,18 +204,18 @@ async function fetchSolisStringData(client: SolisClient): Promise<void> {
       }> = []
 
       for (let s = 1; s <= maxStrings; s++) {
-        const voltage = detail[`uPv${s}`] ?? 0
-        const current = detail[`iPv${s}`] ?? 0
-        const power = detail[`pow${s}`] ?? 0 // Solis provides power directly
+        const voltage = safeFloat(detail[`uPv${s}`])
+        const current = safeFloat(detail[`iPv${s}`])
+        const power = safeFloat(detail[`pow${s}`]) // Solis provides power directly
 
         if (voltage > 0 || current > 0) {
           measurements.push({
             device_id: device.id,
             plant_id: device.plant_id,
             string_number: s,
-            voltage: new Decimal(Number(voltage).toFixed(2)),
-            current: new Decimal(Number(current).toFixed(3)),
-            power: new Decimal(Number(power).toFixed(2)),
+            voltage: new Decimal(voltage.toFixed(2)),
+            current: new Decimal(current.toFixed(3)),
+            power: new Decimal(power.toFixed(2)),
           })
         }
       }
@@ -225,9 +229,11 @@ async function fetchSolisStringData(client: SolisClient): Promise<void> {
         })
       }
 
-      await generateAlerts(device.id, device.plant_id, measurements)
-      await updateHourlyAggregates(device.id, device.plant_id, maxStrings)
-      await updateDailyAggregates(device.id, device.plant_id, maxStrings)
+      if (measurements.length > 0) {
+        await generateAlerts(device.id, device.plant_id, measurements)
+        await updateHourlyAggregates(device.id, device.plant_id, maxStrings)
+        await updateDailyAggregates(device.id, device.plant_id, maxStrings)
+      }
     } catch (error) {
       console.error(`[Solis] Failed to fetch string data for device ${device.id}:`, error)
     }

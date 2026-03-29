@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { SungrowClient } from '@/lib/sungrow-client'
 import { PROVIDERS, DEVICE_TYPE_IDS } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat } from '@/lib/poller-utils'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
@@ -133,11 +133,15 @@ async function syncSungrowPlantHealth(client: SungrowClient): Promise<void> {
 
   try {
     const stations = await client.getPowerStationList()
-    for (const station of stations) {
-      await prisma.plants.update({
-        where: { id: station.ps_id },
-        data: { health_state: mapSungrowHealthState(station.ps_status) },
-      })
+    if (stations.length > 0) {
+      await prisma.$transaction(
+        stations.map((station) =>
+          prisma.plants.update({
+            where: { id: station.ps_id },
+            data: { health_state: mapSungrowHealthState(station.ps_status) },
+          })
+        )
+      )
     }
   } catch (error) {
     console.error('[Sungrow] Failed to sync plant health:', error)
@@ -228,8 +232,8 @@ async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
         const cid = STRING_CURRENT_IDS[s]
         const vid = STRING_VOLTAGE_IDS[s]
         if (!cid || !vid) continue
-        const current = parseFloat(dp[`p${cid}`]) || 0
-        const voltage = parseFloat(dp[`p${vid}`]) || 0
+        const current = safeFloat(dp[`p${cid}`])
+        const voltage = safeFloat(dp[`p${vid}`])
         if (current > 0 || voltage > 0) {
           detectedStrings = s
           break
@@ -260,18 +264,19 @@ async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
         const voltagePointId = STRING_VOLTAGE_IDS[s]
         if (!currentPointId || !voltagePointId) continue
 
-        const current = parseFloat(dp[`p${currentPointId}`]) || 0
-        const voltage = parseFloat(dp[`p${voltagePointId}`]) || 0
-        const power = voltage * current
+        const current = safeFloat(dp[`p${currentPointId}`])
+        const voltage = safeFloat(dp[`p${voltagePointId}`])
 
         if (voltage > 0 || current > 0) {
+          const vDec = new Decimal(voltage).toDecimalPlaces(2)
+          const cDec = new Decimal(current).toDecimalPlaces(3)
           measurements.push({
             device_id: device.id,
             plant_id: device.plant_id,
             string_number: s,
-            voltage: new Decimal(voltage.toFixed(2)),
-            current: new Decimal(current.toFixed(3)),
-            power: new Decimal(power.toFixed(2)),
+            voltage: vDec,
+            current: cDec,
+            power: vDec.mul(cDec).toDecimalPlaces(2),
           })
         }
       }
@@ -285,9 +290,11 @@ async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
         })
       }
 
-      await generateAlerts(device.id, device.plant_id, measurements)
-      await updateHourlyAggregates(device.id, device.plant_id, maxStrings)
-      await updateDailyAggregates(device.id, device.plant_id, maxStrings)
+      if (measurements.length > 0) {
+        await generateAlerts(device.id, device.plant_id, measurements)
+        await updateHourlyAggregates(device.id, device.plant_id, maxStrings)
+        await updateDailyAggregates(device.id, device.plant_id, maxStrings)
+      }
     } catch (error) {
       console.error(`[Sungrow] Failed to fetch string data for device ${device.id}:`, error)
     }

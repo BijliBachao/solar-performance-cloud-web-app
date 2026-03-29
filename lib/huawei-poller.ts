@@ -78,11 +78,15 @@ async function syncPlantHealth(): Promise<void> {
 
   try {
     const kpis = await huaweiClient.getPlantRealKpi(plantCodes)
-    for (const kpi of kpis) {
-      await prisma.plants.update({
-        where: { id: kpi.stationCode },
-        data: { health_state: kpi.healthState },
-      })
+    if (kpis.length > 0) {
+      await prisma.$transaction(
+        kpis.map((kpi) =>
+          prisma.plants.update({
+            where: { id: kpi.stationCode },
+            data: { health_state: kpi.healthState },
+          })
+        )
+      )
     }
   } catch (error) {
     console.error('[Huawei] Failed to sync plant health:', error)
@@ -199,16 +203,17 @@ async function fetchStringData(): Promise<void> {
           for (let s = 1; s <= maxStrings; s++) {
             const voltage = data.dataItemMap[`pv${s}_u`] || 0
             const current = data.dataItemMap[`pv${s}_i`] || 0
-            const power = voltage * current
 
             if (voltage > 0 || current > 0) {
+              const vDec = new Decimal(voltage).toDecimalPlaces(2)
+              const cDec = new Decimal(current).toDecimalPlaces(3)
               measurements.push({
                 device_id: device.id,
                 plant_id: device.plant_id,
                 string_number: s,
-                voltage: new Decimal(voltage.toFixed(2)),
-                current: new Decimal(current.toFixed(3)),
-                power: new Decimal(power.toFixed(2)),
+                voltage: vDec,
+                current: cDec,
+                power: vDec.mul(cDec).toDecimalPlaces(2),
               })
             }
           }
@@ -222,9 +227,11 @@ async function fetchStringData(): Promise<void> {
             })
           }
 
-          await generateAlerts(device.id, device.plant_id, measurements)
-          await updateHourlyAggregates(device.id, device.plant_id, maxStrings)
-          await updateDailyAggregates(device.id, device.plant_id, maxStrings)
+          if (measurements.length > 0) {
+            await generateAlerts(device.id, device.plant_id, measurements)
+            await updateHourlyAggregates(device.id, device.plant_id, maxStrings)
+            await updateDailyAggregates(device.id, device.plant_id, maxStrings)
+          }
         } catch (error) {
           console.error(`[Huawei] Failed to process device ${device.id}:`, error)
         }

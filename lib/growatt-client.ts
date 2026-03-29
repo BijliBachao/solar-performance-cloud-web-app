@@ -22,6 +22,9 @@ export class GrowattClient {
   constructor(baseUrl?: string, token?: string) {
     this.baseUrl = baseUrl || process.env.GROWATT_API_URL || 'https://openapi.growatt.com'
     this.token = token || process.env.GROWATT_API_TOKEN || ''
+    if (!this.token) {
+      console.warn('[GrowattClient] No API token configured — all requests will fail')
+    }
   }
 
   private async withRetry<T>(fn: () => Promise<T>, context: string): Promise<T> {
@@ -51,10 +54,18 @@ export class GrowattClient {
   private async v1Get<T>(path: string): Promise<T> {
     return this.withRetry(async () => {
       const url = `${this.baseUrl}${path}`
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: { 'token': this.token },
-      })
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 30000)
+      let res: Response
+      try {
+        res = await fetch(url, {
+          method: 'GET',
+          headers: { 'token': this.token },
+          signal: controller.signal,
+        })
+      } finally {
+        clearTimeout(timeout)
+      }
 
       if (!res.ok) {
         throw new Error(`[GrowattClient] HTTP ${res.status} on GET ${path}`)
@@ -77,14 +88,22 @@ export class GrowattClient {
   private async v4Post<T>(path: string, params: Record<string, string>): Promise<T> {
     return this.withRetry(async () => {
       const url = `${this.baseUrl}${path}`
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'token': this.token,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams(params).toString(),
-      })
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 30000)
+      let res: Response
+      try {
+        res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'token': this.token,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams(params).toString(),
+          signal: controller.signal,
+        })
+      } finally {
+        clearTimeout(timeout)
+      }
 
       if (!res.ok) {
         throw new Error(`[GrowattClient] HTTP ${res.status} on POST ${path}`)
@@ -112,8 +131,9 @@ export class GrowattClient {
     const allPlants: GrowattPlant[] = []
     const pageSize = 20 // Growatt V1 default page size
     let page = 1
+    const maxPages = 50
 
-    while (true) {
+    while (page <= maxPages) {
       const pageData: any = await this.v1Get(`/v1/plant/list?page=${page}`)
       const plants = pageData.data?.plants || []
 

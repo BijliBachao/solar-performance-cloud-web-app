@@ -39,6 +39,8 @@ export class SolisClient {
   private apiId: string
   private apiSecret: string
   private lastRequestTime = 0
+  private rateLimitPromise: Promise<void> = Promise.resolve()
+  private maxRetries = 3
 
   constructor(
     baseUrl?: string,
@@ -72,43 +74,60 @@ export class SolisClient {
   }
 
   private async rateLimit(): Promise<void> {
-    const elapsed = Date.now() - this.lastRequestTime
-    if (elapsed < RATE_LIMIT_DELAY_MS) {
-      await new Promise((r) => setTimeout(r, RATE_LIMIT_DELAY_MS - elapsed))
-    }
-    this.lastRequestTime = Date.now()
+    this.rateLimitPromise = this.rateLimitPromise.then(async () => {
+      const elapsed = Date.now() - this.lastRequestTime
+      if (elapsed < RATE_LIMIT_DELAY_MS) {
+        await new Promise((r) => setTimeout(r, RATE_LIMIT_DELAY_MS - elapsed))
+      }
+      this.lastRequestTime = Date.now()
+    })
+    return this.rateLimitPromise
   }
 
   private async request<T>(path: string, body: Record<string, any>): Promise<T> {
     await this.rateLimit()
 
-    const bodyStr = JSON.stringify(body)
-    const headers = this.signRequest(bodyStr, path)
+    let lastError: Error | undefined
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        const bodyStr = JSON.stringify(body)
+        const headers = this.signRequest(bodyStr, path)
 
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      method: 'POST',
-      headers,
-      body: bodyStr,
-    })
+        const res = await fetch(`${this.baseUrl}${path}`, {
+          method: 'POST',
+          headers,
+          body: bodyStr,
+        })
 
-    if (!res.ok) {
-      throw new Error(`[SolisClient] HTTP ${res.status} on ${path}`)
+        if (!res.ok) {
+          throw new Error(`[SolisClient] HTTP ${res.status} on ${path}`)
+        }
+
+        const json = await res.json()
+        if (json.code !== '0') {
+          throw new Error(`[SolisClient] API error on ${path}: code=${json.code} msg=${json.msg}`)
+        }
+
+        return json.data
+      } catch (error: any) {
+        lastError = error
+        if (attempt < this.maxRetries) {
+          const delay = 1000 * Math.pow(2, attempt - 1)
+          console.warn(`[SolisClient] ${path} failed (attempt ${attempt}/${this.maxRetries}), retrying in ${delay}ms...`)
+          await new Promise((r) => setTimeout(r, delay))
+        }
+      }
     }
-
-    const json = await res.json()
-    if (json.code !== '0') {
-      throw new Error(`[SolisClient] API error on ${path}: code=${json.code} msg=${json.msg}`)
-    }
-
-    return json.data
+    throw lastError!
   }
 
   async getStationList(): Promise<SolisStation[]> {
     const allStations: SolisStation[] = []
     let pageNo = 1
     const pageSize = 100
+    const maxPages = 50
 
-    while (true) {
+    while (pageNo <= maxPages) {
       const data = await this.request<any>('/v1/api/userStationList', {
         pageNo,
         pageSize,
@@ -138,8 +157,9 @@ export class SolisClient {
     const allInverters: SolisInverter[] = []
     let pageNo = 1
     const pageSize = 100
+    const maxPages = 50
 
-    while (true) {
+    while (pageNo <= maxPages) {
       const data = await this.request<any>('/v1/api/inverterList', {
         pageNo,
         pageSize,

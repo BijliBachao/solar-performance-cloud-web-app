@@ -2,12 +2,13 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { GrowattClient } from '@/lib/growatt-client'
 import { PROVIDERS, DEVICE_TYPE_IDS } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat } from '@/lib/poller-utils'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
 const HOUR_MS = 60 * 60 * 1000
 const warnedUnmappedDevices = new Set<string>()
+const MAX_WARNED_DEVICES = 500
 
 // Growatt plant status -> our DB health_state
 // Growatt: 1=online, 3=bat online (SPH-S), 0=waiting, 4=offline, 2=fault
@@ -30,6 +31,9 @@ function mapGrowattDeviceHealth(status: number, statusText?: string): number {
 
 function mapDeviceType(deviceType: string): number {
   if (deviceType === 'sph-s') return DEVICE_TYPE_IDS.GROWATT_SPHS_INVERTER
+  if (deviceType !== 'max') {
+    console.warn(`[Growatt] Unknown device type "${deviceType}", defaulting to MAX`)
+  }
   return DEVICE_TYPE_IDS.GROWATT_MAX_INVERTER
 }
 
@@ -152,6 +156,7 @@ async function syncDevices(client: GrowattClient): Promise<void> {
     const plantId = devicePlantMap.get(device.deviceSn)
     if (!plantId) {
       if (!warnedUnmappedDevices.has(device.deviceSn)) {
+        if (warnedUnmappedDevices.size >= MAX_WARNED_DEVICES) warnedUnmappedDevices.clear()
         console.warn(`[Growatt] No plant mapping for device ${device.deviceSn} (type: ${device.deviceType}), skipping — will not warn again this session`)
         warnedUnmappedDevices.add(device.deviceSn)
       }
@@ -199,12 +204,16 @@ async function syncPlantHealth(client: GrowattClient): Promise<void> {
   try {
     // Plant health comes from the plant list (status field)
     const apiPlants = await client.getPlantList()
-    for (const plant of apiPlants) {
-      const plantId = String(plant.plant_id)
-      await prisma.plants.update({
-        where: { id: plantId },
-        data: { health_state: mapGrowattPlantHealth(plant.status) },
-      })
+    if (apiPlants.length > 0) {
+      await prisma.$transaction(
+        apiPlants.map((plant) => {
+          const plantId = String(plant.plant_id)
+          return prisma.plants.update({
+            where: { id: plantId },
+            data: { health_state: mapGrowattPlantHealth(plant.status) },
+          })
+        })
+      )
     }
   } catch (error) {
     console.error('[Growatt] Failed to sync plant health:', error)
@@ -339,9 +348,11 @@ async function processDeviceData(
     })
   }
 
-  await generateAlerts(device.id, device.plant_id, measurements)
-  await updateHourlyAggregates(device.id, device.plant_id, maxStrings || strings.length)
-  await updateDailyAggregates(device.id, device.plant_id, maxStrings || strings.length)
+  if (measurements.length > 0) {
+    await generateAlerts(device.id, device.plant_id, measurements)
+    await updateHourlyAggregates(device.id, device.plant_id, maxStrings || strings.length)
+    await updateDailyAggregates(device.id, device.plant_id, maxStrings || strings.length)
+  }
 }
 
 interface StringReading {
@@ -357,8 +368,8 @@ function extractStrings(deviceData: any, deviceType: string): StringReading[] {
   // Level 1: Try individual string data first (best granularity, some MAX devices have this)
   if (deviceType === 'max') {
     for (let i = 1; i <= 32; i++) {
-      const v = parseFloat(deviceData[`vString${i}`]) || 0
-      const c = parseFloat(deviceData[`currentString${i}`]) || 0
+      const v = safeFloat(deviceData[`vString${i}`])
+      const c = safeFloat(deviceData[`currentString${i}`])
       if (v > 0 || c > 0) {
         strings.push({
           string_number: i,
@@ -374,9 +385,9 @@ function extractStrings(deviceData: any, deviceType: string): StringReading[] {
   if (strings.length === 0) {
     const maxMppt = deviceType === 'sph-s' ? 3 : 16
     for (let i = 1; i <= maxMppt; i++) {
-      const v = parseFloat(deviceData[`vpv${i}`]) || 0
-      const c = parseFloat(deviceData[`ipv${i}`]) || 0
-      const p = parseFloat(deviceData[`ppv${i}`]) || 0
+      const v = safeFloat(deviceData[`vpv${i}`])
+      const c = safeFloat(deviceData[`ipv${i}`])
+      const p = safeFloat(deviceData[`ppv${i}`])
       if (v > 0 || c > 0 || p > 0) {
         strings.push({
           string_number: i,

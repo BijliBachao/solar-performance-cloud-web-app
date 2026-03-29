@@ -1,6 +1,12 @@
 import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 
+/** Safe parseFloat that returns 0 instead of NaN */
+export function safeFloat(v: any): number {
+  const n = parseFloat(v)
+  return isNaN(n) || !isFinite(n) ? 0 : n
+}
+
 export async function generateAlerts(
   deviceId: string,
   plantId: string,
@@ -105,7 +111,9 @@ export async function generateAlerts(
   }
 }
 
-// Pakistan timezone offset (UTC+5)
+// Pakistan Standard Time (PKT) is UTC+5 with no daylight saving transitions.
+// Hardcoded offset is safe because Pakistan has not observed DST since 2010.
+// If DST is ever reintroduced, replace with a proper timezone library.
 const PKT_OFFSET_MS = 5 * 60 * 60 * 1000
 
 function getPKTHourStart(): Date {
@@ -264,9 +272,10 @@ export async function updateDailyAggregates(
     const powers = measurements.map((m) => Number(m.power)).filter((p) => p > 0)
 
     const stringAvgCurrent = avg(currents)
+    // When inverter has no active current (all strings offline), health is unknown (null)
     const healthScore = inverterAvgCurrent > 0
       ? Math.min((stringAvgCurrent / inverterAvgCurrent) * 100, 100)
-      : 100
+      : null
 
     const data = {
       avg_voltage: new Decimal(avg(voltages).toFixed(2)),
@@ -274,7 +283,7 @@ export async function updateDailyAggregates(
       avg_power: new Decimal(avg(powers).toFixed(2)),
       min_current: safeMin(currents) !== null ? new Decimal(safeMin(currents)!.toFixed(3)) : null,
       max_current: safeMax(currents) !== null ? new Decimal(safeMax(currents)!.toFixed(3)) : null,
-      health_score: new Decimal(healthScore.toFixed(2)),
+      health_score: healthScore !== null ? new Decimal(healthScore.toFixed(2)) : null,
     }
 
     upserts.push(

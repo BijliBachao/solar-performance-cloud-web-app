@@ -74,7 +74,9 @@ class HuaweiClient {
   private password: string
   private token: TokenInfo | null = null
   private cache: Map<string, CacheEntry> = new Map()
+  private readonly maxCacheSize = 200
   private maxRetries = 3
+  private loginPromise: Promise<void> | null = null
 
   constructor(baseUrl: string, username: string, password: string) {
     this.baseUrl = baseUrl
@@ -94,6 +96,7 @@ class HuaweiClient {
     })
 
     const data = await res.json()
+    // Huawei API: failCode===0 indicates success even when success field is false/missing
     if (!data.success && data.failCode !== 0) {
       throw new AuthenticationError(
         `Login failed: ${data.message || 'Unknown error'}`,
@@ -139,11 +142,23 @@ class HuaweiClient {
   }
 
   private async ensureAuth(): Promise<void> {
-    if (!this.isTokenValid()) {
-      if (this.token) {
-        await this.logout()
-      }
+    if (this.isTokenValid()) return
+
+    // Mutex: if login is already in flight, wait for it
+    if (this.loginPromise) {
+      await this.loginPromise
+      return
+    }
+
+    this.loginPromise = (async () => {
+      if (this.token) await this.logout()
       await this.login()
+    })()
+
+    try {
+      await this.loginPromise
+    } finally {
+      this.loginPromise = null
     }
   }
 
@@ -158,6 +173,12 @@ class HuaweiClient {
   }
 
   private setCache(key: string, data: any, ttlMs: number): void {
+    if (this.cache.size >= this.maxCacheSize) {
+      const now = Date.now()
+      for (const [k, entry] of this.cache) {
+        if (now > entry.expiresAt) this.cache.delete(k)
+      }
+    }
     this.cache.set(key, { data, expiresAt: Date.now() + ttlMs })
   }
 
@@ -242,8 +263,9 @@ class HuaweiClient {
     const allPlants: Plant[] = []
     let pageNo = 1
     const pageSize = 100
+    const maxPages = 50
 
-    while (true) {
+    while (pageNo <= maxPages) {
       const data = await this.request(
         '/thirdData/stations',
         { pageNo, pageSize },

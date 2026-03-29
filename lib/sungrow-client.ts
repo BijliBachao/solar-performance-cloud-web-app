@@ -48,6 +48,7 @@ export class SungrowClient {
   private token: string | null = null
   private tokenExpiry = 0
   private lastRequestTime = 0
+  private rateLimitPromise: Promise<void> = Promise.resolve()
   private rsaPem: string
 
   constructor(opts?: {
@@ -124,11 +125,14 @@ export class SungrowClient {
   }
 
   private async rateLimit(): Promise<void> {
-    const elapsed = Date.now() - this.lastRequestTime
-    if (elapsed < RATE_LIMIT_DELAY_MS) {
-      await new Promise((r) => setTimeout(r, RATE_LIMIT_DELAY_MS - elapsed))
-    }
-    this.lastRequestTime = Date.now()
+    this.rateLimitPromise = this.rateLimitPromise.then(async () => {
+      const elapsed = Date.now() - this.lastRequestTime
+      if (elapsed < RATE_LIMIT_DELAY_MS) {
+        await new Promise((r) => setTimeout(r, RATE_LIMIT_DELAY_MS - elapsed))
+      }
+      this.lastRequestTime = Date.now()
+    })
+    return this.rateLimitPromise
   }
 
   private async request<T>(path: string, body: Record<string, any>, skipAuth = false): Promise<T> {
@@ -239,7 +243,11 @@ export class SungrowClient {
       const decrypted = this.aesDecrypt(responseText, aesKey)
       json = JSON.parse(decrypted)
     } catch {
-      json = JSON.parse(responseText)
+      try {
+        json = JSON.parse(responseText)
+      } catch {
+        throw new Error(`[SungrowClient] Failed to parse login response: ${responseText.substring(0, 200)}`)
+      }
     }
 
     if (json.result_code !== '1' && json.result_code !== 1) {

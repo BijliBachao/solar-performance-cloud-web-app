@@ -58,16 +58,18 @@ async function main() {
     }
   })
 
-  // Run data retention cleanup daily at 2:00 AM
+  // Run data retention cleanup daily at 2:00 AM (30-day retention for raw measurements)
+  // Hourly/daily aggregates are kept indefinitely for historical analysis.
   cron.schedule('0 2 * * *', async () => {
-    console.log('[Poller] Running data retention cleanup...')
+    console.log('[Poller] Running data retention cleanup (30-day retention)...')
     try {
       const { prisma } = await import('../lib/prisma')
-      const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // 30 days ago
+      const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+      console.log(`[Poller] Deleting string_measurements older than ${cutoff.toISOString()}`)
       const result = await prisma.string_measurements.deleteMany({
         where: { timestamp: { lt: cutoff } },
       })
-      console.log(`[Poller] Deleted ${result.count} old string_measurements (older than 30 days)`)
+      console.log(`[Poller] Deleted ${result.count} old string_measurements`)
     } catch (err) {
       console.error('[Poller] Data retention cleanup failed:', err)
     }
