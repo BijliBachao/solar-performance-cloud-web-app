@@ -247,8 +247,12 @@ function detectMaxStrings(dataItemMap: Record<string, number | null>): number {
   for (const key of Object.keys(dataItemMap)) {
     const match = key.match(/^pv(\d+)_[ui]$/)
     if (match) {
-      const num = parseInt(match[1], 10)
-      if (num > max) max = num
+      const value = dataItemMap[key]
+      // Only count strings that have non-zero data (connected)
+      if (value !== null && value !== undefined && value !== 0) {
+        const num = parseInt(match[1], 10)
+        if (num > max) max = num
+      }
     }
   }
   return max

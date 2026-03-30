@@ -12,6 +12,7 @@ interface StringRow {
   mppt: number
   kw_per_string: number | null
   scores: Record<string, number | null>
+  type?: 'active' | 'unused'
 }
 
 interface StringLevelTableProps {
@@ -44,7 +45,9 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
     )
   }
 
-  // Group by device to add visual separators
+  const activeRows = rows.filter(r => r.type !== 'unused')
+  const unusedRows = rows.filter(r => r.type === 'unused')
+
   let prevDeviceId = ''
 
   return (
@@ -75,7 +78,8 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, idx) => {
+          {/* Active strings */}
+          {activeRows.map((row, idx) => {
             const showDivider = row.device_id !== prevDeviceId && idx > 0
             prevDeviceId = row.device_id
 
@@ -111,6 +115,47 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
               </tr>
             )
           })}
+
+          {/* Unused / Spare Ports section */}
+          {unusedRows.length > 0 && (
+            <>
+              <tr>
+                <td
+                  colSpan={4 + dates.length}
+                  className="bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-500 border-t-2 border-gray-300"
+                >
+                  Unused / Spare Ports ({unusedRows.length})
+                </td>
+              </tr>
+              {unusedRows.map((row) => (
+                <tr
+                  key={`unused-${row.device_id}-${row.string_number}`}
+                  className="bg-gray-50/50"
+                >
+                  <td className="sticky left-0 z-10 bg-gray-50 px-3 py-1 text-xs text-gray-400 border-r border-gray-200 whitespace-nowrap">
+                    {row.device_name}
+                  </td>
+                  <td className="sticky left-[140px] z-10 bg-gray-50 px-2 py-1 text-xs text-gray-400 border-r border-gray-200">
+                    MPPT{row.mppt}
+                  </td>
+                  <td className="sticky left-[204px] z-10 bg-gray-50 px-2 py-1 text-xs text-gray-400 border-r border-gray-200">
+                    PV{row.string_number}
+                  </td>
+                  <td className="sticky left-[264px] z-10 bg-gray-50 px-2 py-1 text-xs text-gray-300 text-right border-r border-gray-200">
+                    —
+                  </td>
+                  {dates.map((date) => (
+                    <td
+                      key={date}
+                      className="px-2 py-1 text-center text-xs text-gray-300 border-r border-gray-100 bg-gray-50/50"
+                    >
+                      —
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </>
+          )}
         </tbody>
       </table>
     </div>

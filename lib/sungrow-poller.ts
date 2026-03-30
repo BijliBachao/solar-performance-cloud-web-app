@@ -226,21 +226,21 @@ async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
       if (results.length === 0) continue
       const dp = results[0]
 
-      // Detect active strings from data
+      // Detect active strings from data — only count strings with current
+      // (Sungrow reports voltage on MPPT pairs but current only on primary string)
       let detectedStrings = 0
       for (let s = 32; s >= 1; s--) {
         const cid = STRING_CURRENT_IDS[s]
-        const vid = STRING_VOLTAGE_IDS[s]
-        if (!cid || !vid) continue
+        if (!cid) continue
         const current = safeFloat(dp[`p${cid}`])
-        const voltage = safeFloat(dp[`p${vid}`])
-        if (current > 0 || voltage > 0) {
+        if (current > 0) {
           detectedStrings = s
           break
         }
       }
 
-      const maxStrings = device.max_strings || detectedStrings || 24
+      const maxStrings = device.max_strings || detectedStrings
+      if (maxStrings === 0) continue // No strings detected, skip
 
       // Update max_strings if discovered
       if (detectedStrings > 0 && detectedStrings !== device.max_strings) {
@@ -267,7 +267,11 @@ async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
         const current = safeFloat(dp[`p${currentPointId}`])
         const voltage = safeFloat(dp[`p${voltagePointId}`])
 
-        if (voltage > 0 || current > 0) {
+        // Sungrow MPPT topology: 2 strings share 1 MPPT, API reports current
+        // on primary string only (odd-numbered). Secondary strings have voltage
+        // but always 0 current — storing them creates misleading 0% health scores.
+        // Only store strings that have measurable current (real individual data).
+        if (current > 0) {
           const vDec = new Decimal(voltage).toDecimalPlaces(2)
           const cDec = new Decimal(current).toDecimalPlaces(3)
           measurements.push({

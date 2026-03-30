@@ -31,13 +31,11 @@ export async function GET(
 
     const deviceStrings = await Promise.all(
       devices.map(async (device) => {
-        const maxStrings = device.max_strings || 24
-
-        // Get latest measurement per string
+        // Get latest measurement per string (only strings with actual data)
         const latestMeasurements = await prisma.string_measurements.findMany({
           where: { device_id: device.id },
           orderBy: { timestamp: 'desc' },
-          take: maxStrings * 2, // Get enough to cover all strings
+          take: 100, // Safety limit — no inverter has >100 strings
           distinct: ['string_number'],
         })
 

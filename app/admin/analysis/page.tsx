@@ -319,7 +319,7 @@ export default function AnalysisPage() {
       {summary && !loading && (
         <div className="flex items-center gap-6 text-xs px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">
           <span className="text-gray-500 font-medium">
-            {summary.total_strings} strings
+            {summary.active_strings} active strings
           </span>
           <span className="flex items-center gap-1">
             <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
@@ -333,10 +333,17 @@ export default function AnalysisPage() {
             <XCircle className="w-3.5 h-3.5 text-red-500" />
             <span className="text-gray-600">{summary.critical} Critical</span>
           </span>
-          <span className="flex items-center gap-1">
-            <CircleDashed className="w-3.5 h-3.5 text-gray-400" />
-            <span className="text-gray-600">{summary.offline} No Data</span>
-          </span>
+          {summary.no_data > 0 && (
+            <span className="flex items-center gap-1">
+              <CircleDashed className="w-3.5 h-3.5 text-gray-400" />
+              <span className="text-gray-600">{summary.no_data} No Data</span>
+            </span>
+          )}
+          {summary.unused_strings > 0 && (
+            <span className="flex items-center gap-1 ml-2 pl-2 border-l border-gray-300">
+              <span className="text-gray-400">{summary.unused_strings} Unused</span>
+            </span>
+          )}
         </div>
       )}
 

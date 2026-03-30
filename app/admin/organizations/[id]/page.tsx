@@ -22,27 +22,40 @@ export default function AdminOrgDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [assignDialogOpen, setAssignDialogOpen] = useState(false)
   const [allPlants, setAllPlants] = useState<any[]>([])
+  const [assignLoading, setAssignLoading] = useState(false)
 
   async function fetchOrg() {
     try {
       const res = await fetch(`/api/admin/organizations/${params.id}`)
       if (!res.ok) throw new Error('Organization not found')
       setOrg(await res.json())
+      setError(null)
     } catch (err: any) { setError(err.message) } finally { setLoading(false) }
   }
   useEffect(() => { fetchOrg() }, [params.id])
 
   async function handleAssignPlant(plantId: string) {
-    await fetch('/api/admin/plants/assign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plant_id: plantId, organization_id: params.id }) })
-    setAssignDialogOpen(false); fetchOrg()
+    setAssignLoading(true)
+    try {
+      const res = await fetch('/api/admin/plants/assign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plant_id: plantId, organization_id: params.id }) })
+      if (!res.ok) { const data = await res.json(); throw new Error(data.error || 'Failed to assign plant') }
+      setAssignDialogOpen(false); fetchOrg()
+    } catch (err: any) { setError(err.message) } finally { setAssignLoading(false) }
   }
   async function handleRemovePlant(plantId: string) {
-    await fetch('/api/admin/plants/assign', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plant_id: plantId, organization_id: params.id }) })
-    fetchOrg()
+    setAssignLoading(true)
+    try {
+      const res = await fetch('/api/admin/plants/assign', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plant_id: plantId, organization_id: params.id }) })
+      if (!res.ok) { const data = await res.json(); throw new Error(data.error || 'Failed to remove plant') }
+      fetchOrg()
+    } catch (err: any) { setError(err.message) } finally { setAssignLoading(false) }
   }
   async function openAssignDialog() {
-    const res = await fetch('/api/admin/plants')
-    if (res.ok) { const data = await res.json(); setAllPlants(data.plants) }
+    try {
+      const res = await fetch('/api/admin/plants')
+      if (!res.ok) throw new Error('Failed to load plants')
+      const data = await res.json(); setAllPlants(data.plants)
+    } catch (err: any) { setError(err.message); return }
     setAssignDialogOpen(true)
   }
 
@@ -67,7 +80,7 @@ export default function AdminOrgDetailPage() {
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Assigned Plants</h3>
-              <Button size="sm" onClick={openAssignDialog}><Plus className="h-4 w-4 mr-1" />Assign Plant</Button>
+              <Button size="sm" disabled={assignLoading} onClick={openAssignDialog}><Plus className="h-4 w-4 mr-1" />Assign Plant</Button>
             </div>
             <Table>
               <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Capacity</TableHead><TableHead>Health</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
@@ -77,7 +90,7 @@ export default function AdminOrgDetailPage() {
                     <TableCell className="font-medium">{pa.plants.plant_name}</TableCell>
                     <TableCell>{pa.plants.capacity_kw ? `${Number(pa.plants.capacity_kw).toFixed(1)} kW` : 'N/A'}</TableCell>
                     <TableCell><Badge variant={pa.plants.health_state === 3 ? 'success' : pa.plants.health_state === 2 ? 'destructive' : 'secondary'}>{pa.plants.health_state === 3 ? 'Healthy' : pa.plants.health_state === 2 ? 'Faulty' : 'Disconnected'}</Badge></TableCell>
-                    <TableCell><Button variant="ghost" size="sm" onClick={() => handleRemovePlant(pa.plant_id)}><Trash2 className="h-4 w-4 text-red-500" /></Button></TableCell>
+                    <TableCell><Button variant="ghost" size="sm" disabled={assignLoading} onClick={() => handleRemovePlant(pa.plant_id)}><Trash2 className="h-4 w-4 text-red-500" /></Button></TableCell>
                   </TableRow>
                 ))}
                 {org.plant_assignments.length === 0 && (<TableRow><TableCell colSpan={4} className="text-center text-gray-500 py-8">No plants assigned</TableCell></TableRow>)}
@@ -109,7 +122,7 @@ export default function AdminOrgDetailPage() {
           <DialogHeader><DialogTitle>Assign Plant</DialogTitle></DialogHeader>
           <div className="space-y-2 max-h-64 overflow-y-auto">
             {unassignedPlants.map((plant: any) => (
-              <button key={plant.id} onClick={() => handleAssignPlant(plant.id)} className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-primary-300 hover:bg-primary-50 transition-colors">
+              <button key={plant.id} disabled={assignLoading} onClick={() => handleAssignPlant(plant.id)} className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-primary-300 hover:bg-primary-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                 <p className="font-medium text-sm">{plant.plant_name}</p>
                 <p className="text-xs text-gray-500">{plant.capacity_kw ? `${Number(plant.capacity_kw).toFixed(1)} kW` : 'Capacity N/A'}</p>
               </button>

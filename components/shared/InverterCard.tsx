@@ -48,7 +48,7 @@ export function InverterCard({ device }: InverterCardProps) {
           )}
         </div>
         <span className="text-xs text-gray-500">
-          {device.max_strings || total} strings
+          {total} strings
         </span>
       </div>
       <div className="flex gap-3 mt-2 text-xs">

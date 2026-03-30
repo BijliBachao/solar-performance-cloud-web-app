@@ -141,12 +141,13 @@ export default function AdminPlantsPage() {
     try {
       // If plant is currently assigned to a different org, unassign first
       if (assignPlant.assigned_org && assignPlant.assigned_org.id !== selectedOrgId) {
-        await fetch('/api/admin/plants/assign', {
+        const delRes = await fetch('/api/admin/plants/assign', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({ plant_id: assignPlant.id, organization_id: assignPlant.assigned_org.id }),
         })
+        if (!delRes.ok && delRes.status !== 404) throw new Error('Failed to unassign from previous organization')
       }
 
       const res = await fetch('/api/admin/plants/assign', {

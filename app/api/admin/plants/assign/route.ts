@@ -16,6 +16,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Verify plant and organization exist
+    const [plant, org] = await Promise.all([
+      prisma.plants.findUnique({ where: { id: plant_id }, select: { id: true } }),
+      prisma.organizations.findUnique({ where: { id: organization_id }, select: { id: true } }),
+    ])
+    if (!plant) return NextResponse.json({ error: 'Plant not found' }, { status: 404 })
+    if (!org) return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+
     const assignment = await prisma.plant_assignments.create({
       data: {
         plant_id,
@@ -52,9 +60,13 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    await prisma.plant_assignments.deleteMany({
+    const result = await prisma.plant_assignments.deleteMany({
       where: { plant_id, organization_id },
     })
+
+    if (result.count === 0) {
+      return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

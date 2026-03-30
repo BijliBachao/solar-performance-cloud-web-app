@@ -25,10 +25,13 @@ export function ExportButton({ dates, rows, type }: ExportButtonProps) {
     const lines: string[] = []
 
     if (type === 'string') {
+      const activeRows = rows.filter((r: any) => r.type !== 'unused')
+      const unusedRows = rows.filter((r: any) => r.type === 'unused')
+
       // Header
-      lines.push(['Plant', 'Inverter', 'MPPT', 'String', 'kW/String', ...dates].join(','))
-      // Rows
-      for (const row of rows) {
+      lines.push(['Plant', 'Inverter', 'MPPT', 'String', 'Type', 'kW/String', ...dates].join(','))
+      // Active rows
+      for (const row of activeRows) {
         const scores = dates.map(d => {
           const s = row.scores[d]
           return s !== null && s !== undefined ? `${Math.round(s)}%` : ''
@@ -38,9 +41,25 @@ export function ExportButton({ dates, rows, type }: ExportButtonProps) {
           csvVal(row.device_name),
           `MPPT${row.mppt}`,
           `PV${row.string_number}`,
+          'Active',
           row.kw_per_string != null ? `${row.kw_per_string} kW` : '',
           ...scores,
         ].join(','))
+      }
+      // Unused rows
+      if (unusedRows.length > 0) {
+        lines.push('')
+        lines.push(`Unused / Spare Ports (${unusedRows.length})`)
+        for (const row of unusedRows) {
+          lines.push([
+            csvVal(row.plant_name),
+            csvVal(row.device_name),
+            `MPPT${row.mppt}`,
+            `PV${row.string_number}`,
+            'Unused',
+            '',
+          ].join(','))
+        }
       }
     } else {
       // Inverter level

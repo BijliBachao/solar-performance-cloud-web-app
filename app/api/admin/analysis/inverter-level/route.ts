@@ -101,13 +101,13 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      const plantCap = Number(dev.plants.capacity_kw) || 0
+      const plantCap = Number(dev.plants?.capacity_kw) || 0
       const invCount = plantInverterCounts.get(dev.plant_id) || 1
       const kwPerInverter = plantCap > 0 ? Math.round((plantCap / invCount) * 100) / 100 : null
 
       rows.push({
         plant_id: dev.plant_id,
-        plant_name: dev.plants.plant_name,
+        plant_name: dev.plants?.plant_name || 'Unknown',
         device_id: dev.id,
         device_name: dev.device_name || dev.id,
         kw: kwPerInverter,

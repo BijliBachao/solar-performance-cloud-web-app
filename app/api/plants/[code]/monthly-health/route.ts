@@ -347,12 +347,7 @@ export async function GET(
     hourlyData.forEach(d => allStrings.add(d.string_number))
     alertData.forEach(d => allStrings.add(d.string_number))
 
-    // If no data at all, try to get strings from device max_strings
-    if (allStrings.size === 0 && device.max_strings) {
-      for (let i = 1; i <= device.max_strings; i++) {
-        allStrings.add(i)
-      }
-    }
+    // If no data at all, return empty — don't show phantom strings from max_strings
 
     // Build result for each string first, then calculate inverter average from active strings
     const stringHealthData: StringHealthData[] = []
