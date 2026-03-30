@@ -243,13 +243,14 @@ async function fetchStringData(): Promise<void> {
 }
 
 function detectMaxStrings(dataItemMap: Record<string, number | null>): number {
+  // Find highest string number with meaningful current (> 0.1A)
+  // Voltage alone is unreliable (residual values on unused ports)
   let max = 0
   for (const key of Object.keys(dataItemMap)) {
-    const match = key.match(/^pv(\d+)_[ui]$/)
+    const match = key.match(/^pv(\d+)_i$/)
     if (match) {
       const value = dataItemMap[key]
-      // Only count strings that have non-zero data (connected)
-      if (value !== null && value !== undefined && value !== 0) {
+      if (value !== null && value !== undefined && value > 0.1) {
         const num = parseInt(match[1], 10)
         if (num > max) max = num
       }
