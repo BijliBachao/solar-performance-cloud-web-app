@@ -184,7 +184,8 @@ async function fetchStringData(): Promise<void> {
 
         try {
           const maxStrings = device.max_strings || detectMaxStrings(data.dataItemMap)
-          if (maxStrings > 0 && !device.max_strings) {
+          // Update max_strings if not yet set or if we found MORE (daytime has more data)
+          if (maxStrings > 0 && (!device.max_strings || maxStrings > device.max_strings)) {
             await prisma.devices.update({
               where: { id: device.id },
               data: { max_strings: maxStrings },

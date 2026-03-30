@@ -309,8 +309,8 @@ async function processDeviceData(
   const strings = extractStrings(deviceData, deviceType)
   const maxStrings = device.max_strings || (strings.length > 0 ? Math.max(...strings.map(s => s.string_number)) : 0)
 
-  // Update max_strings if not yet set and we found strings
-  if (maxStrings > 0 && !device.max_strings) {
+  // Update max_strings if not yet set or if we found MORE strings (daytime has more data)
+  if (maxStrings > 0 && (!device.max_strings || maxStrings > device.max_strings)) {
     await prisma.devices.update({
       where: { id: device.id },
       data: { max_strings: maxStrings },
