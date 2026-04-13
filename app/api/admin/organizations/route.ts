@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest, requireRole, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { randomUUID } from 'crypto'
+import { OrganizationCreateSchema } from '@/lib/api-validation'
+import { validationError, serverError } from '@/lib/api-errors'
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,10 +11,10 @@ export async function GET(request: NextRequest) {
     requireRole(userContext, ['SUPER_ADMIN'])
 
     const searchParams = request.nextUrl.searchParams
-    const search = searchParams.get('search') || ''
+    const search = (searchParams.get('search') || '').slice(0, 100) // Cap search length
     const status = searchParams.get('status') || ''
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '50')
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50')))
     const skip = (page - 1) * limit
 
     const where: any = {}
@@ -45,8 +47,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     if (error instanceof ApiAuthError) return createErrorResponse(error)
-    console.error('[Admin Organizations GET]', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return serverError('Admin Organizations GET', error)
   }
 }
 
@@ -55,15 +56,11 @@ export async function POST(request: NextRequest) {
     const userContext = await getUserFromRequest()
     requireRole(userContext, ['SUPER_ADMIN'])
 
-    const body = await request.json()
-    const { name, email, phone, address } = body
+    const raw = await request.json()
+    const parsed = OrganizationCreateSchema.safeParse(raw)
+    if (!parsed.success) return validationError(parsed.error)
 
-    if (!name || name.length < 2 || name.length > 100) {
-      return NextResponse.json(
-        { error: 'Name is required (2-100 characters)' },
-        { status: 400 }
-      )
-    }
+    const { name, email, phone, address } = parsed.data
 
     const org = await prisma.organizations.create({
       data: {
@@ -78,7 +75,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(org, { status: 201 })
   } catch (error) {
     if (error instanceof ApiAuthError) return createErrorResponse(error)
-    console.error('[Admin Organizations POST]', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return serverError('Admin Organizations POST', error)
   }
 }

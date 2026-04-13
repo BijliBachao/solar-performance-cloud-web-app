@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getUserFromRequest, requireOrganization, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
+import { getUserFromRequest, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
+import { requirePlantAccess } from '@/lib/api-access'
 import { prisma } from '@/lib/prisma'
 
 export async function PATCH(
@@ -22,19 +23,8 @@ export async function PATCH(
       return NextResponse.json({ error: 'Alert not found' }, { status: 404 })
     }
 
-    // Verify access - SUPER_ADMIN can resolve any alert
-    if (userContext.role !== 'SUPER_ADMIN') {
-      requireOrganization(userContext)
-      const assignment = await prisma.plant_assignments.findFirst({
-        where: {
-          plant_id: alert.plant_id,
-          organization_id: userContext.organizationId!,
-        },
-      })
-      if (!assignment) {
-        return NextResponse.json({ error: 'Access denied' }, { status: 403 })
-      }
-    }
+    // Verify access — SUPER_ADMIN passes, ORG_USER checked via plant_assignments
+    await requirePlantAccess(userContext, alert.plant_id)
 
     const updated = await prisma.alerts.update({
       where: { id: alertId },

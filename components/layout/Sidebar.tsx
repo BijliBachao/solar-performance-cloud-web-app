@@ -27,6 +27,7 @@ const adminNav = [
 
 const userNav = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
+  { href: '/dashboard/analysis', label: 'Analysis', icon: BarChart3 },
   { href: '/dashboard/alerts', label: 'Alerts', icon: Bell },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ]

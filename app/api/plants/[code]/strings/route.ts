@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getUserFromRequest, requireOrganization, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
+import { getUserFromRequest, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
+import { requirePlantAccess } from '@/lib/api-access'
 import { prisma } from '@/lib/prisma'
 import { INVERTER_DEVICE_TYPE_IDS } from '@/lib/constants'
 
@@ -9,20 +10,7 @@ export async function GET(
 ) {
   try {
     const userContext = await getUserFromRequest()
-
-    // SUPER_ADMIN can access any plant; org users need assignment check
-    if (userContext.role !== 'SUPER_ADMIN') {
-      requireOrganization(userContext)
-      const assignment = await prisma.plant_assignments.findFirst({
-        where: {
-          plant_id: params.code,
-          organization_id: userContext.organizationId!,
-        },
-      })
-      if (!assignment) {
-        return NextResponse.json({ error: 'Access denied' }, { status: 403 })
-      }
-    }
+    await requirePlantAccess(userContext, params.code)
 
     const devices = await prisma.devices.findMany({
       where: { plant_id: params.code, device_type_id: { in: INVERTER_DEVICE_TYPE_IDS } },

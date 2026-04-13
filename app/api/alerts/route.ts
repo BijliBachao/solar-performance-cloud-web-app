@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
       })
       plantIds = assignments.map((a) => a.plant_id)
       if (plantId && !plantIds.includes(plantId)) {
-        return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+        return NextResponse.json({ error: 'Not found' }, { status: 404 })
       }
     }
 

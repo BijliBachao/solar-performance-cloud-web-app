@@ -1,28 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest, requireRole, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
+import { PlantAssignSchema } from '@/lib/api-validation'
+import { validationError, notFoundError, conflictError, serverError } from '@/lib/api-errors'
 
 export async function POST(request: NextRequest) {
   try {
     const userContext = await getUserFromRequest()
     requireRole(userContext, ['SUPER_ADMIN'])
 
-    const { plant_id, organization_id } = await request.json()
+    const raw = await request.json()
+    const parsed = PlantAssignSchema.safeParse(raw)
+    if (!parsed.success) return validationError(parsed.error)
 
-    if (!plant_id || !organization_id) {
-      return NextResponse.json(
-        { error: 'plant_id and organization_id are required' },
-        { status: 400 }
-      )
-    }
+    const { plant_id, organization_id } = parsed.data
 
-    // Verify plant and organization exist
+    // Verify both plant and organization exist
     const [plant, org] = await Promise.all([
       prisma.plants.findUnique({ where: { id: plant_id }, select: { id: true } }),
       prisma.organizations.findUnique({ where: { id: organization_id }, select: { id: true } }),
     ])
-    if (!plant) return NextResponse.json({ error: 'Plant not found' }, { status: 404 })
-    if (!org) return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
+    if (!plant) return notFoundError('Plant')
+    if (!org) return notFoundError('Organization')
 
     const assignment = await prisma.plant_assignments.create({
       data: {
@@ -36,13 +35,9 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     if (error instanceof ApiAuthError) return createErrorResponse(error)
     if (error?.code === 'P2002') {
-      return NextResponse.json(
-        { error: 'Plant is already assigned to this organization' },
-        { status: 409 }
-      )
+      return conflictError('Plant is already assigned to this organization')
     }
-    console.error('[Admin Plant Assign POST]', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return serverError('Admin Plant Assign POST', error)
   }
 }
 
@@ -51,27 +46,21 @@ export async function DELETE(request: NextRequest) {
     const userContext = await getUserFromRequest()
     requireRole(userContext, ['SUPER_ADMIN'])
 
-    const { plant_id, organization_id } = await request.json()
+    const raw = await request.json()
+    const parsed = PlantAssignSchema.safeParse(raw)
+    if (!parsed.success) return validationError(parsed.error)
 
-    if (!plant_id || !organization_id) {
-      return NextResponse.json(
-        { error: 'plant_id and organization_id are required' },
-        { status: 400 }
-      )
-    }
+    const { plant_id, organization_id } = parsed.data
 
     const result = await prisma.plant_assignments.deleteMany({
       where: { plant_id, organization_id },
     })
 
-    if (result.count === 0) {
-      return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
-    }
+    if (result.count === 0) return notFoundError('Assignment')
 
     return NextResponse.json({ success: true })
   } catch (error) {
     if (error instanceof ApiAuthError) return createErrorResponse(error)
-    console.error('[Admin Plant Assign DELETE]', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return serverError('Admin Plant Assign DELETE', error)
   }
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getUserFromRequest, requireOrganization, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
+import { getUserFromRequest, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
+import { requirePlantAccess } from '@/lib/api-access'
 import { prisma } from '@/lib/prisma'
 
 export async function GET(
@@ -8,20 +9,7 @@ export async function GET(
 ) {
   try {
     const userContext = await getUserFromRequest()
-
-    // SUPER_ADMIN can access any plant; org users need assignment check
-    if (userContext.role !== 'SUPER_ADMIN') {
-      requireOrganization(userContext)
-      const assignment = await prisma.plant_assignments.findFirst({
-        where: {
-          plant_id: params.code,
-          organization_id: userContext.organizationId!,
-        },
-      })
-      if (!assignment) {
-        return NextResponse.json({ error: 'Plant not found or not assigned' }, { status: 404 })
-      }
-    }
+    await requirePlantAccess(userContext, params.code)
 
     const plant = await prisma.plants.findUnique({
       where: { id: params.code },

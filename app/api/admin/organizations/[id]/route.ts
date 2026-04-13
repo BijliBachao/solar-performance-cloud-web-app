@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest, requireRole, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
+import { OrganizationUpdateSchema } from '@/lib/api-validation'
+import { validationError, notFoundError, badRequestError, serverError } from '@/lib/api-errors'
 
 export async function GET(
   request: NextRequest,
@@ -31,15 +33,12 @@ export async function GET(
       },
     })
 
-    if (!org) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
-    }
+    if (!org) return notFoundError('Organization')
 
     return NextResponse.json(org)
   } catch (error) {
     if (error instanceof ApiAuthError) return createErrorResponse(error)
-    console.error('[Admin Org Detail GET]', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return serverError('Admin Org Detail GET', error)
   }
 }
 
@@ -51,9 +50,18 @@ export async function PATCH(
     const userContext = await getUserFromRequest()
     requireRole(userContext, ['SUPER_ADMIN'])
 
-    const body = await request.json()
-    const { name, email, phone, address, status } = body
+    const raw = await request.json()
+    const parsed = OrganizationUpdateSchema.safeParse(raw)
+    if (!parsed.success) return validationError(parsed.error)
 
+    // Verify org exists
+    const existing = await prisma.organizations.findUnique({
+      where: { id: params.id },
+      select: { id: true },
+    })
+    if (!existing) return notFoundError('Organization')
+
+    const { name, email, phone, address, status } = parsed.data
     const updateData: any = {}
     if (name !== undefined) updateData.name = name
     if (email !== undefined) updateData.email = email
@@ -69,8 +77,7 @@ export async function PATCH(
     return NextResponse.json(org)
   } catch (error) {
     if (error instanceof ApiAuthError) return createErrorResponse(error)
-    console.error('[Admin Org PATCH]', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return serverError('Admin Org PATCH', error)
   }
 }
 
@@ -89,22 +96,14 @@ export async function DELETE(
       },
     })
 
-    if (!org) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
-    }
+    if (!org) return notFoundError('Organization')
 
     if (org._count.users > 0) {
-      return NextResponse.json(
-        { error: `Cannot delete: ${org._count.users} user${org._count.users !== 1 ? 's' : ''} still assigned. Remove all users first.` },
-        { status: 400 }
-      )
+      return badRequestError(`Cannot delete: ${org._count.users} user${org._count.users !== 1 ? 's' : ''} still assigned. Remove all users first.`)
     }
 
     if (org._count.plant_assignments > 0) {
-      return NextResponse.json(
-        { error: `Cannot delete: ${org._count.plant_assignments} plant${org._count.plant_assignments !== 1 ? 's' : ''} still assigned. Unassign all plants first.` },
-        { status: 400 }
-      )
+      return badRequestError(`Cannot delete: ${org._count.plant_assignments} plant${org._count.plant_assignments !== 1 ? 's' : ''} still assigned. Unassign all plants first.`)
     }
 
     await prisma.organizations.update({
@@ -115,7 +114,6 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error) {
     if (error instanceof ApiAuthError) return createErrorResponse(error)
-    console.error('[Admin Org DELETE]', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return serverError('Admin Org DELETE', error)
   }
 }
