@@ -17,58 +17,72 @@ export async function generateAlerts(
     power: Decimal
   }>
 ): Promise<void> {
+  if (measurements.length === 0) return
+
   const activeStrings = measurements.filter(
     (m) => Number(m.current) > 0.1
   )
-  if (activeStrings.length < 2) return
 
   const totalCurrent = activeStrings.reduce((sum, m) => sum + Number(m.current), 0)
+  const avgCurrentAll = activeStrings.length > 0 ? totalCurrent / activeStrings.length : 0
 
-  // Skip alert generation during low-light conditions (Fix #18)
-  const avgCurrentAll = totalCurrent / activeStrings.length
-  if (avgCurrentAll < 1) return
-
-  // Build a map of string_number -> current severity for this cycle
+  // Build severity map
   const currentSeverities = new Map<number, { severity: string; gapPercent: number }>()
 
-  for (const measurement of activeStrings) {
-    const current = Number(measurement.current)
-    // Compute average EXCLUDING the string being tested (Fix #13)
-    const othersTotal = totalCurrent - current
-    const othersCount = activeStrings.length - 1
-    if (othersCount <= 0) continue
-    const othersAvg = othersTotal / othersCount
+  // ── Part 1: Compare active strings against each other ──────────
+  if (activeStrings.length >= 2 && avgCurrentAll >= 1) {
+    for (const measurement of activeStrings) {
+      const current = Number(measurement.current)
+      const othersTotal = totalCurrent - current
+      const othersCount = activeStrings.length - 1
+      if (othersCount <= 0) continue
+      const othersAvg = othersTotal / othersCount
+      if (othersAvg <= 0) continue
 
-    if (othersAvg <= 0) continue
+      const gapPercent = ((othersAvg - current) / othersAvg) * 100
 
-    const gapPercent = ((othersAvg - current) / othersAvg) * 100
+      let severity: string | null = null
+      if (gapPercent > 50) severity = 'CRITICAL'
+      else if (gapPercent > 25) severity = 'WARNING'
+      else if (gapPercent > 10) severity = 'INFO'
 
-    let severity: string | null = null
-    if (gapPercent > 50) severity = 'CRITICAL'
-    else if (gapPercent > 25) severity = 'WARNING'
-    else if (gapPercent > 10) severity = 'INFO'
-
-    if (severity) {
-      currentSeverities.set(measurement.string_number, { severity, gapPercent })
+      if (severity) {
+        currentSeverities.set(measurement.string_number, { severity, gapPercent })
+      }
     }
   }
 
-  // Fetch all open alerts for this device
+  // ── Part 2: Dead/near-dead strings (current <= 0.1A) ──────────
+  // These were invisible before — now flagged as CRITICAL
+  if (activeStrings.length >= 2 && avgCurrentAll >= 1) {
+    const deadStrings = measurements.filter(
+      (m) => Number(m.current) <= 0.1
+    )
+    for (const measurement of deadStrings) {
+      const current = Number(measurement.current)
+      const gapPercent = avgCurrentAll > 0
+        ? Math.min(((avgCurrentAll - current) / avgCurrentAll) * 100, 100)
+        : 100
+      currentSeverities.set(measurement.string_number, {
+        severity: 'CRITICAL',
+        gapPercent,
+      })
+    }
+  }
+
+  // ── Part 3: Resolve / Create alerts ────────────────────────────
+  if (currentSeverities.size === 0) return
+
   const openAlerts = await prisma.alerts.findMany({
-    where: {
-      device_id: deviceId,
-      resolved_at: null,
-    },
+    where: { device_id: deviceId, resolved_at: null },
   })
 
-  // Track which string+severity combos need a new alert
-  const resolvedSet = new Set<string>() // "stringNumber:severity" keys that were resolved
+  const resolvedSet = new Set<string>()
 
-  // Resolve alerts for strings that have recovered or changed severity
+  // Resolve recovered or changed-severity alerts
   for (const alert of openAlerts) {
     const currentState = currentSeverities.get(alert.string_number)
     if (!currentState || currentState.severity !== alert.severity) {
-      // String recovered (gap < 10%) or severity changed — resolve
       await prisma.alerts.update({
         where: { id: alert.id },
         data: { resolved_at: new Date() },
@@ -77,35 +91,34 @@ export async function generateAlerts(
     }
   }
 
-  // Create new alerts where needed
-  for (const measurement of activeStrings) {
-    const currentState = currentSeverities.get(measurement.string_number)
-    if (!currentState) continue
-
-    // Skip if an open alert with the same severity already exists and wasn't resolved
+  // Create new alerts
+  for (const [stringNumber, state] of currentSeverities) {
     const alreadyOpen = openAlerts.some(
       (a) =>
-        a.string_number === measurement.string_number &&
-        a.severity === currentState.severity &&
+        a.string_number === stringNumber &&
+        a.severity === state.severity &&
         !resolvedSet.has(`${a.string_number}:${a.severity}`)
     )
     if (alreadyOpen) continue
 
+    const measurement = measurements.find((m) => m.string_number === stringNumber)
+    if (!measurement) continue
+
     const current = Number(measurement.current)
-    const othersTotal = totalCurrent - current
-    const othersCount = activeStrings.length - 1
-    const othersAvg = othersTotal / othersCount
+    const message = current <= 0.1
+      ? `String ${stringNumber} producing near-zero current (${current.toFixed(3)}A)`
+      : `String ${stringNumber} is ${state.gapPercent.toFixed(1)}% below average`
 
     await prisma.alerts.create({
       data: {
         device_id: deviceId,
         plant_id: plantId,
-        string_number: measurement.string_number,
-        severity: currentState.severity,
-        message: `String ${measurement.string_number} is ${currentState.gapPercent.toFixed(1)}% below average`,
-        expected_value: new Decimal(othersAvg.toFixed(3)),
+        string_number: stringNumber,
+        severity: state.severity,
+        message,
+        expected_value: new Decimal(avgCurrentAll.toFixed(3)),
         actual_value: measurement.current,
-        gap_percent: new Decimal(currentState.gapPercent.toFixed(1)),
+        gap_percent: new Decimal(state.gapPercent.toFixed(1)),
       },
     })
   }
