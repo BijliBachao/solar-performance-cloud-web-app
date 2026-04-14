@@ -75,7 +75,7 @@ export default function LandingPage() {
                 <Sun className="w-4 h-4 text-[#76b900]" />
               </div>
               <div>
-                <span className="text-sm font-bold text-white">Solar Performance Cloud</span>
+                <span className="text-xs md:text-sm font-bold text-white whitespace-nowrap">Solar Performance Cloud</span>
               </div>
             </div>
 
@@ -85,17 +85,17 @@ export default function LandingPage() {
               <a href="#faults" className="text-xs font-semibold text-[#a7a7a7] hover:text-white transition-colors">Fault Detection</a>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 md:gap-3">
               {isSignedIn ? (
-                <Link href="/auth-redirect" className="px-4 py-1.5 text-xs font-bold border-2 border-[#76b900] text-[#76b900] rounded-sm hover:bg-[#76b900] hover:text-white transition-colors">
+                <Link href="/auth-redirect" className="px-3 md:px-4 py-1.5 text-[10px] md:text-xs font-bold border-2 border-[#76b900] text-[#76b900] rounded-sm hover:bg-[#76b900] hover:text-white transition-colors">
                   Dashboard
                 </Link>
               ) : (
                 <>
-                  <Link href="/sign-in" className="text-xs font-semibold text-[#a7a7a7] hover:text-white transition-colors">
+                  <Link href="/sign-in" className="hidden sm:inline text-xs font-semibold text-[#a7a7a7] hover:text-white transition-colors">
                     Sign In
                   </Link>
-                  <Link href="/sign-up" className="px-4 py-1.5 text-xs font-bold border-2 border-[#76b900] text-[#76b900] rounded-sm hover:bg-[#76b900] hover:text-white transition-colors">
+                  <Link href="/sign-up" className="px-3 md:px-4 py-1.5 text-[10px] md:text-xs font-bold border-2 border-[#76b900] text-[#76b900] rounded-sm hover:bg-[#76b900] hover:text-white transition-colors whitespace-nowrap">
                     Get Started
                   </Link>
                 </>

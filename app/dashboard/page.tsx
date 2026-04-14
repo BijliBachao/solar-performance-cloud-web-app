@@ -33,10 +33,10 @@ export default function DashboardOverviewPage() {
   return (
     <PageWrapper title="Overview" loading={loading} error={error || undefined}>
       {data && (
-        <div className="space-y-6">
-          {/* KPI Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard title="Assigned Plants" value={data.stats.totalPlants} icon={Zap} accent="green" />
+        <div className="space-y-8">
+          {/* KPI Cards — dark cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <KpiCard title="Plants" value={data.stats.totalPlants} icon={Zap} accent="green" />
             <KpiCard
               title="Active Alerts"
               value={data.stats.activeAlerts}
@@ -45,48 +45,53 @@ export default function DashboardOverviewPage() {
               subtitle={data.stats.activeAlerts > 0 ? 'Needs attention' : 'All clear'}
             />
             <KpiCard
-              title="Avg String Health"
+              title="String Health"
               value={`${data.stats.avgStringHealth}%`}
               icon={Activity}
               accent={data.stats.avgStringHealth >= 90 ? 'green' : data.stats.avgStringHealth >= 50 ? 'amber' : 'red'}
             />
             <KpiCard
-              title="Last Update"
+              title="Last Sync"
               value={data.stats.lastUpdate ? formatDistanceToNow(new Date(data.stats.lastUpdate), { addSuffix: true }) : 'N/A'}
               icon={Clock}
               accent="gray"
             />
           </div>
 
-          {/* Plants */}
+          {/* Plants — dark cards */}
           <div>
-            <h3 className="text-base font-bold text-[#0a0a0a] mb-3">Your Plants</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-[#0a0a0a] uppercase tracking-wider">Your Plants</h3>
+              <span className="text-[10px] font-bold text-[#898989]">{data.plants.length} total</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {data.plants.map((plant) => (
                 <PlantCard key={plant.id} plant={plant} />
               ))}
               {data.plants.length === 0 && (
-                <div className="col-span-full text-center py-12">
-                  <Zap className="h-10 w-10 mx-auto mb-2 text-[#e5e5e5]" />
-                  <p className="text-sm font-bold text-[#525252]">No plants assigned yet</p>
-                  <p className="text-xs text-[#898989] mt-1">Contact your administrator to assign plants to your organization.</p>
+                <div className="col-span-full bg-[#1a1a1a] rounded-sm text-center py-16">
+                  <Zap className="h-8 w-8 mx-auto mb-3 text-[#333]" />
+                  <p className="text-sm font-bold text-[#5e5e5e]">No plants assigned</p>
+                  <p className="text-[11px] text-[#525252] mt-1">Contact your administrator.</p>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Recent Alerts */}
-          <div className="bg-white rounded border border-[#e5e5e5] p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold text-[#0a0a0a]">Recent Alerts</h3>
+          {/* Recent Alerts — dark card */}
+          <div className="bg-[#1a1a1a] rounded-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-[#333]">
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider">Recent Alerts</h3>
               <Link
                 href="/dashboard/alerts"
-                className="flex items-center gap-1 text-xs font-semibold text-[#76b900] hover:text-[#5a8f00] transition-colors"
+                className="flex items-center gap-1 text-[11px] font-bold text-[#76b900] hover:text-[#bff230] transition-colors"
               >
-                View All <ArrowRight className="h-3.5 w-3.5" />
+                View All <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
-            <AlertPanel alerts={data.recentAlerts} />
+            <div className="p-4">
+              <AlertPanel alerts={data.recentAlerts} />
+            </div>
           </div>
         </div>
       )}

@@ -1,7 +1,7 @@
 'use client'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { Cpu, AlertTriangle } from 'lucide-react'
+import { Cpu, AlertTriangle, ChevronRight } from 'lucide-react'
 
 interface PlantCardProps {
   plant: {
@@ -16,70 +16,67 @@ interface PlantCardProps {
   basePath?: string
 }
 
-const providerBadge: Record<string, { label: string; className: string }> = {
-  huawei: { label: 'Huawei', className: 'bg-red-50 text-red-700 border-red-200' },
-  solis: { label: 'Solis', className: 'bg-blue-50 text-blue-700 border-blue-200' },
-  growatt: { label: 'Growatt', className: 'bg-orange-50 text-orange-700 border-orange-200' },
-  sungrow: { label: 'Sungrow', className: 'bg-purple-50 text-purple-700 border-purple-200' },
+const healthLine: Record<number, string> = {
+  1: 'bg-[#898989]',
+  2: 'bg-[#e52020]',
+  3: 'bg-[#76b900]',
 }
 
-const healthConfig: Record<number, { color: string; bg: string; label: string }> = {
-  1: { color: 'text-[#898989]', bg: 'bg-gray-100 border-gray-200', label: 'Disconnected' },
-  2: { color: 'text-[#e52020]', bg: 'bg-red-50 border-red-200', label: 'Faulty' },
-  3: { color: 'text-[#5a8f00]', bg: 'bg-[#e8f5d0] border-[#76b900]/30', label: 'Healthy' },
+const healthLabel: Record<number, { text: string; color: string }> = {
+  1: { text: 'OFFLINE', color: 'text-[#898989]' },
+  2: { text: 'FAULTY', color: 'text-[#e52020]' },
+  3: { text: 'HEALTHY', color: 'text-[#76b900]' },
 }
 
 export function PlantCard({ plant, basePath = '/dashboard/plants' }: PlantCardProps) {
   const router = useRouter()
-  const health = healthConfig[plant.health_state || 0] || healthConfig[1]
+  const hl = healthLine[plant.health_state || 0] || healthLine[1]
+  const hlabel = healthLabel[plant.health_state || 0] || healthLabel[1]
 
   return (
     <div
       onClick={() => router.push(`${basePath}/${plant.id}`)}
-      className="bg-white rounded border border-[#e5e5e5] p-4 hover:border-[#76b900] transition-colors cursor-pointer group"
+      className="bg-[#1a1a1a] rounded-sm overflow-hidden cursor-pointer group hover:ring-1 hover:ring-[#76b900]/50 transition-all"
     >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-3">
-        <div className="min-w-0">
-          <h3 className="text-sm font-bold text-[#0a0a0a] truncate group-hover:text-[#76b900] transition-colors">
-            {plant.plant_name}
-          </h3>
-          <div className="flex items-center gap-2 mt-1">
-            {plant.provider && providerBadge[plant.provider] && (
-              <span className={cn(
-                'inline-flex items-center text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-sm border',
-                providerBadge[plant.provider].className
-              )}>
-                {providerBadge[plant.provider].label}
-              </span>
-            )}
+      <div className={cn('h-[2px]', hl)} />
+      <div className="p-5">
+        {/* Plant name + health */}
+        <div className="flex items-start justify-between mb-4">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-bold text-white truncate group-hover:text-[#76b900] transition-colors">
+              {plant.plant_name}
+            </h3>
             {plant.capacity_kw && (
-              <span className="text-xs font-semibold text-[#525252]">
+              <span className="text-[11px] font-bold text-[#5e5e5e] mt-0.5 block">
                 {Number(plant.capacity_kw).toFixed(1)} kW
               </span>
             )}
           </div>
+          <span className={cn('text-[10px] font-bold uppercase tracking-widest', hlabel.color)}>
+            {hlabel.text}
+          </span>
         </div>
-        <span className={cn(
-          'inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-sm border',
-          health.bg, health.color
-        )}>
-          {health.label}
-        </span>
-      </div>
 
-      {/* Stats */}
-      <div className="flex items-center gap-4 pt-3 border-t border-[#f0f0f0]">
-        <div className="flex items-center gap-1.5 text-xs text-[#898989]">
-          <Cpu className="h-3.5 w-3.5" />
-          <span className="font-semibold text-[#525252]">{plant.device_count}</span> inverters
-        </div>
-        {plant.alert_count > 0 && (
-          <div className="flex items-center gap-1.5 text-xs text-[#e52020]">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            <span className="font-semibold">{plant.alert_count}</span> alerts
+        {/* Stats row */}
+        <div className="flex items-center justify-between pt-3 border-t border-[#333]">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1.5">
+              <Cpu className="h-3 w-3 text-[#5e5e5e]" />
+              <span className="text-[11px] text-[#898989]"><strong className="text-[#a7a7a7]">{plant.device_count}</strong> inv</span>
+            </div>
+            {plant.alert_count > 0 && (
+              <div className="flex items-center gap-1.5">
+                <AlertTriangle className="h-3 w-3 text-[#e52020]" />
+                <span className="text-[11px] font-bold text-[#e52020]">{plant.alert_count}</span>
+              </div>
+            )}
           </div>
-        )}
+          {plant.provider && (
+            <span className="text-[10px] font-bold text-[#5e5e5e] uppercase tracking-wider">
+              {plant.provider}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   )
