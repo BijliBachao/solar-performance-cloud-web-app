@@ -7,7 +7,29 @@ interface KpiCardProps {
   subtitle?: string
   icon?: LucideIcon
   trend?: { value: number; isPositive: boolean }
+  accent?: 'green' | 'amber' | 'red' | 'gray'
   className?: string
+}
+
+const accentColors = {
+  green: 'border-t-[#76b900]',
+  amber: 'border-t-[#ef9100]',
+  red: 'border-t-[#e52020]',
+  gray: 'border-t-[#898989]',
+}
+
+const iconBgColors = {
+  green: 'bg-[#e8f5d0]',
+  amber: 'bg-amber-50',
+  red: 'bg-red-50',
+  gray: 'bg-gray-100',
+}
+
+const iconTextColors = {
+  green: 'text-[#76b900]',
+  amber: 'text-[#ef9100]',
+  red: 'text-[#e52020]',
+  gray: 'text-[#898989]',
 }
 
 export function KpiCard({
@@ -16,28 +38,30 @@ export function KpiCard({
   subtitle,
   icon: Icon,
   trend,
+  accent = 'green',
   className,
 }: KpiCardProps) {
   return (
     <div
       className={cn(
-        'bg-white rounded-xl border border-gray-200 p-6 shadow-sm',
+        'bg-white rounded border border-[#e5e5e5] border-t-2 p-4',
+        accentColors[accent],
         className
       )}
     >
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm font-medium text-gray-500">{title}</p>
-          <p className="mt-2 text-3xl font-bold text-gray-900">{value}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#898989]">{title}</p>
+          <p className="mt-1.5 text-2xl font-bold text-[#0a0a0a]">{value}</p>
           {subtitle && (
-            <p className="mt-1 text-sm text-gray-500">{subtitle}</p>
+            <p className="mt-0.5 text-xs text-[#898989]">{subtitle}</p>
           )}
           {trend && (
-            <div className="mt-2 flex items-center text-sm">
+            <div className="mt-1.5 flex items-center text-xs">
               <span
                 className={cn(
-                  'font-medium',
-                  trend.isPositive ? 'text-green-600' : 'text-red-600'
+                  'font-semibold',
+                  trend.isPositive ? 'text-[#76b900]' : 'text-[#e52020]'
                 )}
               >
                 {trend.isPositive ? '+' : ''}{trend.value}%
@@ -46,8 +70,8 @@ export function KpiCard({
           )}
         </div>
         {Icon && (
-          <div className="rounded-lg bg-primary-50 p-3">
-            <Icon className="h-6 w-6 text-primary-600" />
+          <div className={cn('rounded-sm p-2', iconBgColors[accent])}>
+            <Icon className={cn('h-5 w-5', iconTextColors[accent])} />
           </div>
         )}
       </div>

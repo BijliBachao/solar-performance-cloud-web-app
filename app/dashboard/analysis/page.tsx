@@ -171,24 +171,21 @@ export default function DashboardAnalysisPage() {
     <div className="p-6 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="w-5 h-5 text-gray-700" />
-          <h1 className="text-lg font-semibold text-gray-900">Performance Analysis</h1>
-        </div>
-        <div className="text-xs text-gray-500">
-          Values shown are Health Score (string current vs inverter average)
+        <h1 className="text-xl font-bold text-[#0a0a0a] leading-tight">Performance Analysis</h1>
+        <div className="text-[11px] font-semibold text-[#898989]">
+          Health Score = Performance × Availability
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+      <div className="flex gap-1">
         <button
           onClick={() => setTab('string')}
           className={cn(
-            'px-4 py-1.5 text-sm font-medium rounded-md transition-colors',
+            'px-4 py-1.5 text-xs font-semibold rounded-sm transition-colors',
             tab === 'string'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-[#76b900]/10 text-[#76b900] border border-[#76b900]/30'
+              : 'bg-[#f5f5f5] text-[#525252] hover:bg-[#f0f0f0]'
           )}
         >
           String Level
@@ -196,10 +193,10 @@ export default function DashboardAnalysisPage() {
         <button
           onClick={() => setTab('inverter')}
           className={cn(
-            'px-4 py-1.5 text-sm font-medium rounded-md transition-colors',
+            'px-4 py-1.5 text-xs font-semibold rounded-sm transition-colors',
             tab === 'inverter'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-[#76b900]/10 text-[#76b900] border border-[#76b900]/30'
+              : 'bg-[#f5f5f5] text-[#525252] hover:bg-[#f0f0f0]'
           )}
         >
           Inverter Level
@@ -214,7 +211,7 @@ export default function DashboardAnalysisPage() {
           <select
             value={plantId}
             onChange={(e) => { setPlantId(e.target.value); setDeviceId('') }}
-            className="text-sm border border-gray-300 rounded-md px-2 py-1.5 bg-white min-w-[180px]"
+            className="text-xs font-semibold border border-[#e5e5e5] rounded px-2.5 py-1.5 bg-white text-[#525252] min-w-[180px] focus:border-[#76b900] focus:ring-1 focus:ring-[#76b900]/20 outline-none"
           >
             <option value="">All Plants</option>
             {plants.map(p => (
@@ -230,7 +227,7 @@ export default function DashboardAnalysisPage() {
             <select
               value={deviceId}
               onChange={(e) => setDeviceId(e.target.value)}
-              className="text-sm border border-gray-300 rounded-md px-2 py-1.5 bg-white min-w-[160px]"
+              className="text-xs font-semibold border border-[#e5e5e5] rounded px-2.5 py-1.5 bg-white text-[#525252] min-w-[160px] focus:border-[#76b900] focus:ring-1 focus:ring-[#76b900]/20 outline-none"
             >
               <option value="">All Inverters</option>
               {devices.map(d => (
@@ -247,7 +244,7 @@ export default function DashboardAnalysisPage() {
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
-            className="text-sm border border-gray-300 rounded-md px-2 py-1.5"
+            className="text-xs font-semibold border border-[#e5e5e5] rounded px-2.5 py-1.5 bg-white text-[#525252] focus:border-[#76b900] focus:ring-1 focus:ring-[#76b900]/20 outline-none"
           />
         </div>
         <div>
@@ -256,7 +253,7 @@ export default function DashboardAnalysisPage() {
             type="date"
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            className="text-sm border border-gray-300 rounded-md px-2 py-1.5"
+            className="text-xs font-semibold border border-[#e5e5e5] rounded px-2.5 py-1.5 bg-white text-[#525252] focus:border-[#76b900] focus:ring-1 focus:ring-[#76b900]/20 outline-none"
           />
         </div>
 
@@ -270,7 +267,7 @@ export default function DashboardAnalysisPage() {
             <button
               key={p.label}
               onClick={() => setPreset(p.days)}
-              className="px-2 py-1.5 text-xs text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+              className="px-2.5 py-1.5 text-xs font-semibold text-[#525252] bg-[#f5f5f5] rounded-sm hover:bg-[#f0f0f0] transition-colors"
             >
               {p.label}
             </button>
@@ -287,7 +284,7 @@ export default function DashboardAnalysisPage() {
         <button
           onClick={fetchData}
           disabled={loading || !!validationError}
-          className="px-4 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="px-4 py-1.5 text-xs font-bold text-[#76b900] border-2 border-[#76b900] rounded-sm hover:bg-[#76b900] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           {loading ? 'Loading...' : 'Generate'}
         </button>

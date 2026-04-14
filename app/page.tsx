@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@clerk/nextjs'
 import Link from 'next/link'
 import {
-  Sun, BarChart3, GitCompareArrows, Bell, FileText,
-  ArrowRight, Shield, Zap, Activity, ChevronRight,
-  AlertTriangle, Check, Eye, TrendingUp,
+  Sun, BarChart3, Bell, ArrowRight, Zap, Activity,
+  AlertTriangle, Check, Eye, TrendingUp, Shield, Clock,
+  Cpu, ChevronRight, Layers, Radio,
 } from 'lucide-react'
 
 export default function LandingPage() {
@@ -53,57 +53,50 @@ export default function LandingPage() {
     // Continue to landing page
   } else if (!isLoaded || redirecting) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
-          <p className="text-gray-500">
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <div className="flex items-center gap-3">
+          <div className="w-5 h-5 border-2 border-[#76b900] border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm font-semibold text-[#a7a7a7]">
             {!isLoaded ? 'Initializing...' : 'Redirecting to dashboard...'}
-          </p>
+          </span>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-white text-gray-900">
-      {/* Navigation */}
-      <nav className="fixed top-0 w-full bg-white/80 backdrop-blur-xl border-b border-gray-200 z-50">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex justify-between h-16 items-center">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-amber-500 rounded-xl flex items-center justify-center">
-                <Sun className="w-5 h-5 text-white" />
+    <div className="min-h-screen bg-black text-white">
+      {/* ── Navigation ─────────────────────────────────────────────── */}
+      <nav className="fixed top-0 w-full bg-black/90 backdrop-blur-sm border-b border-[#333] z-50">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="flex justify-between h-14 items-center">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-sm bg-[#76b900]/20 flex items-center justify-center">
+                <Sun className="w-4 h-4 text-[#76b900]" />
               </div>
               <div>
-                <span className="text-xl font-bold tracking-tight text-gray-900">Solar Cloud</span>
-                <span className="text-xs text-gray-500 block -mt-1">by Bijli Bachao</span>
+                <span className="text-sm font-bold text-white">Solar Performance Cloud</span>
               </div>
             </div>
 
-            <div className="hidden md:flex items-center gap-8 text-sm">
-              <a href="#problem" className="text-gray-600 hover:text-gray-900 transition-colors">Problem</a>
-              <a href="#solution" className="text-gray-600 hover:text-gray-900 transition-colors">Solution</a>
-              <a href="#how-it-works" className="text-gray-600 hover:text-gray-900 transition-colors">How It Works</a>
+            <div className="hidden md:flex items-center gap-8">
+              <a href="#features" className="text-xs font-semibold text-[#a7a7a7] hover:text-white transition-colors">Features</a>
+              <a href="#how-it-works" className="text-xs font-semibold text-[#a7a7a7] hover:text-white transition-colors">How It Works</a>
+              <a href="#faults" className="text-xs font-semibold text-[#a7a7a7] hover:text-white transition-colors">Fault Detection</a>
             </div>
 
-            <div className="flex items-center gap-2 md:gap-3">
+            <div className="flex items-center gap-3">
               {isSignedIn ? (
-                <Link
-                  href="/auth-redirect"
-                  className="px-3 md:px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium text-sm"
-                >
+                <Link href="/auth-redirect" className="px-4 py-1.5 text-xs font-bold border-2 border-[#76b900] text-[#76b900] rounded-sm hover:bg-[#76b900] hover:text-white transition-colors">
                   Dashboard
                 </Link>
               ) : (
                 <>
-                  <Link href="/sign-in" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                  <Link href="/sign-in" className="text-xs font-semibold text-[#a7a7a7] hover:text-white transition-colors">
                     Sign In
                   </Link>
-                  <Link
-                    href="/sign-up"
-                    className="px-3 md:px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium text-sm"
-                  >
-                    Sign Up
+                  <Link href="/sign-up" className="px-4 py-1.5 text-xs font-bold border-2 border-[#76b900] text-[#76b900] rounded-sm hover:bg-[#76b900] hover:text-white transition-colors">
+                    Get Started
                   </Link>
                 </>
               )}
@@ -112,279 +105,249 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <section className="pt-32 pb-20 px-6 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-orange-50 via-white to-white" />
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-orange-100/50 rounded-full blur-3xl" />
-
-        <div className="max-w-5xl mx-auto relative z-10 text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-orange-100 border border-orange-200 rounded-full text-orange-700 text-sm mb-6">
-            <span className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
-            PV String Monitoring
+      {/* ── Hero ───────────────────────────────────────────────────── */}
+      <section className="pt-28 pb-20 px-6">
+        <div className="max-w-5xl mx-auto text-center">
+          <div className="inline-flex items-center gap-2 px-3 py-1 border border-[#76b900]/30 rounded-sm text-[#76b900] text-[10px] font-bold uppercase tracking-wider mb-8">
+            <span className="w-1.5 h-1.5 bg-[#76b900] rounded-full animate-pulse" />
+            IEC 61724 Aligned Monitoring
           </div>
 
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight mb-6 text-gray-900">
-            Detect <span className="text-orange-600">underperforming strings</span>
+          <h1 className="text-4xl md:text-5xl lg:text-[56px] font-bold leading-[1.15] mb-6 tracking-tight">
+            Detect underperforming strings
             <br />
-            before they cost you money.
+            <span className="text-[#76b900]">before they cost you money.</span>
           </h1>
 
-          <p className="text-lg text-gray-600 mb-8 max-w-2xl mx-auto">
-            Solar Performance Cloud gives you real-time visibility into every PV string across all your inverters.
-            Spot degradation, shading issues, and faults instantly.
+          <p className="text-base md:text-lg text-[#a7a7a7] mb-10 max-w-2xl mx-auto leading-relaxed">
+            Real-time PV string-level monitoring across Huawei, Solis, Growatt, and Sungrow inverters.
+            No hardware required. Data syncs every 5 minutes.
           </p>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
             <Link
               href="/sign-up"
-              className="px-6 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-all font-semibold flex items-center gap-2 group shadow-lg shadow-orange-500/25"
+              className="px-6 py-2.5 text-sm font-bold border-2 border-[#76b900] text-white bg-[#76b900] rounded-sm hover:bg-[#5a8f00] hover:border-[#5a8f00] transition-colors flex items-center gap-2"
             >
-              Get Started
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              Start Monitoring <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
               href="/sign-in"
-              className="px-6 py-3 bg-white text-gray-700 rounded-xl hover:bg-gray-50 transition-all font-medium border border-gray-300"
+              className="px-6 py-2.5 text-sm font-bold border-2 border-[#5e5e5e] text-[#a7a7a7] rounded-sm hover:border-white hover:text-white transition-colors"
             >
               Sign In
             </Link>
           </div>
 
-          <div className="flex items-center justify-center gap-6 text-sm text-gray-500">
-            <div className="flex items-center gap-2">
-              <Shield className="w-4 h-4 text-orange-500" />
-              <span>Huawei &amp; SolisCloud</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-orange-500" />
-              <span>5-min sync</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4 text-orange-500" />
-              <span>Real-time alerts</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Problem Section */}
-      <section id="problem" className="py-24 px-6 bg-gray-50">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">
-              The hidden problem with solar plants
-            </h2>
-            <p className="text-gray-600 text-lg max-w-2xl mx-auto">
-              Your solar plant might look fine on the surface, but individual strings could be silently underperforming — costing you generation and revenue every day.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-8">
-            {/* Before */}
-            <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-2xl p-8 border-2 border-red-200">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center">
-                  <AlertTriangle className="w-5 h-5 text-white" />
-                </div>
-                <h3 className="text-xl font-bold text-red-700">Without Monitoring</h3>
-              </div>
-
-              <ul className="space-y-4 text-sm">
-                <li className="flex items-start gap-3 text-gray-700">
-                  <span className="text-red-500 font-bold mt-0.5">&#10005;</span>
-                  <span>Inverter shows total power — no per-string breakdown</span>
-                </li>
-                <li className="flex items-start gap-3 text-gray-700">
-                  <span className="text-red-500 font-bold mt-0.5">&#10005;</span>
-                  <span>Shaded or dirty panels go unnoticed for months</span>
-                </li>
-                <li className="flex items-start gap-3 text-gray-700">
-                  <span className="text-red-500 font-bold mt-0.5">&#10005;</span>
-                  <span>No way to compare string performance across inverters</span>
-                </li>
-                <li className="flex items-start gap-3 text-gray-700">
-                  <span className="text-red-500 font-bold mt-0.5">&#10005;</span>
-                  <span>Faults found only during annual inspections</span>
-                </li>
-              </ul>
-            </div>
-
-            {/* After */}
-            <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-8 border-2 border-green-200">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
-                  <Check className="w-5 h-5 text-white" />
-                </div>
-                <h3 className="text-xl font-bold text-green-700">With Solar Cloud</h3>
-              </div>
-
-              <ul className="space-y-4 text-sm">
-                <li className="flex items-start gap-3 text-gray-700">
-                  <span className="text-green-500 font-bold mt-0.5">&#10003;</span>
-                  <span>See voltage, current, and power for every string</span>
-                </li>
-                <li className="flex items-start gap-3 text-gray-700">
-                  <span className="text-green-500 font-bold mt-0.5">&#10003;</span>
-                  <span>Auto-detect underperformers vs average</span>
-                </li>
-                <li className="flex items-start gap-3 text-gray-700">
-                  <span className="text-green-500 font-bold mt-0.5">&#10003;</span>
-                  <span>Side-by-side string comparison with charts</span>
-                </li>
-                <li className="flex items-start gap-3 text-gray-700">
-                  <span className="text-green-500 font-bold mt-0.5">&#10003;</span>
-                  <span>Instant alerts when strings drop below threshold</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Solution / Features Section */}
-      <section id="solution" className="py-24 px-6 bg-white">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">
-              Everything you need to monitor PV health
-            </h2>
-            <p className="text-gray-600 text-lg max-w-2xl mx-auto">
-              From real-time data to monthly reports — one platform for complete string-level visibility.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Stats bar */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-[#333] rounded-sm overflow-hidden max-w-3xl mx-auto">
             {[
-              {
-                icon: BarChart3,
-                title: 'Real-time Monitoring',
-                description: 'Track PV string voltage, current, and power every 5 minutes from Huawei and SolisCloud inverters.',
-                color: 'orange',
-              },
-              {
-                icon: GitCompareArrows,
-                title: 'String Comparison',
-                description: 'Compare strings side-by-side. Instantly see which ones are below average.',
-                color: 'blue',
-              },
-              {
-                icon: Bell,
-                title: 'Smart Alerts',
-                description: 'Automatic alerts when strings drop below 50%, 75%, or 90% of average current.',
-                color: 'red',
-              },
-              {
-                icon: FileText,
-                title: 'Health Reports',
-                description: 'Daily health scores per string. Monthly trends to track degradation over time.',
-                color: 'green',
-              },
-            ].map((feature) => {
-              const colorMap: Record<string, string> = {
-                orange: 'bg-orange-100 text-orange-600 group-hover:bg-orange-200',
-                blue: 'bg-blue-100 text-blue-600 group-hover:bg-blue-200',
-                red: 'bg-red-100 text-red-600 group-hover:bg-red-200',
-                green: 'bg-green-100 text-green-600 group-hover:bg-green-200',
-              }
-              return (
-                <div
-                  key={feature.title}
-                  className="bg-white rounded-2xl border border-gray-200 p-6 hover:shadow-lg transition-all group"
-                >
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-colors ${colorMap[feature.color]}`}>
-                    <feature.icon className="w-6 h-6" />
-                  </div>
-                  <h3 className="font-semibold text-gray-900 mb-2">{feature.title}</h3>
-                  <p className="text-sm text-gray-600">{feature.description}</p>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works Section */}
-      <section id="how-it-works" className="py-24 px-6 bg-gray-50">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-orange-100 rounded-full text-orange-700 text-sm font-medium mb-4">
-              <Zap className="w-4 h-4" />
-              How It Works
-            </div>
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
-              Connect your plant. <span className="text-orange-600">See every string.</span>
-            </h2>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              {
-                step: '01',
-                icon: Eye,
-                title: 'Connect',
-                description: 'We connect to your Huawei FusionSolar or SolisCloud account. No hardware needed.',
-              },
-              {
-                step: '02',
-                icon: Activity,
-                title: 'Monitor',
-                description: 'Every 5 minutes, we pull string-level data from all your inverters automatically.',
-              },
-              {
-                step: '03',
-                icon: TrendingUp,
-                title: 'Optimize',
-                description: 'Get alerts on underperformers, compare strings, and track health over time.',
-              },
-            ].map((item) => (
-              <div key={item.step} className="text-center">
-                <div className="relative inline-flex items-center justify-center mb-6">
-                  <div className="w-16 h-16 bg-white rounded-2xl border-2 border-orange-200 flex items-center justify-center shadow-sm">
-                    <item.icon className="w-7 h-7 text-orange-500" />
-                  </div>
-                  <span className="absolute -top-2 -right-2 w-7 h-7 bg-orange-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
-                    {item.step}
-                  </span>
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">{item.title}</h3>
-                <p className="text-sm text-gray-600">{item.description}</p>
+              { value: '41', label: 'Plants Monitored' },
+              { value: '46', label: 'Inverters Connected' },
+              { value: '245', label: 'Active PV Strings' },
+              { value: '5 min', label: 'Data Sync Interval' },
+            ].map((stat) => (
+              <div key={stat.label} className="bg-[#1a1a1a] px-6 py-4 text-center">
+                <p className="text-2xl font-bold text-white">{stat.value}</p>
+                <p className="text-[10px] font-semibold text-[#898989] uppercase tracking-wider mt-1">{stat.label}</p>
               </div>
             ))}
           </div>
+        </div>
+      </section>
 
-          {/* CTA Box */}
-          <div className="mt-16 bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl p-8 text-center text-white shadow-xl">
-            <h3 className="text-2xl md:text-3xl font-bold mb-2">Ready to see your strings?</h3>
-            <p className="text-orange-100 mb-6">Start monitoring in minutes. No hardware installation required.</p>
+      {/* ── Brands ─────────────────────────────────────────────────── */}
+      <section className="py-12 border-y border-[#333]">
+        <div className="max-w-5xl mx-auto px-6">
+          <p className="text-center text-[10px] font-bold text-[#898989] uppercase tracking-widest mb-6">
+            Works with your existing inverters
+          </p>
+          <div className="flex items-center justify-center gap-12 md:gap-20">
+            {['Huawei', 'Solis', 'Growatt', 'Sungrow'].map((brand) => (
+              <span key={brand} className="text-lg md:text-xl font-bold text-[#5e5e5e]">
+                {brand}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Zero Hardware ──────────────────────────────────────────── */}
+      <section className="py-20 px-6">
+        <div className="max-w-5xl mx-auto text-center">
+          <div className="inline-flex items-center gap-2 px-3 py-1 border border-[#5e5e5e] rounded-sm text-[#898989] text-[10px] font-bold uppercase tracking-wider mb-6">
+            Zero Hardware Required
+          </div>
+          <h2 className="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
+            No sensors. No gateways. No wiring.
+          </h2>
+          <p className="text-base text-[#a7a7a7] max-w-2xl mx-auto leading-relaxed">
+            Your inverters are already collecting string-level data and uploading it to the cloud.
+            We connect to their APIs directly — Huawei FusionSolar, SolisCloud, Growatt OpenAPI, and Sungrow iSolarCloud.
+            Setup takes minutes, not days.
+          </p>
+        </div>
+      </section>
+
+      {/* ── Features ───────────────────────────────────────────────── */}
+      <section id="features" className="py-20 px-6 bg-[#0d0d0d]">
+        <div className="max-w-5xl mx-auto">
+          <p className="text-[10px] font-bold text-[#76b900] uppercase tracking-widest mb-3">Capabilities</p>
+          <h2 className="text-3xl md:text-4xl font-bold mb-12 tracking-tight">
+            String-level visibility.<br />Inverter-level clarity.
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[
+              { icon: Activity, title: 'Per-String Health Scores', desc: 'Performance and Availability scores per string, per day. See exactly which string is underperforming and whether it\'s a shading issue or a connection fault.' },
+              { icon: AlertTriangle, title: 'Intelligent Alerts', desc: 'Three severity levels — Critical (>50% drop), Warning (25-50%), Info (10-25%). Skips low-light conditions. Auto-resolves when strings recover.' },
+              { icon: Eye, title: 'Fault Diagnosis', desc: 'Distinguishes between dirty panels, bird droppings, tree shadows, loose cables, broken connections, and panel degradation — each with specific action guidance.' },
+              { icon: BarChart3, title: 'Performance Analysis', desc: 'Date-range heatmaps showing health scores across all strings. Export to CSV. Compare performance trends over weeks and months.' },
+              { icon: TrendingUp, title: 'Shading Detection', desc: 'Time-of-day pattern analysis identifies current drops at specific hours — pinpointing tree shadows and building obstructions as they grow.' },
+              { icon: Layers, title: 'Multi-Brand Dashboard', desc: 'Huawei, Solis, Growatt, and Sungrow inverters in one unified view. No switching between four different apps.' },
+            ].map((feature) => (
+              <div key={feature.title} className="bg-[#1a1a1a] border border-[#333] rounded-sm p-5">
+                <feature.icon className="w-5 h-5 text-[#76b900] mb-3" />
+                <h3 className="text-sm font-bold text-white mb-2">{feature.title}</h3>
+                <p className="text-xs text-[#a7a7a7] leading-relaxed">{feature.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── How It Works ───────────────────────────────────────────── */}
+      <section id="how-it-works" className="py-20 px-6">
+        <div className="max-w-5xl mx-auto">
+          <p className="text-[10px] font-bold text-[#76b900] uppercase tracking-widest mb-3">Process</p>
+          <h2 className="text-3xl md:text-4xl font-bold mb-12 tracking-tight">
+            From sign-up to monitoring<br />in under 5 minutes.
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[
+              { step: '01', title: 'Share Credentials', desc: 'Provide your inverter cloud API credentials (FusionSolar, SolisCloud, Growatt OpenAPI, or iSolarCloud). We handle the rest.' },
+              { step: '02', title: 'Automatic Discovery', desc: 'SPC discovers all your plants, inverters, and strings automatically. No manual configuration of devices or port numbers.' },
+              { step: '03', title: 'Real-Time Monitoring', desc: 'Data flows every 5 minutes. Health scores, alerts, and fault diagnosis start immediately. Access your dashboard from any device.' },
+            ].map((item) => (
+              <div key={item.step} className="relative">
+                <span className="text-5xl font-bold text-[#1a1a1a] absolute -top-2 -left-1">{item.step}</span>
+                <div className="pt-10">
+                  <h3 className="text-base font-bold text-white mb-2">{item.title}</h3>
+                  <p className="text-xs text-[#a7a7a7] leading-relaxed">{item.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Fault Detection ────────────────────────────────────────── */}
+      <section id="faults" className="py-20 px-6 bg-[#0d0d0d]">
+        <div className="max-w-5xl mx-auto">
+          <p className="text-[10px] font-bold text-[#76b900] uppercase tracking-widest mb-3">Fault Detection</p>
+          <h2 className="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
+            Know what&apos;s wrong.<br />Know what to fix.
+          </h2>
+          <p className="text-base text-[#a7a7a7] mb-10 max-w-2xl leading-relaxed">
+            SPC doesn&apos;t just tell you a string is underperforming — it tells you why, and what action to take.
+          </p>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b-2 border-[#333]">
+                  <th className="py-3 pr-6 text-[10px] font-bold text-[#898989] uppercase tracking-wider">Fault Type</th>
+                  <th className="py-3 pr-6 text-[10px] font-bold text-[#898989] uppercase tracking-wider">Pattern</th>
+                  <th className="py-3 text-[10px] font-bold text-[#898989] uppercase tracking-wider">Detection</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { fault: 'Dirty / Dusty Panels', pattern: '10-30% current drop, gradual', detection: 'Multiple strings decline together over days' },
+                  { fault: 'Bird Droppings', pattern: '>25% sudden drop', detection: 'Individual string, not time-dependent' },
+                  { fault: 'Tree Shadow', pattern: 'Drops at specific hours', detection: 'Time-of-day pattern analysis' },
+                  { fault: 'Faulty Panel', pattern: '30-50% consistently lower', detection: 'Persistent regardless of weather/time' },
+                  { fault: 'Loose Cable', pattern: 'Random on/off, intermittent', detection: 'High performance but low availability' },
+                  { fault: 'Broken / Disconnected', pattern: '0V, 0A', detection: 'Complete loss of output' },
+                  { fault: 'Panel Degradation', pattern: 'Gradual decline over months', detection: 'Slow health score decrease in trends' },
+                ].map((row) => (
+                  <tr key={row.fault} className="border-b border-[#252525] hover:bg-[#1a1a1a] transition-colors">
+                    <td className="py-3 pr-6 text-sm font-bold text-white">{row.fault}</td>
+                    <td className="py-3 pr-6 text-xs text-[#a7a7a7]">{row.pattern}</td>
+                    <td className="py-3 text-xs text-[#a7a7a7]">{row.detection}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      {/* ── IEC Standard ───────────────────────────────────────────── */}
+      <section className="py-20 px-6">
+        <div className="max-w-5xl mx-auto">
+          <div className="bg-[#1a1a1a] border border-[#333] rounded-sm p-8 md:p-12">
+            <div className="flex items-start gap-4">
+              <Shield className="w-8 h-8 text-[#76b900] flex-shrink-0 mt-1" />
+              <div>
+                <p className="text-[10px] font-bold text-[#76b900] uppercase tracking-widest mb-2">International Standard</p>
+                <h3 className="text-xl md:text-2xl font-bold mb-3">IEC 61724 Aligned Health Scoring</h3>
+                <p className="text-sm text-[#a7a7a7] leading-relaxed mb-6">
+                  Our health scoring system follows the IEC 61724 standard for photovoltaic system performance monitoring.
+                  Each string is evaluated on two separate metrics — <strong className="text-white">Performance</strong> (current quality when producing) and <strong className="text-white">Availability</strong> (percentage of daylight hours the string was active) — then combined into a single Health Score.
+                </p>
+                <p className="text-sm text-[#a7a7a7] leading-relaxed">
+                  This separation means you instantly know whether a problem is a <strong className="text-white">panel issue</strong> (low performance, high availability = shading or degradation) or a <strong className="text-white">wiring issue</strong> (high performance, low availability = loose cable or intermittent fault).
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── CTA ────────────────────────────────────────────────────── */}
+      <section className="py-20 px-6 bg-[#0d0d0d] border-t border-[#333]">
+        <div className="max-w-3xl mx-auto text-center">
+          <h2 className="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
+            Stop guessing. Start monitoring.
+          </h2>
+          <p className="text-base text-[#a7a7a7] mb-8 max-w-xl mx-auto leading-relaxed">
+            Every day without string-level monitoring is a day you&apos;re losing generation without knowing it.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
               href="/sign-up"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-white text-orange-600 rounded-xl font-bold hover:bg-orange-50 transition-colors"
+              className="px-8 py-3 text-sm font-bold border-2 border-[#76b900] text-white bg-[#76b900] rounded-sm hover:bg-[#5a8f00] hover:border-[#5a8f00] transition-colors flex items-center gap-2"
             >
-              Get Started Free
-              <ChevronRight className="w-4 h-4" />
+              Get Started Free <ArrowRight className="w-4 h-4" />
+            </Link>
+            <Link
+              href="/sign-in"
+              className="px-8 py-3 text-sm font-bold border-2 border-[#5e5e5e] text-[#a7a7a7] rounded-sm hover:border-white hover:text-white transition-colors"
+            >
+              Sign In to Dashboard
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="px-6 py-12 border-t border-gray-200 bg-white">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-amber-500 rounded-lg flex items-center justify-center">
-                <Sun className="w-4 h-4 text-white" />
-              </div>
-              <div>
-                <span className="font-bold text-gray-900">Solar Performance Cloud</span>
-                <span className="text-xs text-gray-500 block">by Bijli Bachao</span>
-              </div>
+      {/* ── Footer ─────────────────────────────────────────────────── */}
+      <footer className="py-10 px-6 border-t border-[#333]">
+        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-6 h-6 rounded-sm bg-[#76b900]/20 flex items-center justify-center">
+              <Sun className="w-3.5 h-3.5 text-[#76b900]" />
             </div>
-
-            <div className="flex items-center gap-6 text-sm text-gray-500">
-              <Link href="/sign-in" className="hover:text-gray-900 transition-colors">Sign In</Link>
-              <Link href="/sign-up" className="hover:text-gray-900 transition-colors">Sign Up</Link>
-            </div>
+            <span className="text-xs font-bold text-[#a7a7a7]">Solar Performance Cloud</span>
+            <span className="text-xs text-[#5e5e5e]">by BijliBachao.pk</span>
+          </div>
+          <div className="flex items-center gap-6 text-xs text-[#5e5e5e]">
+            <span>Founded by Engr. Reyyan Niaz Khan</span>
+            <span>·</span>
+            <span>Lahore, Pakistan</span>
+            <span>·</span>
+            <a href="https://wa.me/923234578775" className="hover:text-[#76b900] transition-colors">WhatsApp</a>
           </div>
         </div>
       </footer>
