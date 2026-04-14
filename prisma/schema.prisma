@@ -136,6 +136,8 @@ model string_daily {
   min_current   Decimal? @db.Decimal(10, 3)
   max_current   Decimal? @db.Decimal(10, 3)
   health_score  Decimal? @db.Decimal(5, 2)
+  performance   Decimal? @db.Decimal(5, 2)
+  availability  Decimal? @db.Decimal(5, 2)
 
   @@unique([device_id, string_number, date])
   @@index([plant_id, date(sort: Desc)])

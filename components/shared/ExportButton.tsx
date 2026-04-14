@@ -25,11 +25,12 @@ export function ExportButton({ dates, rows, type }: ExportButtonProps) {
     const lines: string[] = []
 
     if (type === 'string') {
-      const activeRows = rows.filter((r: any) => r.type !== 'unused')
+      const activeRows = rows.filter((r: any) => r.type === 'active' || !r.type)
+      const inactiveRows = rows.filter((r: any) => r.type === 'inactive')
       const unusedRows = rows.filter((r: any) => r.type === 'unused')
 
       // Header
-      lines.push(['Plant', 'Inverter', 'MPPT', 'String', 'Type', 'kW/String', ...dates].join(','))
+      lines.push(['Plant', 'Inverter', 'MPPT', 'String', 'Type', 'kW/String', 'Perf(%)', 'Avail(%)', ...dates].join(','))
       // Active rows
       for (const row of activeRows) {
         const scores = dates.map(d => {
@@ -43,8 +44,27 @@ export function ExportButton({ dates, rows, type }: ExportButtonProps) {
           `PV${row.string_number}`,
           'Active',
           row.kw_per_string != null ? `${row.kw_per_string} kW` : '',
+          row.perf_avg != null ? `${row.perf_avg}%` : '',
+          row.avail_avg != null ? `${row.avail_avg}%` : '',
           ...scores,
         ].join(','))
+      }
+      // Inactive rows
+      if (inactiveRows.length > 0) {
+        lines.push('')
+        lines.push(`Stopped Producing (${inactiveRows.length}) — inspect for faults`)
+        for (const row of inactiveRows) {
+          lines.push([
+            csvVal(row.plant_name),
+            csvVal(row.device_name),
+            `MPPT${row.mppt}`,
+            `PV${row.string_number}`,
+            'Inactive',
+            '',
+            '',
+            '',
+          ].join(','))
+        }
       }
       // Unused rows
       if (unusedRows.length > 0) {
@@ -57,6 +77,8 @@ export function ExportButton({ dates, rows, type }: ExportButtonProps) {
             `MPPT${row.mppt}`,
             `PV${row.string_number}`,
             'Unused',
+            '',
+            '',
             '',
           ].join(','))
         }

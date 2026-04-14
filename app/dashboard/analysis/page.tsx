@@ -333,9 +333,14 @@ export default function DashboardAnalysisPage() {
               <span className="text-gray-600">{summary.no_data} No Data</span>
             </span>
           )}
-          {summary.unused_strings > 0 && (
-            <span className="flex items-center gap-1 ml-2 pl-2 border-l border-gray-300">
-              <span className="text-gray-400">{summary.unused_strings} Unused</span>
+          {(summary.inactive_strings > 0 || summary.unused_strings > 0) && (
+            <span className="flex items-center gap-4 ml-2 pl-2 border-l border-gray-300">
+              {summary.inactive_strings > 0 && (
+                <span className="text-amber-600">{summary.inactive_strings} Stopped</span>
+              )}
+              {summary.unused_strings > 0 && (
+                <span className="text-gray-400">{summary.unused_strings} Unused</span>
+              )}
             </span>
           )}
         </div>
@@ -349,14 +354,22 @@ export default function DashboardAnalysisPage() {
         </div>
       )}
 
-      {/* Color legend */}
-      <div className="flex items-center gap-4 text-[10px] text-gray-500">
-        <span>Color guide:</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-yellow-100 border border-yellow-200" /> 75%-89%</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-200 border border-orange-300" /> 50%-74%</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-200 border border-red-300" /> 25%-49%</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500" /> &lt;25%</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-100 border border-gray-200" /> No data</span>
+      {/* Color legend + Column guide */}
+      <div className="space-y-1">
+        <div className="flex items-center gap-4 text-[10px] text-gray-500">
+          <span>Color guide:</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-yellow-100 border border-yellow-200" /> 75%-89%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-200 border border-orange-300" /> 50%-74%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-200 border border-red-300" /> 25%-49%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500" /> &lt;25%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-100 border border-gray-200" /> No data</span>
+        </div>
+        <div className="flex items-center gap-4 text-[10px] text-gray-500">
+          <span>Column guide:</span>
+          <span><strong className="text-blue-700">Perf</strong> — Performance: how well the string produces when working (low = shading / dirty panels)</span>
+          <span><strong className="text-violet-700">Avail</strong> — Availability: % of daylight hours the string was active (low = loose cable / connection fault)</span>
+          <span><strong className="text-gray-600">Daily cells</strong> — Health Score: Perf × Avail combined</span>
+        </div>
       </div>
 
       {/* Table */}

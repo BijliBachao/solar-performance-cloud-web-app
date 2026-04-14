@@ -250,7 +250,7 @@ export async function updateDailyAggregates(
 
   if (allMeasurements.length === 0) return
 
-  // Compute inverter-wide average current (for health score)
+  // Compute inverter-wide average current (for performance score)
   const allCurrents = allMeasurements
     .map((m) => Number(m.current))
     .filter((c) => c > 0)
@@ -264,6 +264,9 @@ export async function updateDailyAggregates(
     byString.set(m.string_number, group)
   }
 
+  // Max measurements any single string has today = "full day" reference for availability
+  const maxMeasurements = Math.max(...Array.from(byString.values()).map((m) => m.length))
+
   // Batch upserts
   const upserts = []
   for (const [stringNumber, measurements] of byString) {
@@ -272,9 +275,21 @@ export async function updateDailyAggregates(
     const powers = measurements.map((m) => Number(m.power)).filter((p) => p > 0)
 
     const stringAvgCurrent = avg(currents)
-    // When inverter has no active current (all strings offline), health is unknown (null)
-    const healthScore = inverterAvgCurrent > 0
+
+    // IEC 61724 aligned — two separate metrics:
+    // Performance: how well the string produces WHEN active (current quality)
+    const perfScore = inverterAvgCurrent > 0
       ? Math.min((stringAvgCurrent / inverterAvgCurrent) * 100, 100)
+      : null
+
+    // Availability: what % of the day the string was active (uptime)
+    const availScore = maxMeasurements > 0
+      ? Math.min((measurements.length / maxMeasurements) * 100, 100)
+      : null
+
+    // Health Score = Performance × Availability (combined true picture)
+    const healthScore = perfScore !== null && availScore !== null
+      ? Math.min((perfScore * availScore) / 100, 100)
       : null
 
     const data = {
@@ -284,6 +299,8 @@ export async function updateDailyAggregates(
       min_current: safeMin(currents) !== null ? new Decimal(safeMin(currents)!.toFixed(3)) : null,
       max_current: safeMax(currents) !== null ? new Decimal(safeMax(currents)!.toFixed(3)) : null,
       health_score: healthScore !== null ? new Decimal(healthScore.toFixed(2)) : null,
+      performance: perfScore !== null ? new Decimal(perfScore.toFixed(2)) : null,
+      availability: availScore !== null ? new Decimal(availScore.toFixed(2)) : null,
     }
 
     upserts.push(

@@ -11,8 +11,10 @@ interface StringRow {
   string_number: number
   mppt: number
   kw_per_string: number | null
+  perf_avg: number | null
+  avail_avg: number | null
   scores: Record<string, number | null>
-  type?: 'active' | 'unused'
+  type?: 'active' | 'inactive' | 'unused'
 }
 
 interface StringLevelTableProps {
@@ -24,6 +26,14 @@ interface StringLevelTableProps {
 function formatDateHeader(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00')
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+function metricCell(value: number | null, type: 'perf' | 'avail'): string {
+  if (value === null) return 'text-gray-400'
+  if (value >= 90) return 'text-emerald-600 font-medium'
+  if (value >= 75) return 'text-yellow-700 font-medium'
+  if (value >= 50) return 'text-orange-600 font-semibold'
+  return 'text-red-600 font-bold'
 }
 
 export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps) {
@@ -45,7 +55,8 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
     )
   }
 
-  const activeRows = rows.filter(r => r.type !== 'unused')
+  const activeRows = rows.filter(r => r.type === 'active' || !r.type)
+  const inactiveRows = rows.filter(r => r.type === 'inactive')
   const unusedRows = rows.filter(r => r.type === 'unused')
 
   let prevDeviceId = ''
@@ -66,6 +77,12 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
             </th>
             <th className="sticky left-[264px] z-20 bg-gray-50 px-2 py-2 text-right text-xs font-semibold text-gray-600 border-r border-gray-200 min-w-[80px]">
               kW/String
+            </th>
+            <th className="px-2 py-2 text-center text-xs font-semibold text-blue-700 border-r border-gray-200 min-w-[52px] bg-blue-50/50">
+              Perf
+            </th>
+            <th className="px-2 py-2 text-center text-xs font-semibold text-violet-700 border-r border-gray-200 min-w-[52px] bg-violet-50/50">
+              Avail
             </th>
             {dates.map((date) => (
               <th
@@ -106,6 +123,12 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
                 <td className="sticky left-[264px] z-10 bg-white group-hover:bg-blue-50/50 px-2 py-1.5 text-xs text-gray-600 text-right border-r border-gray-200 transition-colors">
                   {row.kw_per_string ? `${row.kw_per_string} kW` : '—'}
                 </td>
+                <td className={cn('px-2 py-1.5 text-center text-xs font-mono border-r border-gray-200 bg-blue-50/30', metricCell(row.perf_avg, 'perf'))}>
+                  {row.perf_avg !== null ? `${row.perf_avg}%` : '—'}
+                </td>
+                <td className={cn('px-2 py-1.5 text-center text-xs font-mono border-r border-gray-200 bg-violet-50/30', metricCell(row.avail_avg, 'avail'))}>
+                  {row.avail_avg !== null ? `${row.avail_avg}%` : '—'}
+                </td>
                 {dates.map((date) => (
                   <PerformanceCell
                     key={date}
@@ -116,12 +139,55 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
             )
           })}
 
+          {/* Inactive / Stopped Producing section */}
+          {inactiveRows.length > 0 && (
+            <>
+              <tr>
+                <td
+                  colSpan={6 + dates.length}
+                  className="bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 border-t-2 border-amber-300"
+                >
+                  Stopped Producing ({inactiveRows.length}) — these strings had data before but stopped. Inspect for faults.
+                </td>
+              </tr>
+              {inactiveRows.map((row) => (
+                <tr
+                  key={`inactive-${row.device_id}-${row.string_number}`}
+                  className="bg-amber-50/30"
+                >
+                  <td className="sticky left-0 z-10 bg-amber-50/50 px-3 py-1 text-xs text-amber-700 border-r border-gray-200 whitespace-nowrap">
+                    {row.device_name}
+                  </td>
+                  <td className="sticky left-[140px] z-10 bg-amber-50/50 px-2 py-1 text-xs text-amber-600 border-r border-gray-200">
+                    MPPT{row.mppt}
+                  </td>
+                  <td className="sticky left-[204px] z-10 bg-amber-50/50 px-2 py-1 text-xs font-medium text-amber-700 border-r border-gray-200">
+                    PV{row.string_number}
+                  </td>
+                  <td className="sticky left-[264px] z-10 bg-amber-50/50 px-2 py-1 text-xs text-amber-400 text-right border-r border-gray-200">
+                    —
+                  </td>
+                  <td className="px-2 py-1 text-center text-xs text-amber-400 border-r border-gray-200 bg-amber-50/30">—</td>
+                  <td className="px-2 py-1 text-center text-xs text-amber-400 border-r border-gray-200 bg-amber-50/30">—</td>
+                  {dates.map((date) => (
+                    <td
+                      key={date}
+                      className="px-2 py-1 text-center text-xs text-amber-400 border-r border-gray-100 bg-amber-50/30"
+                    >
+                      —
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </>
+          )}
+
           {/* Unused / Spare Ports section */}
           {unusedRows.length > 0 && (
             <>
               <tr>
                 <td
-                  colSpan={4 + dates.length}
+                  colSpan={6 + dates.length}
                   className="bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-500 border-t-2 border-gray-300"
                 >
                   Unused / Spare Ports ({unusedRows.length})
@@ -144,6 +210,8 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
                   <td className="sticky left-[264px] z-10 bg-gray-50 px-2 py-1 text-xs text-gray-300 text-right border-r border-gray-200">
                     —
                   </td>
+                  <td className="px-2 py-1 text-center text-xs text-gray-300 border-r border-gray-200 bg-gray-50/50">—</td>
+                  <td className="px-2 py-1 text-center text-xs text-gray-300 border-r border-gray-200 bg-gray-50/50">—</td>
                   {dates.map((date) => (
                     <td
                       key={date}

@@ -21,7 +21,6 @@ export async function GET(request: NextRequest) {
     const fromDate = new Date(from)
     const toDate = new Date(to)
 
-    // Max 45 days
     const diffDays = (toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)
     if (diffDays > 45 || diffDays < 0) {
       return NextResponse.json({ error: 'Date range must be 1-45 days' }, { status: 400 })
@@ -34,7 +33,6 @@ export async function GET(request: NextRequest) {
     if (plantId) deviceWhere.plant_id = plantId
     if (deviceId) deviceWhere.id = deviceId
 
-    // Get devices with plant info
     const devices = await prisma.devices.findMany({
       where: deviceWhere,
       include: {
@@ -44,43 +42,72 @@ export async function GET(request: NextRequest) {
     })
 
     if (devices.length === 0) {
-      return NextResponse.json({ dates: [], rows: [], summary: { active_strings: 0, healthy: 0, warning: 0, critical: 0, no_data: 0, unused_strings: 0 } })
+      return NextResponse.json({ dates: [], rows: [], summary: { active_strings: 0, healthy: 0, warning: 0, critical: 0, no_data: 0, inactive_strings: 0, unused_strings: 0 } })
     }
 
     const deviceIds = devices.map(d => d.id)
     const deviceMap = new Map(devices.map(d => [d.id, d]))
 
-    // Detect historically active strings (any data in last 90 days)
-    const ninetyDaysAgo = new Date()
-    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
+    // ── 3-Category Detection ────────────────────────────────────────
+    // 1. Active: data in last 14 days (recent production)
+    // 2. Inactive: data in lifetime but NOT in last 14 days (was working, stopped)
+    // 3. Unused: NEVER had any data (spare port)
 
-    const activeStringRecords = await prisma.string_daily.groupBy({
+    const fourteenDaysAgo = new Date()
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
+
+    // Recent active strings (last 14 days)
+    const recentRecords = await prisma.string_daily.groupBy({
       by: ['device_id', 'string_number'],
       where: {
         device_id: { in: deviceIds },
-        date: { gte: ninetyDaysAgo },
+        date: { gte: fourteenDaysAgo },
       },
     })
-
-    const activeStringSet = new Set<string>()
-    for (const rec of activeStringRecords) {
-      activeStringSet.add(`${rec.device_id}:${rec.string_number}`)
+    const recentSet = new Set<string>()
+    for (const rec of recentRecords) {
+      recentSet.add(`${rec.device_id}:${rec.string_number}`)
     }
 
-    // Build unused set: in 1..max_strings but NOT active
-    const unusedStringSet = new Set<string>()
+    // Lifetime strings (ever had data)
+    const lifetimeRecords = await prisma.string_daily.groupBy({
+      by: ['device_id', 'string_number'],
+      where: {
+        device_id: { in: deviceIds },
+      },
+    })
+    const lifetimeSet = new Set<string>()
+    for (const rec of lifetimeRecords) {
+      lifetimeSet.add(`${rec.device_id}:${rec.string_number}`)
+    }
+
+    // Classify: active / inactive / unused
+    const activeStringSet = new Set<string>() // recent data
+    const inactiveStringSet = new Set<string>() // had data, stopped
+    const unusedStringSet = new Set<string>() // never had data
+
+    // All strings from lifetime data are either active or inactive
+    for (const key of lifetimeSet) {
+      if (recentSet.has(key)) {
+        activeStringSet.add(key)
+      } else {
+        inactiveStringSet.add(key)
+      }
+    }
+
+    // Unused: in 1..max_strings but never had any data
     for (const d of devices) {
       if (d.max_strings) {
         for (let s = 1; s <= d.max_strings; s++) {
           const key = `${d.id}:${s}`
-          if (!activeStringSet.has(key)) {
+          if (!lifetimeSet.has(key)) {
             unusedStringSet.add(key)
           }
         }
       }
     }
 
-    // Compute kW per string using ACTIVE string count (not max_strings)
+    // ── kW per string (active count only) ───────────────────────────
     const plantCapacities = new Map<string, number>()
     for (const d of devices) {
       plantCapacities.set(d.plant_id, Number(d.plants?.capacity_kw) || 0)
@@ -91,12 +118,11 @@ export async function GET(request: NextRequest) {
       const [devId] = key.split(':')
       const dev = deviceMap.get(devId)
       if (dev) {
-        const pid = dev.plant_id
-        plantActiveStringCounts.set(pid, (plantActiveStringCounts.get(pid) || 0) + 1)
+        plantActiveStringCounts.set(dev.plant_id, (plantActiveStringCounts.get(dev.plant_id) || 0) + 1)
       }
     }
 
-    // Query string_daily for the selected date range
+    // ── Query string_daily for selected date range ──────────────────
     const dailyData = await prisma.string_daily.findMany({
       where: {
         device_id: { in: deviceIds },
@@ -108,8 +134,8 @@ export async function GET(request: NextRequest) {
         string_number: true,
         date: true,
         health_score: true,
-        avg_current: true,
-        avg_power: true,
+        performance: true,
+        availability: true,
       },
       orderBy: [{ device_id: 'asc' }, { string_number: 'asc' }, { date: 'asc' }],
     })
@@ -122,15 +148,19 @@ export async function GET(request: NextRequest) {
       d.setDate(d.getDate() + 1)
     }
 
-    // Index daily data: "deviceId:stringNumber:date" -> health_score
+    // Index daily data
     const scoreMap = new Map<string, number | null>()
+    const perfMap = new Map<string, number | null>()
+    const availMap = new Map<string, number | null>()
     for (const row of dailyData) {
       const dateStr = new Date(row.date).toISOString().split('T')[0]
       const key = `${row.device_id}:${row.string_number}:${dateStr}`
       scoreMap.set(key, row.health_score ? Number(row.health_score) : null)
+      perfMap.set(key, row.performance ? Number(row.performance) : null)
+      availMap.set(key, row.availability ? Number(row.availability) : null)
     }
 
-    // Active strings: from dailyData + from 90-day active set
+    // Strings with data in query range + all active strings
     const stringSet = new Set<string>()
     for (const row of dailyData) {
       stringSet.add(`${row.device_id}:${row.string_number}`)
@@ -139,9 +169,8 @@ export async function GET(request: NextRequest) {
       stringSet.add(key)
     }
 
-    // Build active rows
-    const rows: any[] = []
-    const sortedStrings = Array.from(stringSet).sort((a, b) => {
+    // ── Sort helper ─────────────────────────────────────────────────
+    const sortByPlantDeviceString = (a: string, b: string) => {
       const [aDevice, aStr] = a.split(':')
       const [bDevice, bStr] = b.split(':')
       const aD = deviceMap.get(aDevice)
@@ -151,23 +180,35 @@ export async function GET(request: NextRequest) {
       const devCmp = (aD?.device_name || '').localeCompare(bD?.device_name || '')
       if (devCmp !== 0) return devCmp
       return Number(aStr) - Number(bStr)
-    })
+    }
 
-    for (const key of sortedStrings) {
+    // ── Build rows ──────────────────────────────────────────────────
+    const rows: any[] = []
+
+    // Helper to build a row
+    const buildRow = (key: string, type: 'active' | 'inactive' | 'unused') => {
       const [devId, strNum] = key.split(':')
       const device = deviceMap.get(devId)
-      if (!device) continue
+      if (!device) return
 
       const plantCap = plantCapacities.get(device.plant_id) || 0
       const plantStrings = plantActiveStringCounts.get(device.plant_id) || 0
-      const kwPerString = plantStrings > 0 && plantCap > 0
+      const kwPerString = type === 'active' && plantStrings > 0 && plantCap > 0
         ? Math.round((plantCap / plantStrings) * 100) / 100
         : null
 
       const scores: Record<string, number | null> = {}
-      for (const date of dates) {
-        const scoreKey = `${devId}:${strNum}:${date}`
-        scores[date] = scoreMap.has(scoreKey) ? scoreMap.get(scoreKey)! : null
+      let perfSum = 0, perfCount = 0, availSum = 0, availCount = 0
+
+      if (type !== 'unused') {
+        for (const date of dates) {
+          const mk = `${devId}:${strNum}:${date}`
+          scores[date] = scoreMap.get(mk) ?? null
+          const p = perfMap.get(mk)
+          const a = availMap.get(mk)
+          if (p !== null && p !== undefined) { perfSum += p; perfCount++ }
+          if (a !== null && a !== undefined) { availSum += a; availCount++ }
+        }
       }
 
       rows.push({
@@ -178,43 +219,31 @@ export async function GET(request: NextRequest) {
         string_number: Number(strNum),
         mppt: Math.ceil(Number(strNum) / 2),
         kw_per_string: kwPerString,
+        perf_avg: perfCount > 0 ? Math.round(perfSum / perfCount) : null,
+        avail_avg: availCount > 0 ? Math.round(availSum / availCount) : null,
         scores,
-        type: 'active',
+        type,
       })
     }
 
-    // Build unused rows
-    const sortedUnused = Array.from(unusedStringSet).sort((a, b) => {
-      const [aDevice, aStr] = a.split(':')
-      const [bDevice, bStr] = b.split(':')
-      const aD = deviceMap.get(aDevice)
-      const bD = deviceMap.get(bDevice)
-      const plantCmp = (aD?.plants?.plant_name || '').localeCompare(bD?.plants?.plant_name || '')
-      if (plantCmp !== 0) return plantCmp
-      const devCmp = (aD?.device_name || '').localeCompare(bD?.device_name || '')
-      if (devCmp !== 0) return devCmp
-      return Number(aStr) - Number(bStr)
-    })
-
-    for (const key of sortedUnused) {
-      const [devId, strNum] = key.split(':')
-      const device = deviceMap.get(devId)
-      if (!device) continue
-
-      rows.push({
-        plant_id: device.plant_id,
-        plant_name: device.plants?.plant_name || 'Unknown',
-        device_id: devId,
-        device_name: device.device_name || devId,
-        string_number: Number(strNum),
-        mppt: Math.ceil(Number(strNum) / 2),
-        kw_per_string: null,
-        scores: {},
-        type: 'unused',
-      })
+    // Active rows
+    for (const key of Array.from(stringSet).sort(sortByPlantDeviceString)) {
+      buildRow(key, 'active')
     }
 
-    // Summary from latest date — only count active strings
+    // Inactive rows (had data, stopped)
+    for (const key of Array.from(inactiveStringSet).sort(sortByPlantDeviceString)) {
+      if (!stringSet.has(key)) { // not already in active set
+        buildRow(key, 'inactive')
+      }
+    }
+
+    // Unused rows (never had data)
+    for (const key of Array.from(unusedStringSet).sort(sortByPlantDeviceString)) {
+      buildRow(key, 'unused')
+    }
+
+    // ── Summary ─────────────────────────────────────────────────────
     let healthy = 0, warning = 0, critical = 0, noData = 0
     const latestDate = dates[dates.length - 1]
     const activeRows = rows.filter(r => r.type === 'active')
@@ -235,6 +264,7 @@ export async function GET(request: NextRequest) {
         warning,
         critical,
         no_data: noData,
+        inactive_strings: rows.filter(r => r.type === 'inactive').length,
         unused_strings: rows.filter(r => r.type === 'unused').length,
       },
     })
