@@ -17,6 +17,7 @@ interface StringData {
   current: number
   gap_percent: number
   status: 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
+  energy_kwh?: number
 }
 
 interface CurrentDeviationChartProps {
@@ -24,30 +25,29 @@ interface CurrentDeviationChartProps {
   avgCurrent: number
 }
 
-function getBarColor(status: string, performance: number): string {
-  if (status === 'OPEN_CIRCUIT') return '#991b1b' // red-800 — wiring fault
-  if (status === 'DISCONNECTED') return '#374151' // gray-700 — total loss
-  if (performance >= 0) return '#10b981' // emerald-500 — above avg
-  if (performance > -10) return '#22c55e' // green-500 — slightly below
-  if (performance > -25) return '#f59e0b' // amber-500 — warning
-  if (performance > -50) return '#f97316' // orange-500 — concerning
-  return '#ef4444' // red-500 — critical
+function getBarColor(status: string): string {
+  if (status === 'NORMAL') return '#76b900'
+  if (status === 'WARNING') return '#ef9100'
+  if (status === 'CRITICAL') return '#e52020'
+  if (status === 'OPEN_CIRCUIT') return '#991b1b'
+  return '#525252' // DISCONNECTED
+}
+
+const statusLabels: Record<string, string> = {
+  NORMAL: 'Normal',
+  WARNING: 'Warning',
+  CRITICAL: 'Critical',
+  OPEN_CIRCUIT: 'Open Circuit',
+  DISCONNECTED: 'Disconnected',
 }
 
 export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationChartProps) {
-  // Show ALL strings — dead strings appear as deep negative bars
-  const data = strings.map((s) => {
-    const performance = avgCurrent > 0
-      ? ((s.current - avgCurrent) / avgCurrent) * 100
-      : s.current > 0 ? 0 : -100
-    return {
-      name: `PV${s.string_number}`,
-      performance: Number(performance.toFixed(1)),
-      current: s.current,
-      avg: avgCurrent,
-      status: s.status,
-    }
-  })
+  const data = strings.map((s) => ({
+    name: `PV${s.string_number}`,
+    current: s.current,
+    status: s.status,
+    kwh: s.energy_kwh || 0,
+  }))
 
   return (
     <div className="w-full h-[280px]">
@@ -56,66 +56,61 @@ export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationC
           data={data}
           margin={{ top: 10, right: 20, left: 10, bottom: 5 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
           <XAxis
             dataKey="name"
-            tick={{ fontSize: 11, fill: '#6b7280' }}
-            axisLine={{ stroke: '#e5e7eb' }}
+            tick={{ fontSize: 11, fill: '#898989' }}
+            axisLine={{ stroke: '#5e5e5e' }}
             tickLine={false}
           />
           <YAxis
-            tick={{ fontSize: 11, fill: '#6b7280' }}
+            tick={{ fontSize: 11, fill: '#898989' }}
             axisLine={false}
             tickLine={false}
-            tickFormatter={(v) => `${v > 0 ? '+' : ''}${v}%`}
-            domain={['auto', 'auto']}
+            tickFormatter={(v) => `${v}A`}
           />
           <Tooltip
             contentStyle={{
               fontSize: 12,
-              borderRadius: 4,
-              border: '1px solid #e5e7eb',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+              borderRadius: 2,
+              border: '1px solid #333',
+              backgroundColor: '#1a1a1a',
+              color: '#fff',
             }}
             formatter={(value: number, _name: string, props: any) => {
               const entry = props.payload
-              const statusLabels: Record<string, string> = {
-                NORMAL: 'Normal',
-                WARNING: 'Warning',
-                CRITICAL: 'Critical',
-                OPEN_CIRCUIT: 'Open Circuit',
-                DISCONNECTED: 'Disconnected',
-              }
               return [
-                <span key="val">
-                  <strong>{value > 0 ? '+' : ''}{value}%</strong>
-                  {' '}— {entry.current.toFixed(2)}A vs {entry.avg.toFixed(2)}A avg
-                  {' '}({statusLabels[entry.status] || entry.status})
+                <span key="val" style={{ color: '#fff' }}>
+                  <strong>{value.toFixed(2)}A</strong>
+                  {' '}— {statusLabels[entry.status] || entry.status}
+                  {entry.kwh > 0 ? ` — ${entry.kwh.toFixed(1)} kWh today` : ''}
                 </span>,
-                'Performance',
+                'Current',
               ]
             }}
           />
-          <ReferenceLine
-            y={0}
-            stroke="#9ca3af"
-            strokeWidth={1.5}
-            strokeDasharray="4 4"
-            label={{
-              value: `Avg: ${avgCurrent.toFixed(2)}A`,
-              position: 'right',
-              style: { fontSize: 10, fill: '#9ca3af' },
-            }}
-          />
+          {avgCurrent > 0 && (
+            <ReferenceLine
+              y={avgCurrent}
+              stroke="#76b900"
+              strokeWidth={2}
+              strokeDasharray="6 3"
+              label={{
+                value: `Avg: ${avgCurrent.toFixed(2)}A`,
+                position: 'right',
+                style: { fontSize: 10, fill: '#76b900', fontWeight: 700 },
+              }}
+            />
+          )}
           <Bar
-            dataKey="performance"
-            radius={[2, 2, 2, 2]}
+            dataKey="current"
+            radius={[2, 2, 0, 0]}
             maxBarSize={40}
           >
             {data.map((entry, index) => (
               <Cell
                 key={`cell-${index}`}
-                fill={getBarColor(entry.status, entry.performance)}
+                fill={getBarColor(entry.status)}
               />
             ))}
           </Bar>

@@ -202,7 +202,7 @@ export function PlantDetailView({
   // ─── Render ────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#f5f5f5]">
       <PlantHeader
         plantName={plant.plant_name}
         healthState={plant.health_state}
@@ -259,18 +259,18 @@ export function PlantDetailView({
 
             {/* Empty state if no inverters */}
             {plant.devices.length === 0 && (
-              <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-                <Activity className="w-8 h-8 text-gray-300 mx-auto mb-3" />
-                <p className="text-sm text-gray-500">No inverters found for this plant.</p>
-                <p className="text-xs text-gray-400 mt-1">Devices will appear once the poller syncs from your inverter provider.</p>
+              <div className="bg-[#1a1a1a] rounded-sm p-8 text-center">
+                <Activity className="w-8 h-8 text-[#333] mx-auto mb-3" />
+                <p className="text-sm font-bold text-[#5e5e5e]">No inverters found</p>
+                <p className="text-[11px] text-[#525252] mt-1">Devices will appear once the poller syncs from your inverter provider.</p>
               </div>
             )}
           </TabsContent>
 
           {/* Alert History Tab */}
           <TabsContent value="history">
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Alert History</h2>
+            <div className="bg-white rounded-sm border border-gray-200 p-5">
+              <h2 className="text-base font-bold text-gray-900 mb-4">Alert History</h2>
               <AlertHistoryLog
                 plantId={plantCode}
                 showResolveButton={showResolveAlerts}

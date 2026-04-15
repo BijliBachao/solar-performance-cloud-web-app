@@ -393,17 +393,14 @@ export function InverterDetailSection({
         {/* ── Performance vs Average Chart ─────────────────────── */}
         {strings.length > 0 && (
           <div className="py-4 border-t border-gray-100">
-            <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center justify-between mb-2">
               <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                Performance vs Average
+                String Current Comparison
               </h4>
               <span className="text-[10px] text-gray-400">
-                Avg: {avgCurrent.toFixed(2)}A
+                Green line = Avg: {avgCurrent.toFixed(2)}A (all strings)
               </span>
             </div>
-            <p className="text-[10px] text-gray-400 mb-2">
-              Positive (+) = above average, Negative (-) = below average
-            </p>
             <CurrentDeviationChart strings={strings} avgCurrent={avgCurrent} />
           </div>
         )}

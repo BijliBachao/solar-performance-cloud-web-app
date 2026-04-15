@@ -1,24 +1,16 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   ArrowLeft, Zap, MapPin, Activity, Clock, Cpu, RefreshCw,
 } from 'lucide-react'
 
-const providerStyles: Record<string, { label: string; className: string }> = {
-  huawei: { label: 'Huawei FusionSolar', className: 'bg-blue-50 text-blue-700 border-blue-200' },
-  solis: { label: 'SolisCloud', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  growatt: { label: 'Growatt', className: 'bg-orange-50 text-orange-700 border-orange-200' },
-  sungrow: { label: 'Sungrow iSolarCloud', className: 'bg-purple-50 text-purple-700 border-purple-200' },
-}
-
-function getProviderBadge(provider?: string): { label: string; className: string } | null {
-  if (!provider) return null
-  const known = providerStyles[provider]
-  if (known) return known
-  return { label: provider.charAt(0).toUpperCase() + provider.slice(1), className: 'bg-gray-50 text-gray-700 border-gray-200' }
+const providerLabel: Record<string, string> = {
+  huawei: 'HUAWEI',
+  solis: 'SOLIS',
+  growatt: 'GROWATT',
+  sungrow: 'SUNGROW',
 }
 
 interface PlantHeaderProps {
@@ -58,11 +50,12 @@ export function PlantHeader({
 }: PlantHeaderProps) {
   const router = useRouter()
 
-  const healthBadge = (state: number | null) => {
-    if (state === 3) return { label: 'Healthy', variant: 'success' as const }
-    if (state === 2) return { label: 'Faulty', variant: 'destructive' as const }
-    return { label: 'Disconnected', variant: 'secondary' as const }
+  const healthConfig: Record<number, { label: string; color: string }> = {
+    3: { label: 'HEALTHY', color: 'text-[#76b900]' },
+    2: { label: 'FAULTY', color: 'text-[#e52020]' },
+    1: { label: 'OFFLINE', color: 'text-[#898989]' },
   }
+  const health = healthConfig[healthState || 0] || healthConfig[1]
 
   const formatDate = (d: string | null) => {
     if (!d) return 'Never'
@@ -73,91 +66,72 @@ export function PlantHeader({
     if (diffMin < 1) return 'Just now'
     if (diffMin < 60) return `${diffMin}m ago`
     if (diffMin < 1440) return `${Math.floor(diffMin / 60)}h ago`
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   }
 
-  const health = healthBadge(healthState)
-
   return (
-    <div className="border-b border-gray-200 bg-white">
+    <div className="bg-[#1a1a1a] border-b border-[#333]">
       <div className="px-4 sm:px-6 py-4">
         {/* Top row */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <Zap className="w-5 h-5 text-yellow-500 flex-shrink-0" />
-            <h1 className="text-lg font-semibold text-gray-900 truncate">{plantName}</h1>
-            <Badge variant={health.variant}>{health.label}</Badge>
-            {(() => {
-              const badge = getProviderBadge(provider)
-              return badge ? (
-                <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded border ${badge.className}`}>
-                  {badge.label}
-                </span>
-              ) : null
-            })()}
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-bold text-white truncate">{plantName}</h1>
+            <span className={`text-[10px] font-bold uppercase tracking-widest ${health.color}`}>
+              {health.label}
+            </span>
+            {provider && (
+              <span className="text-[10px] font-bold text-[#5e5e5e] uppercase tracking-widest">
+                {providerLabel[provider] || provider}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={onToggleAutoRefresh}
-              className={`flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full border transition-colors ${
+              className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-sm border transition-colors ${
                 autoRefresh
-                  ? 'bg-green-50 text-green-700 border-green-200'
-                  : 'bg-gray-50 text-gray-400 border-gray-200'
+                  ? 'bg-[#76b900]/10 text-[#76b900] border-[#76b900]/30'
+                  : 'bg-transparent text-[#5e5e5e] border-[#333]'
               }`}
             >
-              <span className={`w-1.5 h-1.5 rounded-full ${autoRefresh ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${autoRefresh ? 'bg-[#76b900] animate-pulse' : 'bg-[#5e5e5e]'}`} />
               {autoRefresh ? 'Live' : 'Paused'}
             </button>
-            <Button variant="ghost" size="sm" onClick={onRefresh} disabled={isRefreshing} className="text-gray-500">
+            <button onClick={onRefresh} disabled={isRefreshing} className="text-[#898989] hover:text-white p-1 transition-colors">
               <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => router.push(backPath)}>
-              <ArrowLeft className="h-4 w-4 mr-1" /> {backLabel}
-            </Button>
+            </button>
+            <button onClick={() => router.push(backPath)} className="flex items-center gap-1 text-[11px] font-bold text-[#898989] hover:text-white transition-colors">
+              <ArrowLeft className="h-3.5 w-3.5" /> {backLabel}
+            </button>
           </div>
         </div>
 
         {/* Info bar */}
-        <div className="flex flex-wrap items-center gap-4 sm:gap-6 mt-3 text-xs text-gray-500">
+        <div className="flex flex-wrap items-center gap-4 sm:gap-6 mt-3 text-[11px] text-[#898989]">
           {capacityKw && (
             <div className="flex items-center gap-1.5">
-              <Activity className="w-3.5 h-3.5" />
-              <span>{Number(capacityKw).toFixed(1)} kW</span>
-            </div>
-          )}
-          {address && (
-            <div className="flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5" />
-              <span className="max-w-[200px] truncate">{address}</span>
+              <Activity className="w-3.5 h-3.5 text-[#5e5e5e]" />
+              <span className="font-semibold text-[#a7a7a7]">{Number(capacityKw).toFixed(1)} kW</span>
             </div>
           )}
           <div className="flex items-center gap-1.5">
-            <Cpu className="w-3.5 h-3.5" />
-            <span>{deviceCount} inverter{deviceCount !== 1 ? 's' : ''}</span>
+            <Cpu className="w-3.5 h-3.5 text-[#5e5e5e]" />
+            <span className="font-semibold text-[#a7a7a7]">{deviceCount}</span> inverters
           </div>
           <div className="flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5" />
-            <span>Last data {formatDate(lastDataAt ?? lastSynced)}</span>
+            <Clock className="w-3.5 h-3.5 text-[#5e5e5e]" />
+            Last data <span className="font-semibold text-[#a7a7a7]">{formatDate(lastDataAt ?? lastSynced)}</span>
           </div>
           {stringSummary.total > 0 && (
             <>
-              <span className="text-gray-300 hidden sm:inline">|</span>
+              <span className="text-[#333] hidden sm:inline">|</span>
               <div className="flex items-center gap-3">
-                <span className="flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                  {stringSummary.ok} OK
-                </span>
+                <span className="text-[#76b900] font-bold">{stringSummary.ok} OK</span>
                 {stringSummary.warning > 0 && (
-                  <span className="flex items-center gap-1 text-yellow-600">
-                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
-                    {stringSummary.warning} warn
-                  </span>
+                  <span className="text-[#ef9100] font-bold">{stringSummary.warning} warn</span>
                 )}
                 {stringSummary.critical > 0 && (
-                  <span className="flex items-center gap-1 text-red-600">
-                    <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                    {stringSummary.critical} critical
-                  </span>
+                  <span className="text-[#e52020] font-bold">{stringSummary.critical} crit</span>
                 )}
               </div>
             </>
