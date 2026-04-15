@@ -177,24 +177,21 @@ export default function AnalysisPage() {
     <div className="p-6 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="w-5 h-5 text-gray-700" />
-          <h1 className="text-lg font-semibold text-gray-900">Performance Analysis</h1>
-        </div>
-        <div className="text-xs text-gray-500">
-          Values shown are Health Score (string current vs inverter average)
+        <h1 className="text-lg font-bold text-gray-900">Performance Analysis</h1>
+        <div className="text-[11px] font-semibold text-gray-500">
+          Health Score = Performance × Availability (IEC 61724)
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+      <div className="flex gap-1">
         <button
           onClick={() => setTab('string')}
           className={cn(
-            'px-4 py-1.5 text-sm font-medium rounded-md transition-colors',
+            'px-4 py-1.5 text-xs font-semibold rounded-sm transition-colors',
             tab === 'string'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-primary-50 text-primary-700 border border-primary-200'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           )}
         >
           String Level
@@ -202,10 +199,10 @@ export default function AnalysisPage() {
         <button
           onClick={() => setTab('inverter')}
           className={cn(
-            'px-4 py-1.5 text-sm font-medium rounded-md transition-colors',
+            'px-4 py-1.5 text-xs font-semibold rounded-sm transition-colors',
             tab === 'inverter'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-primary-50 text-primary-700 border border-primary-200'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           )}
         >
           Inverter Level
@@ -276,7 +273,7 @@ export default function AnalysisPage() {
             <button
               key={p.label}
               onClick={() => setPreset(p.days)}
-              className="px-2 py-1.5 text-xs text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+              className="px-2.5 py-1.5 text-xs font-semibold text-gray-600 bg-gray-100 rounded-sm hover:bg-gray-200 transition-colors"
             >
               {p.label}
             </button>
@@ -293,7 +290,7 @@ export default function AnalysisPage() {
         <button
           onClick={fetchData}
           disabled={loading || !!validationError}
-          className="px-4 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="px-4 py-1.5 text-xs font-bold text-white bg-gray-900 rounded-sm hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           {loading ? 'Loading...' : 'Generate'}
         </button>
@@ -374,6 +371,7 @@ export default function AnalysisPage() {
           <span>Column guide:</span>
           <span><strong className="text-blue-700">Perf</strong> — Performance: how well the string produces when working (low = shading / dirty panels)</span>
           <span><strong className="text-violet-700">Avail</strong> — Availability: % of daylight hours the string was active (low = loose cable / connection fault)</span>
+          <span><strong className="text-emerald-700">kWh</strong> — Total energy produced in the selected date range (trapezoidal integration, ±1.3% accuracy)</span>
           <span><strong className="text-gray-600">Daily cells</strong> — Health Score: Perf × Avail combined</span>
         </div>
       </div>

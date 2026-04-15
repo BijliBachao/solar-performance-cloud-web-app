@@ -365,6 +365,7 @@ export default function DashboardAnalysisPage() {
           <span>Column guide:</span>
           <span><strong className="text-blue-700">Perf</strong> — Performance: how well the string produces when working (low = shading / dirty panels)</span>
           <span><strong className="text-violet-700">Avail</strong> — Availability: % of daylight hours the string was active (low = loose cable / connection fault)</span>
+          <span><strong className="text-emerald-700">kWh</strong> — Total energy produced in the selected date range (trapezoidal integration, ±1.3% accuracy)</span>
           <span><strong className="text-gray-600">Daily cells</strong> — Health Score: Perf × Avail combined</span>
         </div>
       </div>
