@@ -2,6 +2,7 @@ import { cn } from '@/lib/utils'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { AlertTriangle, CheckCircle, XCircle, Circle, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { useState } from 'react'
+import { ACTIVE_CURRENT_THRESHOLD, HEALTH_HEALTHY, HEALTH_WARNING } from '@/lib/string-health'
 
 interface Diagnosis {
   issue: string
@@ -38,22 +39,22 @@ function getAlertColor(count: number): string {
 }
 
 function getStatusIcon(data: MonthlyHealthData) {
-  if (data.trend === 'offline' || data.avg_current < 0.1) {
+  if (data.trend === 'offline' || data.avg_current < ACTIVE_CURRENT_THRESHOLD) {
     return <Circle className="w-4 h-4 text-gray-400" />
   }
   if (data.avg_health_score < 50) {
     return <XCircle className="w-4 h-4 text-red-500" />
   }
-  if (data.avg_health_score < 75) {
+  if (data.avg_health_score < HEALTH_HEALTHY) {
     return <AlertTriangle className="w-4 h-4 text-amber-500" />
   }
   return <CheckCircle className="w-4 h-4 text-emerald-500" />
 }
 
 function getStatusLabel(data: MonthlyHealthData): string {
-  if (data.trend === 'offline' || data.avg_current < 0.1) return 'Offline'
+  if (data.trend === 'offline' || data.avg_current < ACTIVE_CURRENT_THRESHOLD) return 'Offline'
   if (data.avg_health_score < 50) return 'Critical'
-  if (data.avg_health_score < 75) return 'Warning'
+  if (data.avg_health_score < HEALTH_HEALTHY) return 'Warning'
   return 'Healthy'
 }
 
@@ -72,8 +73,8 @@ function HealthBar({ score }: { score: number }) {
             className={cn(
               'w-2.5 h-3 rounded-sm flex-shrink-0',
               i < filledSegments
-                ? cappedScore >= 75 ? 'bg-emerald-500'
-                  : cappedScore >= 50 ? 'bg-amber-500'
+                ? cappedScore >= HEALTH_HEALTHY ? 'bg-emerald-500'
+                  : cappedScore >= HEALTH_WARNING ? 'bg-amber-500'
                   : 'bg-red-500'
                 : 'bg-gray-200'
             )}
@@ -212,7 +213,7 @@ export function MonthlyHealthReport({ data, inverterAvgCurrent }: MonthlyHealthR
   // Calculate summary stats
   const healthyCount = data.filter(d => !d.diagnosis && d.avg_current >= 0.1).length
   const issueCount = issueStrings.length
-  const offlineCount = data.filter(d => d.avg_current < 0.1).length
+  const offlineCount = data.filter(d => d.avg_current < ACTIVE_CURRENT_THRESHOLD).length
 
   return (
     <div className="space-y-4">

@@ -1,0 +1,210 @@
+/**
+ * String Health Classification — Single Source of Truth
+ *
+ * ALL string health thresholds and classification logic lives HERE.
+ * No other file may define thresholds or inline classification logic.
+ *
+ * Used by:
+ *   - lib/poller-utils.ts (alerts, daily/hourly aggregates)
+ *   - app/api/plants/[code]/strings/route.ts (live status)
+ *   - app/api/plants/[code]/monthly-health/route.ts (monthly diagnosis)
+ *   - app/api/admin/analysis/string-level/route.ts (analysis bucketing)
+ *   - app/api/dashboard/analysis/string-level/route.ts (org analysis)
+ *   - components/shared/InverterDetailSection.tsx (display)
+ *   - components/shared/MonthlyHealthReport.tsx (display)
+ *   - components/shared/FaultDiagnosisPanel.tsx (display)
+ *   - components/shared/PerformanceCell.tsx (cell colors)
+ */
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Constants
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/** Minimum current (amps) for a string to be considered "active/producing" */
+export const ACTIVE_CURRENT_THRESHOLD = 0.1
+
+/** Minimum number of active strings required for peer comparison */
+export const MIN_PEERS_FOR_COMPARISON = 2
+
+/** Minimum average current (amps) for peer comparison to be meaningful */
+export const MIN_AVG_FOR_COMPARISON = 1.0
+
+// ── Real-time gap thresholds (% below peer average) ─────────────────
+/** Gap % above which a string is CRITICAL */
+export const GAP_CRITICAL = 50
+/** Gap % above which a string is WARNING */
+export const GAP_WARNING = 25
+/** Gap % above which an alert is INFO (alerts only, live view stays NORMAL) */
+export const GAP_INFO = 10
+
+// ── Health score buckets (daily/monthly historical views) ───────────
+/** Health score >= this is "Healthy" */
+export const HEALTH_HEALTHY = 90
+/** Health score >= this (but < HEALTH_HEALTHY) is "Warning". Below = Critical */
+export const HEALTH_WARNING = 50
+
+// ── Staleness (real-time only) ──────────────────────────────────────
+/** Milliseconds after which a measurement is stale vs freshest on device */
+export const STALE_MS = 15 * 60 * 1000
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Types
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+export type StringStatus = 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
+export type AlertSeverity = 'CRITICAL' | 'WARNING' | 'INFO'
+export type HealthBucket = 'healthy' | 'warning' | 'critical' | 'no_data'
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Predicates
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/** Is this string actively producing current? */
+export function isActive(currentAmps: number): boolean {
+  return currentAmps > ACTIVE_CURRENT_THRESHOLD
+}
+
+/** Is this measurement stale relative to the freshest on the device? */
+export function isStale(timestampMs: number, freshestTimestampMs: number): boolean {
+  return freshestTimestampMs > 0 && (freshestTimestampMs - timestampMs) > STALE_MS
+}
+
+/** Filter an array of currents to only active values */
+export function filterActive(currents: number[]): number[] {
+  return currents.filter(c => isActive(c))
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Averages
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+export interface StringReading {
+  string_number: number
+  current: number
+  voltage: number
+}
+
+/**
+ * Leave-one-out peer average: average of all OTHER active strings,
+ * excluding the string being evaluated. More fair than self-inclusive.
+ * Returns null if not enough peers.
+ */
+export function leaveOneOutAvg(
+  readings: StringReading[],
+  excludeStringNumber: number,
+): number | null {
+  const peers = readings.filter(
+    r => isActive(r.current) && r.string_number !== excludeStringNumber
+  )
+  if (peers.length < 1) return null
+  return peers.reduce((sum, r) => sum + r.current, 0) / peers.length
+}
+
+/**
+ * Average current of all active strings (self-inclusive).
+ * Used for display summaries and KPI pills.
+ */
+export function activeAvg(readings: StringReading[]): number {
+  const active = readings.filter(r => isActive(r.current))
+  if (active.length === 0) return 0
+  return active.reduce((sum, r) => sum + r.current, 0) / active.length
+}
+
+/**
+ * Can we do a meaningful peer comparison?
+ * Requires ≥MIN_PEERS active strings with avg ≥MIN_AVG.
+ */
+export function canCompare(readings: StringReading[]): boolean {
+  const active = readings.filter(r => isActive(r.current))
+  if (active.length < MIN_PEERS_FOR_COMPARISON) return false
+  const avg = active.reduce((sum, r) => sum + r.current, 0) / active.length
+  return avg >= MIN_AVG_FOR_COMPARISON
+}
+
+/** Compute gap percentage: how far below the reference average */
+export function computeGap(current: number, referenceAvg: number): number {
+  if (referenceAvg <= 0) return 0
+  return Math.max(0, ((referenceAvg - current) / referenceAvg) * 100)
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Real-time Classification
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+export interface RealtimeResult {
+  status: StringStatus
+  gapPercent: number
+}
+
+/**
+ * Classify a single string's real-time status.
+ * Used by the live plant detail view.
+ */
+export function classifyRealtime(
+  current: number,
+  voltage: number,
+  peerAvg: number | null,
+  stale: boolean,
+): RealtimeResult {
+  if (stale) return { status: 'DISCONNECTED', gapPercent: 100 }
+
+  if (!isActive(current)) {
+    if (voltage > 0) return { status: 'OPEN_CIRCUIT', gapPercent: 100 }
+    return { status: 'DISCONNECTED', gapPercent: 100 }
+  }
+
+  if (peerAvg !== null && peerAvg > 0) {
+    const gapPercent = computeGap(current, peerAvg)
+    if (gapPercent > GAP_CRITICAL) return { status: 'CRITICAL', gapPercent }
+    if (gapPercent > GAP_WARNING) return { status: 'WARNING', gapPercent }
+    return { status: 'NORMAL', gapPercent }
+  }
+
+  return { status: 'NORMAL', gapPercent: 0 }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Alert Severity
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/** Classify alert severity from gap %. Returns null if gap not significant. */
+export function classifyAlertSeverity(gapPercent: number): AlertSeverity | null {
+  if (gapPercent > GAP_CRITICAL) return 'CRITICAL'
+  if (gapPercent > GAP_WARNING) return 'WARNING'
+  if (gapPercent > GAP_INFO) return 'INFO'
+  return null
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// IEC 61724 Daily Scores
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/** Performance = stringAvgCurrent / inverterAvgCurrent × 100, capped at 100 */
+export function computePerformance(stringAvg: number, inverterAvg: number): number | null {
+  if (inverterAvg <= 0) return null
+  return Math.min((stringAvg / inverterAvg) * 100, 100)
+}
+
+/** Availability = stringMeasurements / maxMeasurements × 100, capped at 100 */
+export function computeAvailability(stringCount: number, maxCount: number): number | null {
+  if (maxCount <= 0) return null
+  return Math.min((stringCount / maxCount) * 100, 100)
+}
+
+/** Health Score = Performance × Availability / 100, capped at 100 */
+export function computeHealthScore(perf: number | null, avail: number | null): number | null {
+  if (perf === null || avail === null) return null
+  return Math.min((perf * avail) / 100, 100)
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Health Score Bucketing (for historical views)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/** Classify a health score into a display bucket */
+export function bucketHealthScore(score: number | null | undefined): HealthBucket {
+  if (score === null || score === undefined) return 'no_data'
+  if (score >= HEALTH_HEALTHY) return 'healthy'
+  if (score >= HEALTH_WARNING) return 'warning'
+  return 'critical'
+}

@@ -3,8 +3,10 @@ import { getUserFromRequest, createErrorResponse, ApiAuthError } from '@/lib/api
 import { requirePlantAccess } from '@/lib/api-access'
 import { prisma } from '@/lib/prisma'
 import { INVERTER_DEVICE_TYPE_IDS } from '@/lib/constants'
-
-type StringStatus = 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
+import {
+  isStale, classifyRealtime, leaveOneOutAvg, activeAvg,
+  type StringStatus, type StringReading,
+} from '@/lib/string-health'
 
 // PKT day start for "today" query
 function getTodayStart(): Date {
@@ -74,50 +76,28 @@ export async function GET(
           todayByString.set(m.string_number, group)
         }
 
-        // Detect staleness: if a string's latest measurement is >15 min older
-        // than the freshest on this device, it's no longer reporting
-        const STALE_THRESHOLD_MS = 15 * 60 * 1000
+        // Staleness: find freshest timestamp, compare each string
         const freshestTs = latestMeasurements.length > 0
           ? Math.max(...latestMeasurements.map(m => m.timestamp.getTime()))
           : 0
-        const isStale = (ts: Date) => freshestTs > 0 && (freshestTs - ts.getTime()) > STALE_THRESHOLD_MS
 
-        // Averages — only from fresh measurements
-        const freshMeasurements = latestMeasurements.filter(m => !isStale(m.timestamp))
-        const totalCount = freshMeasurements.length
-        const totalCurrent = freshMeasurements.reduce((sum, m) => sum + Number(m.current), 0)
-        const avgCurrent = totalCount > 0 ? totalCurrent / totalCount : 0
+        // Build fresh readings for average calculation (exclude stale)
+        const freshReadings: StringReading[] = latestMeasurements
+          .filter(m => !isStale(m.timestamp.getTime(), freshestTs))
+          .map(m => ({ string_number: m.string_number, current: Number(m.current), voltage: Number(m.voltage) }))
 
-        const activeStrings = freshMeasurements.filter((m) => Number(m.current) > 0.1)
-        const activeAvg = activeStrings.length > 0
-          ? activeStrings.reduce((sum, m) => sum + Number(m.current), 0) / activeStrings.length
-          : 0
+        // Display average (active strings, self-inclusive — for KPI pill)
+        const displayAvg = activeAvg(freshReadings)
 
         // Build string data with kWh
         const strings = latestMeasurements.map((m) => {
           const current = Number(m.current)
           const voltage = Number(m.voltage)
-          const stale = isStale(m.timestamp)
+          const stale = isStale(m.timestamp.getTime(), freshestTs)
 
-          let status: StringStatus
-          let gapPercent = 0
-
-          if (stale) {
-            // String stopped reporting — treat as disconnected
-            status = 'DISCONNECTED'
-            gapPercent = 100
-          } else if (current > 0.1) {
-            gapPercent = activeAvg > 0 ? ((activeAvg - current) / activeAvg) * 100 : 0
-            if (gapPercent > 50) status = 'CRITICAL'
-            else if (gapPercent > 10) status = 'WARNING'
-            else status = 'NORMAL'
-          } else if (voltage > 0) {
-            status = 'OPEN_CIRCUIT'
-            gapPercent = 100
-          } else {
-            status = 'DISCONNECTED'
-            gapPercent = 100
-          }
+          // Leave-one-out peer average for fair comparison
+          const peerAvg = stale ? null : leaveOneOutAvg(freshReadings, m.string_number)
+          const { status, gapPercent } = classifyRealtime(current, voltage, peerAvg, stale)
 
           // Trapezoidal kWh for this string today
           const stringTodayData = todayByString.get(m.string_number) || []
@@ -145,8 +125,8 @@ export async function GET(
           device_id: device.id,
           device_name: device.device_name,
           strings,
-          avg_current: Math.round(avgCurrent * 1000) / 1000,
-          active_avg_current: Math.round(activeAvg * 1000) / 1000,
+          avg_current: Math.round(displayAvg * 1000) / 1000,
+          active_avg_current: Math.round(displayAvg * 1000) / 1000,
           best_string_kwh: bestKwh,
         }
       })

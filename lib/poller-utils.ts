@@ -1,5 +1,10 @@
 import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
+import {
+  isActive, filterActive, computeGap, classifyAlertSeverity,
+  canCompare, computePerformance, computeAvailability, computeHealthScore,
+  MIN_PEERS_FOR_COMPARISON, MIN_AVG_FOR_COMPARISON,
+} from '@/lib/string-health'
 
 /** Safe parseFloat that returns 0 instead of NaN */
 export function safeFloat(v: any): number {
@@ -19,18 +24,17 @@ export async function generateAlerts(
 ): Promise<void> {
   if (measurements.length === 0) return
 
-  const activeStrings = measurements.filter(
-    (m) => Number(m.current) > 0.1
-  )
-
+  const activeStrings = measurements.filter(m => isActive(Number(m.current)))
   const totalCurrent = activeStrings.reduce((sum, m) => sum + Number(m.current), 0)
   const avgCurrentAll = activeStrings.length > 0 ? totalCurrent / activeStrings.length : 0
 
   // Build severity map
   const currentSeverities = new Map<number, { severity: string; gapPercent: number }>()
 
-  // ── Part 1: Compare active strings against each other ──────────
-  if (activeStrings.length >= 2 && avgCurrentAll >= 1) {
+  const canDoComparison = activeStrings.length >= MIN_PEERS_FOR_COMPARISON && avgCurrentAll >= MIN_AVG_FOR_COMPARISON
+
+  // ── Part 1: Compare active strings against each other (leave-one-out) ──
+  if (canDoComparison) {
     for (const measurement of activeStrings) {
       const current = Number(measurement.current)
       const othersTotal = totalCurrent - current
@@ -39,30 +43,20 @@ export async function generateAlerts(
       const othersAvg = othersTotal / othersCount
       if (othersAvg <= 0) continue
 
-      const gapPercent = ((othersAvg - current) / othersAvg) * 100
-
-      let severity: string | null = null
-      if (gapPercent > 50) severity = 'CRITICAL'
-      else if (gapPercent > 25) severity = 'WARNING'
-      else if (gapPercent > 10) severity = 'INFO'
-
+      const gapPercent = computeGap(current, othersAvg)
+      const severity = classifyAlertSeverity(gapPercent)
       if (severity) {
         currentSeverities.set(measurement.string_number, { severity, gapPercent })
       }
     }
   }
 
-  // ── Part 2: Dead/near-dead strings (current <= 0.1A) ──────────
-  // These were invisible before — now flagged as CRITICAL
-  if (activeStrings.length >= 2 && avgCurrentAll >= 1) {
-    const deadStrings = measurements.filter(
-      (m) => Number(m.current) <= 0.1
-    )
+  // ── Part 2: Dead/near-dead strings (current ≤ threshold) ──────
+  if (canDoComparison) {
+    const deadStrings = measurements.filter(m => !isActive(Number(m.current)))
     for (const measurement of deadStrings) {
       const current = Number(measurement.current)
-      const gapPercent = avgCurrentAll > 0
-        ? Math.min(((avgCurrentAll - current) / avgCurrentAll) * 100, 100)
-        : 100
+      const gapPercent = Math.min(computeGap(current, avgCurrentAll), 100)
       currentSeverities.set(measurement.string_number, {
         severity: 'CRITICAL',
         gapPercent,
@@ -105,7 +99,7 @@ export async function generateAlerts(
     if (!measurement) continue
 
     const current = Number(measurement.current)
-    const message = current <= 0.1
+    const message = !isActive(current)
       ? `String ${stringNumber} producing near-zero current (${current.toFixed(3)}A)`
       : `String ${stringNumber} is ${state.gapPercent.toFixed(1)}% below average`
 
@@ -209,7 +203,7 @@ export async function updateHourlyAggregates(
   const upserts = []
   for (const [stringNumber, measurements] of byString) {
     const voltages = measurements.map((m) => Number(m.voltage)).filter((v) => v > 0)
-    const currents = measurements.map((m) => Number(m.current)).filter((c) => c > 0)
+    const currents = filterActive(measurements.map((m) => Number(m.current)))
     const powers = measurements.map((m) => Number(m.power)).filter((p) => p > 0)
 
     const data = {
@@ -265,9 +259,7 @@ export async function updateDailyAggregates(
   if (allMeasurements.length === 0) return
 
   // Compute inverter-wide average current (for performance score)
-  const allCurrents = allMeasurements
-    .map((m) => Number(m.current))
-    .filter((c) => c > 0)
+  const allCurrents = filterActive(allMeasurements.map((m) => Number(m.current)))
   const inverterAvgCurrent = avg(allCurrents)
 
   // Group by string_number
@@ -285,7 +277,7 @@ export async function updateDailyAggregates(
   const upserts = []
   for (const [stringNumber, measurements] of byString) {
     const voltages = measurements.map((m) => Number(m.voltage)).filter((v) => v > 0)
-    const currents = measurements.map((m) => Number(m.current)).filter((c) => c > 0)
+    const currents = filterActive(measurements.map((m) => Number(m.current)))
     const powers = measurements.map((m) => Number(m.power)).filter((p) => p > 0)
 
     const stringAvgCurrent = avg(currents)
@@ -305,21 +297,10 @@ export async function updateDailyAggregates(
     }
     const energyKwh = energyWh / 1000
 
-    // IEC 61724 aligned — two separate metrics:
-    // Performance: how well the string produces WHEN active (current quality)
-    const perfScore = inverterAvgCurrent > 0
-      ? Math.min((stringAvgCurrent / inverterAvgCurrent) * 100, 100)
-      : null
-
-    // Availability: what % of the day the string was active (uptime)
-    const availScore = maxMeasurements > 0
-      ? Math.min((measurements.length / maxMeasurements) * 100, 100)
-      : null
-
-    // Health Score = Performance × Availability (combined true picture)
-    const healthScore = perfScore !== null && availScore !== null
-      ? Math.min((perfScore * availScore) / 100, 100)
-      : null
+    // IEC 61724 aligned — from lib/string-health.ts (single source of truth)
+    const perfScore = computePerformance(stringAvgCurrent, inverterAvgCurrent)
+    const availScore = computeAvailability(measurements.length, maxMeasurements)
+    const healthScore = computeHealthScore(perfScore, availScore)
 
     const data = {
       avg_voltage: new Decimal(avg(voltages).toFixed(2)),

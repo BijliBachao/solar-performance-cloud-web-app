@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest, requireOrganization, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { INVERTER_DEVICE_TYPE_IDS } from '@/lib/constants'
+import { bucketHealthScore } from '@/lib/string-health'
 
 export async function GET(request: NextRequest) {
   try {
@@ -206,9 +207,10 @@ export async function GET(request: NextRequest) {
     const activeRows = rows.filter(r => r.type === 'active')
     for (const row of activeRows) {
       const score = row.scores[latestDate]
-      if (score === null || score === undefined) { noData++; continue }
-      if (score >= 90) healthy++
-      else if (score >= 50) warning++
+      const bucket = bucketHealthScore(score)
+      if (bucket === 'no_data') noData++
+      else if (bucket === 'healthy') healthy++
+      else if (bucket === 'warning') warning++
       else critical++
     }
 

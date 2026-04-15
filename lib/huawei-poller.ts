@@ -3,6 +3,7 @@ import { huaweiClient } from '@/lib/huawei-client'
 import { Decimal } from '@prisma/client/runtime/library'
 import { PROVIDERS } from '@/lib/constants'
 import { generateAlerts, updateHourlyAggregates, updateDailyAggregates } from '@/lib/poller-utils'
+import { ACTIVE_CURRENT_THRESHOLD } from '@/lib/string-health'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
@@ -251,7 +252,7 @@ function detectMaxStrings(dataItemMap: Record<string, number | null>): number {
     const match = key.match(/^pv(\d+)_i$/)
     if (match) {
       const value = dataItemMap[key]
-      if (value !== null && value !== undefined && value > 0.1) {
+      if (value !== null && value !== undefined && value > ACTIVE_CURRENT_THRESHOLD) {
         const num = parseInt(match[1], 10)
         if (num > max) max = num
       }

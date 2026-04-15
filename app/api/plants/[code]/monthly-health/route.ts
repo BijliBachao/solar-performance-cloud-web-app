@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
 import { requirePlantAccess } from '@/lib/api-access'
 import { prisma } from '@/lib/prisma'
+import { isActive, ACTIVE_CURRENT_THRESHOLD, HEALTH_HEALTHY, HEALTH_WARNING } from '@/lib/string-health'
 
 interface Diagnosis {
   issue: string
@@ -40,7 +41,7 @@ function detectShadingPattern(
   for (const row of hourlyData) {
     const hourOfDay = (new Date(row.hour).getUTCHours() + 5) % 24  // Convert UTC → PKT hour
     if (!daylightHours.includes(hourOfDay)) continue
-    if (Number(row.avg_current || 0) < 0.1) continue // Skip inactive hours
+    if (Number(row.avg_current || 0) < ACTIVE_CURRENT_THRESHOLD) continue // Skip inactive hours
 
     if (!hourlyByHour.has(hourOfDay)) {
       hourlyByHour.set(hourOfDay, { total: 0, count: 0, byString: new Map() })
@@ -118,7 +119,7 @@ function diagnoseString(
   hasHistoricalData: boolean
 ): Diagnosis | null {
   // Offline - near-zero current
-  if (avgCurrent < 0.1) {
+  if (avgCurrent < ACTIVE_CURRENT_THRESHOLD) {
     // Only flag as issue if string had historical data (was previously working)
     if (hasHistoricalData) {
       return {
@@ -133,7 +134,7 @@ function diagnoseString(
   }
 
   // Critical - below 50% health
-  if (avgHealthScore < 50) {
+  if (avgHealthScore < HEALTH_WARNING) {
     return {
       issue: 'Severe underperformance',
       likely_cause: 'Faulty panel or major shading',
@@ -143,7 +144,7 @@ function diagnoseString(
   }
 
   // Warning - below 75% health
-  if (avgHealthScore < 75) {
+  if (avgHealthScore < HEALTH_HEALTHY) {
     if (trend === 'declining') {
       return {
         issue: 'Gradual decline',
@@ -261,7 +262,7 @@ export async function GET(
       }),
 
       // 2. Get hourly data for uptime calculation
-      // Uptime = hours with current > 0.1 / expected daylight hours
+      // Uptime = hours with current > ACTIVE_CURRENT_THRESHOLD / expected daylight hours
       prisma.string_hourly.findMany({
         where: {
           device_id: deviceId,
@@ -301,10 +302,10 @@ export async function GET(
     }
 
     // Calculate uptime per string
-    // First, find all "daylight hours" - hours when ANY string had current > 0.1
+    // First, find all "daylight hours" - hours when ANY string had current > ACTIVE_CURRENT_THRESHOLD
     const daylightHours = new Set<string>()
     for (const row of hourlyData) {
-      if (Number(row.avg_current) > 0.1) {
+      if (Number(row.avg_current) > ACTIVE_CURRENT_THRESHOLD) {
         // Use hour timestamp as key to identify unique daylight hours
         daylightHours.add(new Date(row.hour).toISOString())
       }
@@ -323,8 +324,8 @@ export async function GET(
       }
       const entry = stringHourlyMap.get(row.string_number)!
       entry.totalHours++
-      // Count hours where current > 0.1A as active
-      if (Number(row.avg_current) > 0.1) {
+      // Count hours where current > ACTIVE_CURRENT_THRESHOLDA as active
+      if (Number(row.avg_current) > ACTIVE_CURRENT_THRESHOLD) {
         entry.activeHours++
       }
     }
@@ -352,7 +353,7 @@ export async function GET(
 
       const rawHealthScore = dailyRows.length > 0
         ? dailyRows.reduce((sum, r) => sum + Number(r.health_score || 100), 0) / dailyRows.length
-        : avgCurrent < 0.1 ? 0 : 100
+        : avgCurrent < ACTIVE_CURRENT_THRESHOLD ? 0 : 100
       // Cap health score at 100
       const avgHealthScore = Math.min(100, rawHealthScore)
 
@@ -366,15 +367,15 @@ export async function GET(
         : 0
 
       // Determine trend
-      const trend = avgCurrent < 0.1
+      const trend = avgCurrent < ACTIVE_CURRENT_THRESHOLD
         ? 'offline' as const
         : calculateTrend(dailyRows as { date: Date; health_score: number | null }[])
 
       // Check if string has historical data (was previously producing power)
-      const hasHistoricalData = dailyRows.some(r => Number(r.avg_current || 0) > 0.1)
+      const hasHistoricalData = dailyRows.some(r => Number(r.avg_current || 0) > ACTIVE_CURRENT_THRESHOLD)
 
       // Detect shading patterns (drops at specific hours)
-      const shadingPattern = avgCurrent >= 0.1
+      const shadingPattern = avgCurrent >= ACTIVE_CURRENT_THRESHOLD
         ? detectShadingPattern(stringNum, hourlyData)
         : null
 
@@ -407,18 +408,18 @@ export async function GET(
       })
     }
 
-    // Calculate inverter average from ACTIVE strings only (current >= 0.1A)
-    const activeStrings = stringHealthData.filter(s => s.avg_current >= 0.1)
+    // Calculate inverter average from ACTIVE strings only
+    const activeStrings = stringHealthData.filter(s => s.avg_current >= ACTIVE_CURRENT_THRESHOLD)
     const inverterAvgCurrent = activeStrings.length > 0
       ? activeStrings.reduce((sum, s) => sum + s.avg_current, 0) / activeStrings.length
       : 0
 
     // Calculate summary
     const summary = {
-      healthy_strings: stringHealthData.filter(s => s.avg_health_score >= 75 && s.trend !== 'offline').length,
-      warning_strings: stringHealthData.filter(s => s.avg_health_score >= 50 && s.avg_health_score < 75).length,
-      critical_strings: stringHealthData.filter(s => s.avg_health_score > 0 && s.avg_health_score < 50).length,
-      offline_strings: stringHealthData.filter(s => s.trend === 'offline' || s.avg_current < 0.1).length
+      healthy_strings: stringHealthData.filter(s => s.avg_health_score >= HEALTH_HEALTHY && s.trend !== 'offline').length,
+      warning_strings: stringHealthData.filter(s => s.avg_health_score >= HEALTH_WARNING && s.avg_health_score < HEALTH_HEALTHY).length,
+      critical_strings: stringHealthData.filter(s => s.avg_health_score > 0 && s.avg_health_score < HEALTH_WARNING).length,
+      offline_strings: stringHealthData.filter(s => s.trend === 'offline' || s.avg_current < ACTIVE_CURRENT_THRESHOLD).length
     }
 
     // Format month string

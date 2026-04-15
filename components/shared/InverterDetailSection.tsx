@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { cn } from '@/lib/utils'
+import { ACTIVE_CURRENT_THRESHOLD } from '@/lib/string-health'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { StringHealthMatrix } from '@/components/shared/StringHealthMatrix'
@@ -166,9 +167,10 @@ export function InverterDetailSection({
   }
   const totalStrings = strings.length
   const totalPower = producingStrings.reduce((sum, s) => sum + s.power, 0)
-  // Average includes ALL strings — per IEC research
-  const avgCurrent = totalStrings > 0
-    ? strings.reduce((sum, s) => sum + s.current, 0) / totalStrings
+  // Average of active strings only (matches API's active_avg_current)
+  const activeForAvg = strings.filter(s => s.current > ACTIVE_CURRENT_THRESHOLD)
+  const avgCurrent = activeForAvg.length > 0
+    ? activeForAvg.reduce((sum, s) => sum + s.current, 0) / activeForAvg.length
     : 0
   // Health % includes ALL strings in denominator
   const healthPct = totalStrings > 0

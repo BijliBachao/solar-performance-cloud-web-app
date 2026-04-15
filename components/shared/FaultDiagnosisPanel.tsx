@@ -1,6 +1,7 @@
 'use client'
 
 import { cn } from '@/lib/utils'
+import { GAP_WARNING, GAP_INFO } from '@/lib/string-health'
 import {
   Droplets, TreePine, Wrench,
   Unplug, PlugZap, TrendingDown, CheckCircle, Cable,
@@ -72,7 +73,7 @@ function diagnoseStrings(strings: StringData[], avgCurrent: number): Diagnosis[]
   }
 
   // ── Warning: moderate underperformance ─────────────────────────
-  const warning = strings.filter(s => s.status === 'WARNING' && s.gap_percent >= 25)
+  const warning = strings.filter(s => s.status === 'WARNING' && s.gap_percent >= GAP_WARNING)
   if (warning.length > 0) {
     diagnoses.push({
       stringNumbers: warning.map(s => s.string_number),
@@ -85,7 +86,7 @@ function diagnoseStrings(strings: StringData[], avgCurrent: number): Diagnosis[]
   }
 
   // ── Info: mild underperformance ────────────────────────────────
-  const mild = strings.filter(s => s.status === 'WARNING' && s.gap_percent > 10 && s.gap_percent < 25)
+  const mild = strings.filter(s => s.status === 'WARNING' && s.gap_percent > GAP_INFO && s.gap_percent < GAP_WARNING)
   if (mild.length > 0) {
     diagnoses.push({
       stringNumbers: mild.map(s => s.string_number),
