@@ -39,6 +39,7 @@ interface StringInfo {
   power: number
   gap_percent: number
   status: 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
+  energy_kwh?: number
 }
 
 interface DeviceStrings {

@@ -9,6 +9,7 @@ interface StringData {
   power: number
   gap_percent: number
   status: 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
+  energy_kwh?: number
 }
 
 interface StringComparisonTableProps {
@@ -39,6 +40,7 @@ export function StringComparisonTable({ strings }: StringComparisonTableProps) {
           <TableHead>Voltage (V)</TableHead>
           <TableHead>Current (A)</TableHead>
           <TableHead>Power (W)</TableHead>
+          <TableHead>kWh Today</TableHead>
           <TableHead>Gap %</TableHead>
           <TableHead>Status</TableHead>
         </TableRow>
@@ -55,6 +57,7 @@ export function StringComparisonTable({ strings }: StringComparisonTableProps) {
               <TableCell>{s.voltage.toFixed(1)}</TableCell>
               <TableCell>{s.current.toFixed(2)}</TableCell>
               <TableCell>{s.power.toFixed(1)}</TableCell>
+              <TableCell className="font-mono">{s.energy_kwh != null ? s.energy_kwh.toFixed(1) : '—'}</TableCell>
               <TableCell>
                 <span
                   className={cn(

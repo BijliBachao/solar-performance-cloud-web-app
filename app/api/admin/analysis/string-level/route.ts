@@ -136,6 +136,7 @@ export async function GET(request: NextRequest) {
         health_score: true,
         performance: true,
         availability: true,
+        energy_kwh: true,
       },
       orderBy: [{ device_id: 'asc' }, { string_number: 'asc' }, { date: 'asc' }],
     })
@@ -152,12 +153,15 @@ export async function GET(request: NextRequest) {
     const scoreMap = new Map<string, number | null>()
     const perfMap = new Map<string, number | null>()
     const availMap = new Map<string, number | null>()
+    const energyMap = new Map<string, number>()
     for (const row of dailyData) {
       const dateStr = new Date(row.date).toISOString().split('T')[0]
       const key = `${row.device_id}:${row.string_number}:${dateStr}`
       scoreMap.set(key, row.health_score ? Number(row.health_score) : null)
       perfMap.set(key, row.performance ? Number(row.performance) : null)
       availMap.set(key, row.availability ? Number(row.availability) : null)
+      const eKey = `${row.device_id}:${row.string_number}:${dateStr}`
+      if (row.energy_kwh) energyMap.set(eKey, Number(row.energy_kwh))
     }
 
     // Strings with data in query range + all active strings
@@ -198,7 +202,7 @@ export async function GET(request: NextRequest) {
         : null
 
       const scores: Record<string, number | null> = {}
-      let perfSum = 0, perfCount = 0, availSum = 0, availCount = 0
+      let perfSum = 0, perfCount = 0, availSum = 0, availCount = 0, energySum = 0
 
       if (type !== 'unused') {
         for (const date of dates) {
@@ -208,6 +212,8 @@ export async function GET(request: NextRequest) {
           const a = availMap.get(mk)
           if (p !== null && p !== undefined) { perfSum += p; perfCount++ }
           if (a !== null && a !== undefined) { availSum += a; availCount++ }
+          const e = energyMap.get(mk)
+          if (e !== undefined) energySum += e
         }
       }
 
@@ -221,6 +227,7 @@ export async function GET(request: NextRequest) {
         kw_per_string: kwPerString,
         perf_avg: perfCount > 0 ? Math.round(perfSum / perfCount) : null,
         avail_avg: availCount > 0 ? Math.round(availSum / availCount) : null,
+        energy_kwh: energySum > 0 ? Math.round(energySum * 10) / 10 : null,
         scores,
         type,
       })

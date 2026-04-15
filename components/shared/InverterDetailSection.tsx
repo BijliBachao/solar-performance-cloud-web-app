@@ -25,6 +25,7 @@ interface StringInfo {
   power: number
   gap_percent: number
   status: 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
+  energy_kwh?: number
 }
 
 interface AlertData {
@@ -273,6 +274,11 @@ export function InverterDetailSection({
               <Zap className="w-3 h-3 text-amber-500" />
               {formatPower(totalPower)}
             </span>
+            {strings.some(s => s.energy_kwh != null) && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md bg-gray-50 text-gray-600">
+                {strings.reduce((sum, s) => sum + (s.energy_kwh || 0), 0).toFixed(1)} kWh today
+              </span>
+            )}
             <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md bg-gray-50 text-gray-600">
               <Activity className="w-3 h-3 text-blue-500" />
               {avgCurrent > 0 ? `${avgCurrent.toFixed(2)}A avg` : '—'}

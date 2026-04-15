@@ -15,6 +15,7 @@ interface StringData {
   power: number
   gap_percent: number
   status: 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
+  energy_kwh?: number
 }
 
 interface StringHealthMatrixProps {
@@ -101,6 +102,7 @@ export function StringHealthMatrix({ strings, avgCurrent }: StringHealthMatrixPr
                   <p>Voltage: {s.voltage.toFixed(1)} V</p>
                   <p>Current: {s.current.toFixed(2)} A</p>
                   <p>Power: {(s.power / 1000).toFixed(2)} kW</p>
+                  {s.energy_kwh != null && <p>Energy: {s.energy_kwh.toFixed(2)} kWh</p>}
                   <p>Gap: {s.gap_percent.toFixed(1)}%</p>
                   <p>Status: {s.status}</p>
                 </div>

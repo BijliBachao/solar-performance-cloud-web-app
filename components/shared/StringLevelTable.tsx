@@ -13,6 +13,7 @@ interface StringRow {
   kw_per_string: number | null
   perf_avg: number | null
   avail_avg: number | null
+  energy_kwh: number | null
   scores: Record<string, number | null>
   type?: 'active' | 'inactive' | 'unused'
 }
@@ -84,6 +85,9 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
             <th className="px-2 py-2 text-center text-xs font-semibold text-violet-700 border-r border-gray-200 min-w-[52px] bg-violet-50/50">
               Avail
             </th>
+            <th className="px-2 py-2 text-center text-xs font-semibold text-emerald-700 border-r border-gray-200 min-w-[60px] bg-emerald-50/50">
+              kWh
+            </th>
             {dates.map((date) => (
               <th
                 key={date}
@@ -129,6 +133,9 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
                 <td className={cn('px-2 py-1.5 text-center text-xs font-mono border-r border-gray-200 bg-violet-50/30', metricCell(row.avail_avg, 'avail'))}>
                   {row.avail_avg !== null ? `${row.avail_avg}%` : '—'}
                 </td>
+                <td className="px-2 py-1.5 text-center text-xs font-mono font-semibold border-r border-gray-200 bg-emerald-50/30 text-emerald-700">
+                  {row.energy_kwh !== null ? row.energy_kwh.toFixed(1) : '—'}
+                </td>
                 {dates.map((date) => (
                   <PerformanceCell
                     key={date}
@@ -144,7 +151,7 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
             <>
               <tr>
                 <td
-                  colSpan={6 + dates.length}
+                  colSpan={7 + dates.length}
                   className="bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 border-t-2 border-amber-300"
                 >
                   Stopped Producing ({inactiveRows.length}) — these strings had data before but stopped. Inspect for faults.
@@ -169,6 +176,7 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
                   </td>
                   <td className="px-2 py-1 text-center text-xs text-amber-400 border-r border-gray-200 bg-amber-50/30">—</td>
                   <td className="px-2 py-1 text-center text-xs text-amber-400 border-r border-gray-200 bg-amber-50/30">—</td>
+                  <td className="px-2 py-1 text-center text-xs text-amber-400 border-r border-gray-200 bg-amber-50/30">—</td>
                   {dates.map((date) => (
                     <td
                       key={date}
@@ -187,7 +195,7 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
             <>
               <tr>
                 <td
-                  colSpan={6 + dates.length}
+                  colSpan={7 + dates.length}
                   className="bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-500 border-t-2 border-gray-300"
                 >
                   Unused / Spare Ports ({unusedRows.length})
@@ -210,6 +218,7 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
                   <td className="sticky left-[264px] z-10 bg-gray-50 px-2 py-1 text-xs text-gray-300 text-right border-r border-gray-200">
                     —
                   </td>
+                  <td className="px-2 py-1 text-center text-xs text-gray-300 border-r border-gray-200 bg-gray-50/50">—</td>
                   <td className="px-2 py-1 text-center text-xs text-gray-300 border-r border-gray-200 bg-gray-50/50">—</td>
                   <td className="px-2 py-1 text-center text-xs text-gray-300 border-r border-gray-200 bg-gray-50/50">—</td>
                   {dates.map((date) => (

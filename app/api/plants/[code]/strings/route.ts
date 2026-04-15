@@ -4,8 +4,35 @@ import { requirePlantAccess } from '@/lib/api-access'
 import { prisma } from '@/lib/prisma'
 import { INVERTER_DEVICE_TYPE_IDS } from '@/lib/constants'
 
-// 5-state classification per IEC 62446 + industry best practices
 type StringStatus = 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
+
+// PKT day start for "today" query
+function getTodayStart(): Date {
+  const PKT_OFFSET_MS = 5 * 60 * 60 * 1000
+  const nowPKT = new Date(Date.now() + PKT_OFFSET_MS)
+  const dayStart = new Date(Date.UTC(
+    nowPKT.getUTCFullYear(), nowPKT.getUTCMonth(), nowPKT.getUTCDate(), 0, 0, 0, 0
+  ))
+  dayStart.setTime(dayStart.getTime() - PKT_OFFSET_MS)
+  return dayStart
+}
+
+// Trapezoidal integration: sum of ((P_i + P_i+1) / 2) × Δt
+function trapezoidalKwh(
+  measurements: Array<{ power: any; timestamp: Date }>
+): number {
+  if (measurements.length < 2) return 0
+  let energyWh = 0
+  for (let i = 0; i < measurements.length - 1; i++) {
+    const p1 = Number(measurements[i].power)
+    const p2 = Number(measurements[i + 1].power)
+    const dtHours = (measurements[i + 1].timestamp.getTime() - measurements[i].timestamp.getTime()) / (1000 * 3600)
+    if (dtHours > 0 && dtHours < 1) {
+      energyWh += ((p1 + p2) / 2) * dtHours
+    }
+  }
+  return energyWh / 1000
+}
 
 export async function GET(
   request: NextRequest,
@@ -20,8 +47,11 @@ export async function GET(
       select: { id: true, device_name: true, max_strings: true },
     })
 
+    const todayStart = getTodayStart()
+
     const deviceStrings = await Promise.all(
       devices.map(async (device) => {
+        // Latest measurement per string (for real-time status)
         const latestMeasurements = await prisma.string_measurements.findMany({
           where: { device_id: device.id },
           orderBy: { timestamp: 'desc' },
@@ -29,43 +59,55 @@ export async function GET(
           distinct: ['string_number'],
         })
 
-        // Average includes ALL strings (not just active) — per IEC 61724 research
+        // Today's measurements per string (for energy calculation)
+        const todayMeasurements = await prisma.string_measurements.findMany({
+          where: { device_id: device.id, timestamp: { gte: todayStart } },
+          select: { string_number: true, power: true, timestamp: true },
+          orderBy: { timestamp: 'asc' },
+        })
+
+        // Group today's measurements by string for trapezoidal kWh
+        const todayByString = new Map<number, Array<{ power: any; timestamp: Date }>>()
+        for (const m of todayMeasurements) {
+          const group = todayByString.get(m.string_number) || []
+          group.push(m)
+          todayByString.set(m.string_number, group)
+        }
+
+        // Averages
         const totalCount = latestMeasurements.length
         const totalCurrent = latestMeasurements.reduce((sum, m) => sum + Number(m.current), 0)
         const avgCurrent = totalCount > 0 ? totalCurrent / totalCount : 0
 
-        // Also compute active-only average for gap comparison against peers
         const activeStrings = latestMeasurements.filter((m) => Number(m.current) > 0.1)
         const activeAvg = activeStrings.length > 0
           ? activeStrings.reduce((sum, m) => sum + Number(m.current), 0) / activeStrings.length
           : 0
 
+        // Build string data with kWh
         const strings = latestMeasurements.map((m) => {
           const current = Number(m.current)
           const voltage = Number(m.voltage)
 
-          // 5-state classification using voltage + current
           let status: StringStatus
           let gapPercent = 0
 
           if (current > 0.1) {
-            // String is producing — compare to active peers
-            gapPercent = activeAvg > 0
-              ? ((activeAvg - current) / activeAvg) * 100
-              : 0
-
+            gapPercent = activeAvg > 0 ? ((activeAvg - current) / activeAvg) * 100 : 0
             if (gapPercent > 50) status = 'CRITICAL'
             else if (gapPercent > 10) status = 'WARNING'
             else status = 'NORMAL'
           } else if (voltage > 0) {
-            // Voltage present but no current = OPEN CIRCUIT (wiring fault)
             status = 'OPEN_CIRCUIT'
             gapPercent = 100
           } else {
-            // No voltage, no current = DISCONNECTED (total loss)
             status = 'DISCONNECTED'
             gapPercent = 100
           }
+
+          // Trapezoidal kWh for this string today
+          const stringTodayData = todayByString.get(m.string_number) || []
+          const kwh = trapezoidalKwh(stringTodayData)
 
           return {
             string_number: m.string_number,
@@ -74,10 +116,16 @@ export async function GET(
             power: Number(m.power),
             gap_percent: Math.round(gapPercent * 10) / 10,
             status,
+            energy_kwh: Math.round(kwh * 1000) / 1000,
           }
         })
 
         strings.sort((a, b) => a.string_number - b.string_number)
+
+        // Best string kWh for peer comparison
+        const bestKwh = strings.length > 0
+          ? Math.max(...strings.map(s => s.energy_kwh))
+          : 0
 
         return {
           device_id: device.id,
@@ -85,6 +133,7 @@ export async function GET(
           strings,
           avg_current: Math.round(avgCurrent * 1000) / 1000,
           active_avg_current: Math.round(activeAvg * 1000) / 1000,
+          best_string_kwh: bestKwh,
         }
       })
     )
