@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest, requireRole, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
+import { PLANT_HEALTH_HEALTHY, PLANT_HEALTH_FAULTY } from '@/lib/string-health'
 
 export async function GET(request: NextRequest) {
   try {
@@ -117,9 +118,9 @@ export async function GET(request: NextRequest) {
       total: formatted.length,
       assigned: formatted.filter(p => p.assigned_org !== null).length,
       unassigned: formatted.filter(p => p.assigned_org === null).length,
-      healthy: formatted.filter(p => p.health_state === 3).length,
-      faulty: formatted.filter(p => p.health_state === 2).length,
-      disconnected: formatted.filter(p => p.health_state !== 3 && p.health_state !== 2).length,
+      healthy: formatted.filter(p => p.health_state === PLANT_HEALTH_HEALTHY).length,
+      faulty: formatted.filter(p => p.health_state === PLANT_HEALTH_FAULTY).length,
+      disconnected: formatted.filter(p => p.health_state !== PLANT_HEALTH_HEALTHY && p.health_state !== PLANT_HEALTH_FAULTY).length,
       plants_with_alerts: formatted.filter(p => p.alerts_unresolved.total > 0).length,
     }
 

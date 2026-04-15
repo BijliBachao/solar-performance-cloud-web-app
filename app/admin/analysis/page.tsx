@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { StringLevelTable } from '@/components/shared/StringLevelTable'
+import { HEALTH_CAUTION, HEALTH_WARNING, HEALTH_SEVERE } from '@/lib/string-health'
 import { InverterLevelTable } from '@/components/shared/InverterLevelTable'
 import { ExportButton } from '@/components/shared/ExportButton'
 import { cn } from '@/lib/utils'
@@ -361,10 +362,10 @@ export default function AnalysisPage() {
       <div className="space-y-1">
         <div className="flex items-center gap-4 text-[10px] text-gray-500">
           <span>Color guide:</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-yellow-100 border border-yellow-200" /> 75%-89%</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-200 border border-orange-300" /> 50%-74%</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-200 border border-red-300" /> 25%-49%</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500" /> &lt;25%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-yellow-100 border border-yellow-200" /> {HEALTH_CAUTION}%-89%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-200 border border-orange-300" /> {HEALTH_WARNING}%-{HEALTH_CAUTION - 1}%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-200 border border-red-300" /> {HEALTH_SEVERE}%-{HEALTH_WARNING - 1}%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500" /> &lt;{HEALTH_SEVERE}%</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-100 border border-gray-200" /> No data</span>
         </div>
         <div className="flex items-center gap-4 text-[10px] text-gray-500">

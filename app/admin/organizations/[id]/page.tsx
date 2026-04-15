@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { PLANT_HEALTH_HEALTHY, PLANT_HEALTH_FAULTY } from '@/lib/string-health'
 import { PageWrapper } from '@/components/layout/PageWrapper'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -26,7 +27,7 @@ export default function AdminOrgDetailPage() {
 
   async function fetchOrg() {
     try {
-      const res = await fetch(`/api/admin/organizations/${params.id}`)
+      const res = await fetch(`/api/admin/organizations/${params.id}`, { credentials: 'include' })
       if (!res.ok) throw new Error('Organization not found')
       setOrg(await res.json())
       setError(null)
@@ -37,7 +38,7 @@ export default function AdminOrgDetailPage() {
   async function handleAssignPlant(plantId: string) {
     setAssignLoading(true)
     try {
-      const res = await fetch('/api/admin/plants/assign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plant_id: plantId, organization_id: params.id }) })
+      const res = await fetch('/api/admin/plants/assign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ plant_id: plantId, organization_id: params.id }) })
       if (!res.ok) { const data = await res.json(); throw new Error(data.error || 'Failed to assign plant') }
       setAssignDialogOpen(false); fetchOrg()
     } catch (err: any) { setError(err.message) } finally { setAssignLoading(false) }
@@ -45,14 +46,14 @@ export default function AdminOrgDetailPage() {
   async function handleRemovePlant(plantId: string) {
     setAssignLoading(true)
     try {
-      const res = await fetch('/api/admin/plants/assign', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plant_id: plantId, organization_id: params.id }) })
+      const res = await fetch('/api/admin/plants/assign', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ plant_id: plantId, organization_id: params.id }) })
       if (!res.ok) { const data = await res.json(); throw new Error(data.error || 'Failed to remove plant') }
       fetchOrg()
     } catch (err: any) { setError(err.message) } finally { setAssignLoading(false) }
   }
   async function openAssignDialog() {
     try {
-      const res = await fetch('/api/admin/plants')
+      const res = await fetch('/api/admin/plants', { credentials: 'include' })
       if (!res.ok) throw new Error('Failed to load plants')
       const data = await res.json(); setAllPlants(data.plants)
     } catch (err: any) { setError(err.message); return }
@@ -89,7 +90,7 @@ export default function AdminOrgDetailPage() {
                   <TableRow key={pa.id}>
                     <TableCell className="font-medium">{pa.plants.plant_name}</TableCell>
                     <TableCell>{pa.plants.capacity_kw ? `${Number(pa.plants.capacity_kw).toFixed(1)} kW` : 'N/A'}</TableCell>
-                    <TableCell><Badge variant={pa.plants.health_state === 3 ? 'success' : pa.plants.health_state === 2 ? 'destructive' : 'secondary'}>{pa.plants.health_state === 3 ? 'Healthy' : pa.plants.health_state === 2 ? 'Faulty' : 'Disconnected'}</Badge></TableCell>
+                    <TableCell><Badge variant={pa.plants.health_state === PLANT_HEALTH_HEALTHY ? 'success' : pa.plants.health_state === PLANT_HEALTH_FAULTY ? 'destructive' : 'secondary'}>{pa.plants.health_state === PLANT_HEALTH_HEALTHY ? 'Healthy' : pa.plants.health_state === PLANT_HEALTH_FAULTY ? 'Faulty' : 'Disconnected'}</Badge></TableCell>
                     <TableCell><Button variant="ghost" size="sm" disabled={assignLoading} onClick={() => handleRemovePlant(pa.plant_id)}><Trash2 className="h-4 w-4 text-red-500" /></Button></TableCell>
                   </TableRow>
                 ))}

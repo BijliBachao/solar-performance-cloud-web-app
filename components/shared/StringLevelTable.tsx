@@ -2,6 +2,7 @@
 
 import { PerformanceCell } from './PerformanceCell'
 import { cn } from '@/lib/utils'
+import { HEALTH_HEALTHY, HEALTH_CAUTION, HEALTH_WARNING } from '@/lib/string-health'
 
 interface StringRow {
   plant_id: string
@@ -31,9 +32,9 @@ function formatDateHeader(dateStr: string): string {
 
 function metricCell(value: number | null, type: 'perf' | 'avail'): string {
   if (value === null) return 'text-gray-400'
-  if (value >= 90) return 'text-emerald-600 font-medium'
-  if (value >= 75) return 'text-yellow-700 font-medium'
-  if (value >= 50) return 'text-orange-600 font-semibold'
+  if (value >= HEALTH_HEALTHY) return 'text-emerald-600 font-medium'
+  if (value >= HEALTH_CAUTION) return 'text-yellow-700 font-medium'
+  if (value >= HEALTH_WARNING) return 'text-orange-600 font-semibold'
   return 'text-red-600 font-bold'
 }
 

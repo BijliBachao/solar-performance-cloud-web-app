@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { PLANT_HEALTH_HEALTHY, PLANT_HEALTH_FAULTY, PLANT_HEALTH_DISCONNECTED } from '@/lib/string-health'
 import {
   ArrowLeft, Zap, MapPin, Activity, Clock, Cpu, RefreshCw,
 } from 'lucide-react'
@@ -51,9 +52,9 @@ export function PlantHeader({
   const router = useRouter()
 
   const healthConfig: Record<number, { label: string; color: string }> = {
-    3: { label: 'HEALTHY', color: 'text-[#76b900]' },
-    2: { label: 'FAULTY', color: 'text-[#e52020]' },
-    1: { label: 'OFFLINE', color: 'text-[#898989]' },
+    [PLANT_HEALTH_HEALTHY]: { label: 'HEALTHY', color: 'text-[#76b900]' },
+    [PLANT_HEALTH_FAULTY]: { label: 'FAULTY', color: 'text-[#e52020]' },
+    [PLANT_HEALTH_DISCONNECTED]: { label: 'OFFLINE', color: 'text-[#898989]' },
   }
   const health = healthConfig[healthState || 0] || healthConfig[1]
 

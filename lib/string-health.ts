@@ -43,6 +43,17 @@ export const HEALTH_HEALTHY = 90
 /** Health score >= this (but < HEALTH_HEALTHY) is "Warning". Below = Critical */
 export const HEALTH_WARNING = 50
 
+// ── Display gradation stops (cell coloring in tables) ───────────────
+/** Score >= this gets mild yellow (between HEALTHY and WARNING) */
+export const HEALTH_CAUTION = 75
+/** Score >= this gets deep red (below WARNING) */
+export const HEALTH_SEVERE = 25
+
+// ── Plant health_state database values ──────────────────────────────
+export const PLANT_HEALTH_HEALTHY = 3
+export const PLANT_HEALTH_FAULTY = 2
+export const PLANT_HEALTH_DISCONNECTED = 1
+
 // ── Staleness (real-time only) ──────────────────────────────────────
 /** Milliseconds after which a measurement is stale vs freshest on device */
 export const STALE_MS = 15 * 60 * 1000

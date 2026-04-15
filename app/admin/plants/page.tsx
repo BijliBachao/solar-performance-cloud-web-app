@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { PLANT_HEALTH_HEALTHY, PLANT_HEALTH_FAULTY } from '@/lib/string-health'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -212,8 +213,8 @@ export default function AdminPlantsPage() {
   }
 
   const healthBadge = (state: number | null): { label: string; variant: 'success' | 'destructive' | 'secondary' } => {
-    if (state === 3) return { label: 'Healthy', variant: 'success' }
-    if (state === 2) return { label: 'Faulty', variant: 'destructive' }
+    if (state === PLANT_HEALTH_HEALTHY) return { label: 'Healthy', variant: 'success' }
+    if (state === PLANT_HEALTH_FAULTY) return { label: 'Faulty', variant: 'destructive' }
     return { label: 'Disconnected', variant: 'secondary' }
   }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getUserFromRequest, requireRole, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
+import { PLANT_HEALTH_HEALTHY, PLANT_HEALTH_FAULTY } from '@/lib/string-health'
 
 export async function GET() {
   try {
@@ -73,8 +74,8 @@ export async function GET() {
 
     const healthMap = { healthy: 0, faulty: 0, disconnected: 0 }
     for (const h of plantHealth) {
-      if (h.health_state === 3) healthMap.healthy = h._count.id
-      else if (h.health_state === 2) healthMap.faulty = h._count.id
+      if (h.health_state === PLANT_HEALTH_HEALTHY) healthMap.healthy = h._count.id
+      else if (h.health_state === PLANT_HEALTH_FAULTY) healthMap.faulty = h._count.id
       else healthMap.disconnected += h._count.id
     }
 

@@ -130,6 +130,26 @@ else
   echo -e "${GREEN}PASS: No duplicate StringStatus type definitions${NC}"
 fi
 
+# ── Check 7: No hardcoded plant health_state magic numbers ──────────────────
+VIOLATIONS7=$(grep -rn "health_state === 3\|health_state === 2\|health_state === 1\|state === 3\|state === 2" \
+  lib/ app/ components/ \
+  --include="*.ts" --include="*.tsx" \
+  | grep -v "string-health\.ts" \
+  | grep -v "node_modules" \
+  | grep -v "PLANT_HEALTH" \
+  || true)
+
+if [ -n "$VIOLATIONS7" ]; then
+  echo -e "${RED}FAIL: Hardcoded health_state magic numbers found${NC}"
+  echo "$VIOLATIONS7"
+  echo ""
+  echo "  Fix: Import PLANT_HEALTH_HEALTHY/FAULTY/DISCONNECTED from '@/lib/string-health'"
+  echo ""
+  ERRORS=$((ERRORS + 1))
+else
+  echo -e "${GREEN}PASS: No hardcoded health_state magic numbers${NC}"
+fi
+
 # ── Summary ─────────────────────────────────────────────────────────────────
 echo ""
 if [ $ERRORS -gt 0 ]; then
