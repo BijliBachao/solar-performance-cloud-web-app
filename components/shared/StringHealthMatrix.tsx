@@ -14,7 +14,7 @@ interface StringData {
   current: number
   power: number
   gap_percent: number
-  status: 'OK' | 'WARNING' | 'CRITICAL' | 'OFFLINE'
+  status: 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
 }
 
 interface StringHealthMatrixProps {
@@ -23,29 +23,40 @@ interface StringHealthMatrixProps {
 }
 
 const statusConfig = {
-  OK: {
+  NORMAL: {
     bg: 'bg-emerald-50 border-emerald-200',
     text: 'text-emerald-700',
     glow: 'ring-emerald-100',
     dot: 'bg-emerald-500',
+    label: 'Normal',
   },
   WARNING: {
     bg: 'bg-amber-50 border-amber-200',
     text: 'text-amber-700',
     glow: 'ring-amber-100',
     dot: 'bg-amber-500',
+    label: 'Warning',
   },
   CRITICAL: {
     bg: 'bg-red-50 border-red-200',
     text: 'text-red-700',
     glow: 'ring-red-100',
     dot: 'bg-red-500',
+    label: 'Critical',
   },
-  OFFLINE: {
-    bg: 'bg-gray-50 border-gray-200',
-    text: 'text-gray-400',
-    glow: 'ring-gray-100',
-    dot: 'bg-gray-300',
+  OPEN_CIRCUIT: {
+    bg: 'bg-red-100 border-red-400',
+    text: 'text-red-900',
+    glow: 'ring-red-200',
+    dot: 'bg-red-700',
+    label: 'Open Circuit',
+  },
+  DISCONNECTED: {
+    bg: 'bg-gray-200 border-gray-400',
+    text: 'text-gray-700',
+    glow: 'ring-gray-200',
+    dot: 'bg-gray-700',
+    label: 'Disconnected',
   },
 }
 
@@ -77,10 +88,10 @@ export function StringHealthMatrix({ strings, avgCurrent }: StringHealthMatrixPr
                     <span className={cn('w-2 h-2 rounded-full', config.dot)} />
                   </div>
                   <div className={cn('text-base font-bold leading-tight', config.text)}>
-                    {s.status === 'OFFLINE' ? '0A' : `${s.current.toFixed(1)}A`}
+                    {s.current > 0 ? `${s.current.toFixed(1)}A` : '0A'}
                   </div>
                   <div className="text-[10px] text-gray-500 mt-0.5">
-                    {s.status === 'OFFLINE' ? 'Offline' : deviationStr}
+                    {s.status === 'OPEN_CIRCUIT' ? 'Open Circuit' : s.status === 'DISCONNECTED' ? 'No Signal' : deviationStr}
                   </div>
                 </div>
               </TooltipTrigger>

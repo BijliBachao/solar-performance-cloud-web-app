@@ -16,7 +16,7 @@ interface StringData {
   string_number: number
   current: number
   gap_percent: number
-  status: 'OK' | 'WARNING' | 'CRITICAL' | 'OFFLINE'
+  status: 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
 }
 
 interface CurrentDeviationChartProps {
@@ -24,23 +24,22 @@ interface CurrentDeviationChartProps {
   avgCurrent: number
 }
 
-function getPerformanceColor(performance: number): string {
-  // Positive = above average (good), Negative = below average (bad)
-  if (performance >= 0) return '#10b981' // emerald-500 - above avg
-  if (performance > -10) return '#22c55e' // green-500 - slightly below, still ok
-  if (performance > -25) return '#f59e0b' // amber-500 - warning zone
-  if (performance > -50) return '#f97316' // orange-500 - concerning
-  return '#ef4444' // red-500 - critical
+function getBarColor(status: string, performance: number): string {
+  if (status === 'OPEN_CIRCUIT') return '#991b1b' // red-800 — wiring fault
+  if (status === 'DISCONNECTED') return '#374151' // gray-700 — total loss
+  if (performance >= 0) return '#10b981' // emerald-500 — above avg
+  if (performance > -10) return '#22c55e' // green-500 — slightly below
+  if (performance > -25) return '#f59e0b' // amber-500 — warning
+  if (performance > -50) return '#f97316' // orange-500 — concerning
+  return '#ef4444' // red-500 — critical
 }
 
 export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationChartProps) {
-  // Only chart active strings — OFFLINE strings have no meaningful data
-  const activeStrings = strings.filter(s => s.status !== 'OFFLINE')
-  const data = activeStrings.map((s) => {
-    // Performance: positive = above average (good), negative = below average (bad)
+  // Show ALL strings — dead strings appear as deep negative bars
+  const data = strings.map((s) => {
     const performance = avgCurrent > 0
       ? ((s.current - avgCurrent) / avgCurrent) * 100
-      : 0
+      : s.current > 0 ? 0 : -100
     return {
       name: `PV${s.string_number}`,
       performance: Number(performance.toFixed(1)),
@@ -74,17 +73,24 @@ export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationC
           <Tooltip
             contentStyle={{
               fontSize: 12,
-              borderRadius: 8,
+              borderRadius: 4,
               border: '1px solid #e5e7eb',
-              boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
             }}
             formatter={(value: number, _name: string, props: any) => {
               const entry = props.payload
-              const label = value >= 0 ? 'Above avg' : 'Below avg'
+              const statusLabels: Record<string, string> = {
+                NORMAL: 'Normal',
+                WARNING: 'Warning',
+                CRITICAL: 'Critical',
+                OPEN_CIRCUIT: 'Open Circuit',
+                DISCONNECTED: 'Disconnected',
+              }
               return [
                 <span key="val">
                   <strong>{value > 0 ? '+' : ''}{value}%</strong>
-                  {' '}({label}) — {entry.current.toFixed(2)}A vs {entry.avg.toFixed(2)}A avg
+                  {' '}— {entry.current.toFixed(2)}A vs {entry.avg.toFixed(2)}A avg
+                  {' '}({statusLabels[entry.status] || entry.status})
                 </span>,
                 'Performance',
               ]
@@ -103,13 +109,13 @@ export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationC
           />
           <Bar
             dataKey="performance"
-            radius={[4, 4, 4, 4]}
+            radius={[2, 2, 2, 2]}
             maxBarSize={40}
           >
             {data.map((entry, index) => (
               <Cell
                 key={`cell-${index}`}
-                fill={getPerformanceColor(entry.performance)}
+                fill={getBarColor(entry.status, entry.performance)}
               />
             ))}
           </Bar>

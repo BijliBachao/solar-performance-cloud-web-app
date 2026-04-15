@@ -2,8 +2,8 @@
 
 import { cn } from '@/lib/utils'
 import {
-  Droplets, CloudRain, TreePine, Wrench,
-  Unplug, PlugZap, TrendingDown, Thermometer,
+  Droplets, TreePine, Wrench,
+  Unplug, PlugZap, TrendingDown, CheckCircle, Cable,
 } from 'lucide-react'
 
 interface StringData {
@@ -12,7 +12,7 @@ interface StringData {
   current: number
   power: number
   gap_percent: number
-  status: 'OK' | 'WARNING' | 'CRITICAL' | 'OFFLINE'
+  status: 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
 }
 
 interface FaultDiagnosisPanelProps {
@@ -31,102 +31,82 @@ interface Diagnosis {
 
 function diagnoseStrings(strings: StringData[], avgCurrent: number): Diagnosis[] {
   const diagnoses: Diagnosis[] = []
-  // Exclude OFFLINE (unused MPPT ports) from fault analysis
-  const liveStrings = strings.filter(s => s.status !== 'OFFLINE')
-  const critical = liveStrings.filter(s => s.status === 'CRITICAL')
-  const warning = liveStrings.filter(s => s.status === 'WARNING')
 
-  // Count offline ports for info
-  const offlineStrings = strings.filter(s => s.status === 'OFFLINE')
-  if (offlineStrings.length > 0) {
+  // ── Open Circuit: voltage present, no current (wiring fault) ──
+  const openCircuit = strings.filter(s => s.status === 'OPEN_CIRCUIT')
+  if (openCircuit.length > 0) {
     diagnoses.push({
-      stringNumbers: offlineStrings.map(s => s.string_number),
-      severity: 'INFO',
-      cause: 'Unused MPPT Ports',
-      pattern: `${offlineStrings.length} MPPT input${offlineStrings.length !== 1 ? 's' : ''} with voltage but no current — not connected to panels`,
-      action: 'No action needed — these are spare MPPT inputs on the inverter',
-      icon: Unplug,
+      stringNumbers: openCircuit.map(s => s.string_number),
+      severity: 'CRITICAL',
+      cause: 'Open Circuit — No Current Flow',
+      pattern: `Voltage present (${openCircuit[0].voltage.toFixed(0)}V) but 0A current — panels connected but current cannot flow`,
+      action: 'Check MC4 connectors, string fuses, and combiner box switches. Inspect for loose or corroded connections.',
+      icon: Cable,
     })
   }
 
-  // Broken / Disconnected (0V and 0A)
-  const broken = liveStrings.filter(s => s.voltage === 0 && s.current === 0)
-  if (broken.length > 0) {
+  // ── Disconnected: no voltage, no current (total loss) ─────────
+  const disconnected = strings.filter(s => s.status === 'DISCONNECTED')
+  if (disconnected.length > 0) {
     diagnoses.push({
-      stringNumbers: broken.map(s => s.string_number),
+      stringNumbers: disconnected.map(s => s.string_number),
       severity: 'CRITICAL',
-      cause: 'Broken / Disconnected String',
-      pattern: '0V and 0A - no electrical connection',
-      action: 'Emergency inspection: check cables, connectors, and junction boxes',
+      cause: 'Disconnected — Total Signal Loss',
+      pattern: '0V and 0A — no electrical connection detected',
+      action: 'Emergency inspection: check cables for damage, verify inverter input terminals, inspect junction boxes.',
       icon: PlugZap,
     })
   }
 
-  // Voltage present but 0 current (string has panels but no current flow)
-  const noCurrentButVoltage = liveStrings.filter(
-    s => s.voltage > 0 && s.current === 0 && !broken.includes(s)
-  )
-  if (noCurrentButVoltage.length > 0) {
+  // ── Critical: producing but severely underperforming ───────────
+  const critical = strings.filter(s => s.status === 'CRITICAL')
+  if (critical.length > 0) {
     diagnoses.push({
-      stringNumbers: noCurrentButVoltage.map(s => s.string_number),
-      severity: 'CRITICAL',
-      cause: 'Open Circuit - No Current Flow',
-      pattern: `Voltage present (${noCurrentButVoltage[0].voltage.toFixed(0)}V) but 0A current`,
-      action: 'Check for loose cable connections, blown fuse, or disconnected combiner box',
-      icon: Unplug,
-    })
-  }
-
-  // Severe underperformance (>50% below avg, but not zero)
-  const severe = critical.filter(
-    s => s.current > 0 && s.gap_percent > 50
-  )
-  if (severe.length > 0) {
-    diagnoses.push({
-      stringNumbers: severe.map(s => s.string_number),
+      stringNumbers: critical.map(s => s.string_number),
       severity: 'CRITICAL',
       cause: 'Faulty Panel or Major Obstruction',
-      pattern: `Current ${severe[0].gap_percent.toFixed(0)}%+ below average`,
-      action: 'Inspect for broken panel, heavy bird droppings, or major shading',
+      pattern: `Current ${critical[0].gap_percent.toFixed(0)}%+ below average — severe underperformance`,
+      action: 'Inspect for broken panel, heavy bird droppings, or major shading obstruction.',
       icon: Wrench,
     })
   }
 
-  // Moderate underperformance (25-50% below avg)
-  const moderate = warning.filter(s => s.gap_percent >= 25 && s.gap_percent <= 50)
-  if (moderate.length > 0) {
+  // ── Warning: moderate underperformance ─────────────────────────
+  const warning = strings.filter(s => s.status === 'WARNING' && s.gap_percent >= 25)
+  if (warning.length > 0) {
     diagnoses.push({
-      stringNumbers: moderate.map(s => s.string_number),
+      stringNumbers: warning.map(s => s.string_number),
       severity: 'WARNING',
       cause: 'Partial Shading or Dirty Panels',
-      pattern: `Current 25-50% below average`,
-      action: 'Schedule cleaning or check for tree shadow during peak hours',
+      pattern: 'Current 25-50% below average',
+      action: 'Schedule cleaning or check for tree shadow during peak hours.',
       icon: TreePine,
     })
   }
 
-  // Mild underperformance (10-25% below avg)
-  const mild = liveStrings.filter(s => s.gap_percent > 10 && s.gap_percent <= 25 && s.current > 0)
+  // ── Info: mild underperformance ────────────────────────────────
+  const mild = strings.filter(s => s.status === 'WARNING' && s.gap_percent > 10 && s.gap_percent < 25)
   if (mild.length > 0) {
     diagnoses.push({
       stringNumbers: mild.map(s => s.string_number),
       severity: 'INFO',
       cause: 'Minor Dust or Light Soiling',
       pattern: 'Current 10-25% below average',
-      action: 'Monitor trend; schedule routine cleaning if persistent',
+      action: 'Monitor trend; schedule routine cleaning if persistent.',
       icon: Droplets,
     })
   }
 
-  // If no issues found (don't count offline-only as "all healthy")
-  if (diagnoses.length === 0 && liveStrings.length > 0) {
+  // ── All healthy ────────────────────────────────────────────────
+  const normalStrings = strings.filter(s => s.status === 'NORMAL')
+  if (diagnoses.length === 0 && normalStrings.length > 0) {
     diagnoses.push({
       stringNumbers: [],
       severity: 'INFO',
       cause: 'All Strings Healthy',
-      pattern: 'All strings within normal range',
-      action: 'No action needed - continue monitoring',
-      icon: TrendingDown,
+      pattern: 'All strings within normal operating range',
+      action: 'No action needed — continue monitoring.',
+      icon: CheckCircle,
     })
   }
 

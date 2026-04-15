@@ -24,7 +24,7 @@ interface StringInfo {
   current: number
   power: number
   gap_percent: number
-  status: 'OK' | 'WARNING' | 'CRITICAL' | 'OFFLINE'
+  status: 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
 }
 
 interface AlertData {
@@ -154,23 +154,24 @@ export function InverterDetailSection({
 
   // ─── Derived Data ──────────────────────────────────────────
 
-  const activeStrings = strings.filter(s => s.status !== 'OFFLINE')
-  const offlineStrings = strings.filter(s => s.status === 'OFFLINE')
+  const producingStrings = strings.filter(s => s.status === 'NORMAL' || s.status === 'WARNING' || s.status === 'CRITICAL')
+  const deadStrings = strings.filter(s => s.status === 'OPEN_CIRCUIT' || s.status === 'DISCONNECTED')
   const summary = {
-    ok: strings.filter(s => s.status === 'OK').length,
+    normal: strings.filter(s => s.status === 'NORMAL').length,
     warning: strings.filter(s => s.status === 'WARNING').length,
     critical: strings.filter(s => s.status === 'CRITICAL').length,
-    offline: offlineStrings.length,
+    openCircuit: strings.filter(s => s.status === 'OPEN_CIRCUIT').length,
+    disconnected: strings.filter(s => s.status === 'DISCONNECTED').length,
   }
   const totalStrings = strings.length
-  const liveCount = activeStrings.length
-  const totalPower = activeStrings.reduce((sum, s) => sum + s.power, 0)
-  const avgCurrent = activeStrings.length > 0
-    ? activeStrings.reduce((sum, s) => sum + s.current, 0) / activeStrings.length
+  const totalPower = producingStrings.reduce((sum, s) => sum + s.power, 0)
+  // Average includes ALL strings — per IEC research
+  const avgCurrent = totalStrings > 0
+    ? strings.reduce((sum, s) => sum + s.current, 0) / totalStrings
     : 0
-  // Health % based only on live (non-offline) strings
-  const healthPct = liveCount > 0
-    ? Math.round((summary.ok / liveCount) * 100)
+  // Health % includes ALL strings in denominator
+  const healthPct = totalStrings > 0
+    ? Math.round((summary.normal / totalStrings) * 100)
     : 0
 
   const formatPower = (watts: number) => {
@@ -277,7 +278,7 @@ export function InverterDetailSection({
               {avgCurrent > 0 ? `${avgCurrent.toFixed(2)}A avg` : '—'}
             </span>
             <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md bg-gray-50 text-gray-600">
-              {liveCount} active{summary.offline > 0 ? ` / ${totalStrings} total` : ''} strings
+              {producingStrings.length} producing{deadStrings.length > 0 ? ` / ${totalStrings} total` : ''} strings
             </span>
             {alerts.length > 0 && (
               <Badge variant="destructive" className="text-[10px] px-1.5 py-0.5">
@@ -290,10 +291,10 @@ export function InverterDetailSection({
         {/* Status bar — based on live (non-offline) strings */}
         <div className="flex items-center gap-3 mt-3">
           <div className="flex-1 flex gap-0.5 h-1.5 rounded-full overflow-hidden bg-gray-100">
-            {summary.ok > 0 && (
+            {summary.normal > 0 && (
               <div
                 className="bg-emerald-500 transition-all"
-                style={{ width: `${(summary.ok / totalStrings) * 100}%` }}
+                style={{ width: `${(summary.normal / totalStrings) * 100}%` }}
               />
             )}
             {summary.warning > 0 && (
@@ -308,10 +309,16 @@ export function InverterDetailSection({
                 style={{ width: `${(summary.critical / totalStrings) * 100}%` }}
               />
             )}
-            {summary.offline > 0 && (
+            {summary.openCircuit > 0 && (
               <div
-                className="bg-gray-300 transition-all"
-                style={{ width: `${(summary.offline / totalStrings) * 100}%` }}
+                className="bg-red-800 transition-all"
+                style={{ width: `${(summary.openCircuit / totalStrings) * 100}%` }}
+              />
+            )}
+            {summary.disconnected > 0 && (
+              <div
+                className="bg-gray-800 transition-all"
+                style={{ width: `${(summary.disconnected / totalStrings) * 100}%` }}
               />
             )}
           </div>
@@ -347,23 +354,27 @@ export function InverterDetailSection({
             </div>
             {/* Status Legend */}
             <div className="mb-3 p-2.5 bg-gray-50 rounded-lg border border-gray-100">
-              <p className="text-[10px] font-medium text-gray-500 mb-1.5">Status Guide</p>
+              <p className="text-[10px] font-medium text-gray-500 mb-1.5">Status Guide (IEC 62446)</p>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-gray-600">
                 <span className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                  <span><strong>OK</strong> — Normal</span>
+                  <span><strong>Normal</strong> — Within 10% of avg</span>
                 </span>
                 <span className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                  <span><strong>Warning</strong> — 25-50% below avg</span>
+                  <span><strong>Warning</strong> — 10-50% below avg</span>
                 </span>
                 <span className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-red-500"></span>
                   <span><strong>Critical</strong> — &gt;50% below avg</span>
                 </span>
                 <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-gray-300"></span>
-                  <span><strong>Offline</strong> — No current (&lt;0.1A)</span>
+                  <span className="w-2 h-2 rounded-full bg-red-700"></span>
+                  <span><strong>Open Circuit</strong> — Voltage but 0A (wiring)</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-gray-700"></span>
+                  <span><strong>Disconnected</strong> — 0V 0A (total loss)</span>
                 </span>
               </div>
             </div>

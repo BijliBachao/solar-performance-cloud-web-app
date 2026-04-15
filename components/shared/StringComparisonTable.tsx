@@ -8,11 +8,26 @@ interface StringData {
   current: number
   power: number
   gap_percent: number
-  status: 'OK' | 'WARNING' | 'CRITICAL' | 'OFFLINE'
+  status: 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
 }
 
 interface StringComparisonTableProps {
   strings: StringData[]
+}
+
+const rowStyle: Record<string, string> = {
+  CRITICAL: 'bg-red-50',
+  WARNING: 'bg-yellow-50',
+  OPEN_CIRCUIT: 'bg-red-100 font-semibold',
+  DISCONNECTED: 'bg-gray-100 font-semibold',
+}
+
+const statusLabel: Record<string, { text: string; color: string }> = {
+  NORMAL: { text: 'Normal', color: 'text-emerald-600' },
+  WARNING: { text: 'Warning', color: 'text-amber-600' },
+  CRITICAL: { text: 'Critical', color: 'text-red-600' },
+  OPEN_CIRCUIT: { text: 'Open Circuit', color: 'text-red-800' },
+  DISCONNECTED: { text: 'Disconnected', color: 'text-gray-700' },
 }
 
 export function StringComparisonTable({ strings }: StringComparisonTableProps) {
@@ -20,7 +35,7 @@ export function StringComparisonTable({ strings }: StringComparisonTableProps) {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>String #</TableHead>
+          <TableHead>String</TableHead>
           <TableHead>Voltage (V)</TableHead>
           <TableHead>Current (A)</TableHead>
           <TableHead>Power (W)</TableHead>
@@ -29,40 +44,35 @@ export function StringComparisonTable({ strings }: StringComparisonTableProps) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {strings.map((s) => (
-          <TableRow
-            key={s.string_number}
-            className={cn(
-              s.status === 'CRITICAL' && 'bg-red-50',
-              s.status === 'WARNING' && 'bg-yellow-50',
-              s.status === 'OFFLINE' && 'bg-gray-50 opacity-60'
-            )}
-          >
-            <TableCell className="font-medium">PV{s.string_number}</TableCell>
-            <TableCell>{s.voltage.toFixed(1)}</TableCell>
-            <TableCell>{s.status === 'OFFLINE' ? <span className="text-gray-400">0.00</span> : s.current.toFixed(2)}</TableCell>
-            <TableCell>{s.status === 'OFFLINE' ? <span className="text-gray-400">0.0</span> : s.power.toFixed(1)}</TableCell>
-            <TableCell>
-              {s.status === 'OFFLINE' ? (
-                <span className="text-gray-400">—</span>
-              ) : (
+        {strings.map((s) => {
+          const sl = statusLabel[s.status] || statusLabel.NORMAL
+          return (
+            <TableRow
+              key={s.string_number}
+              className={rowStyle[s.status] || ''}
+            >
+              <TableCell className="font-medium">PV{s.string_number}</TableCell>
+              <TableCell>{s.voltage.toFixed(1)}</TableCell>
+              <TableCell>{s.current.toFixed(2)}</TableCell>
+              <TableCell>{s.power.toFixed(1)}</TableCell>
+              <TableCell>
                 <span
                   className={cn(
                     'font-medium',
                     s.gap_percent > 50 && 'text-red-600',
-                    s.gap_percent > 25 && s.gap_percent <= 50 && 'text-yellow-600',
-                    s.gap_percent <= 25 && 'text-green-600'
+                    s.gap_percent > 10 && s.gap_percent <= 50 && 'text-yellow-600',
+                    s.gap_percent <= 10 && 'text-green-600'
                   )}
                 >
                   {s.gap_percent.toFixed(1)}%
                 </span>
-              )}
-            </TableCell>
-            <TableCell>
-              <StatusBadge status={s.status} />
-            </TableCell>
-          </TableRow>
-        ))}
+              </TableCell>
+              <TableCell>
+                <span className={cn('text-xs font-semibold', sl.color)}>{sl.text}</span>
+              </TableCell>
+            </TableRow>
+          )
+        })}
       </TableBody>
     </Table>
   )
