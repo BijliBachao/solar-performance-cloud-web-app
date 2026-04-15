@@ -23,35 +23,35 @@ const INV2 = {
 // ─── Dummy String Data ──────────────────────────────────────────
 
 const STRINGS_INV1 = [
-  { string_number: 1, voltage: 540.2, current: 11.8, power: 6374.4, gap_percent: 1.2, status: 'OK' as const },
-  { string_number: 2, voltage: 538.6, current: 12.1, power: 6517.1, gap_percent: 0.5, status: 'OK' as const },
+  { string_number: 1, voltage: 540.2, current: 11.8, power: 6374.4, gap_percent: 1.2, status: 'NORMAL' as const },
+  { string_number: 2, voltage: 538.6, current: 12.1, power: 6517.1, gap_percent: 0.5, status: 'NORMAL' as const },
   { string_number: 3, voltage: 535.1, current: 6.2, power: 3317.6, gap_percent: 48.1, status: 'CRITICAL' as const },
-  { string_number: 4, voltage: 541.0, current: 12.0, power: 6492.0, gap_percent: 0.8, status: 'OK' as const },
-  { string_number: 5, voltage: 539.5, current: 11.9, power: 6420.1, gap_percent: 1.5, status: 'OK' as const },
-  { string_number: 6, voltage: 537.8, current: 9.4, power: 5055.3, gap_percent: 21.3, status: 'OK' as const },
-  { string_number: 7, voltage: 540.1, current: 11.7, power: 6319.2, gap_percent: 2.1, status: 'OK' as const },
+  { string_number: 4, voltage: 541.0, current: 12.0, power: 6492.0, gap_percent: 0.8, status: 'NORMAL' as const },
+  { string_number: 5, voltage: 539.5, current: 11.9, power: 6420.1, gap_percent: 1.5, status: 'NORMAL' as const },
+  { string_number: 6, voltage: 537.8, current: 9.4, power: 5055.3, gap_percent: 21.3, status: 'NORMAL' as const },
+  { string_number: 7, voltage: 540.1, current: 11.7, power: 6319.2, gap_percent: 2.1, status: 'NORMAL' as const },
   { string_number: 8, voltage: 536.9, current: 8.1, power: 4348.9, gap_percent: 32.2, status: 'WARNING' as const },
-  { string_number: 9, voltage: 541.3, current: 12.2, power: 6603.9, gap_percent: 0.2, status: 'OK' as const },
-  { string_number: 10, voltage: 538.4, current: 11.6, power: 6245.4, gap_percent: 2.8, status: 'OK' as const },
-  { string_number: 11, voltage: 539.7, current: 12.0, power: 6476.4, gap_percent: 0.8, status: 'OK' as const },
-  { string_number: 12, voltage: 540.5, current: 11.5, power: 6215.8, gap_percent: 3.6, status: 'OK' as const },
-  { string_number: 13, voltage: 539.0, current: 0, power: 0, gap_percent: 0, status: 'OFFLINE' as const },
-  { string_number: 14, voltage: 540.2, current: 0, power: 0, gap_percent: 0, status: 'OFFLINE' as const },
+  { string_number: 9, voltage: 541.3, current: 12.2, power: 6603.9, gap_percent: 0.2, status: 'NORMAL' as const },
+  { string_number: 10, voltage: 538.4, current: 11.6, power: 6245.4, gap_percent: 2.8, status: 'NORMAL' as const },
+  { string_number: 11, voltage: 539.7, current: 12.0, power: 6476.4, gap_percent: 0.8, status: 'NORMAL' as const },
+  { string_number: 12, voltage: 540.5, current: 11.5, power: 6215.8, gap_percent: 3.6, status: 'NORMAL' as const },
+  { string_number: 13, voltage: 539.0, current: 0, power: 0, gap_percent: 0, status: 'OPEN_CIRCUIT' as const },
+  { string_number: 14, voltage: 540.2, current: 0, power: 0, gap_percent: 0, status: 'OPEN_CIRCUIT' as const },
 ]
 
 const STRINGS_INV2 = [
-  { string_number: 1, voltage: 542.0, current: 10.8, power: 5853.6, gap_percent: 2.1, status: 'OK' as const },
-  { string_number: 2, voltage: 540.5, current: 11.0, power: 5945.5, gap_percent: 0.4, status: 'OK' as const },
-  { string_number: 3, voltage: 539.2, current: 10.9, power: 5877.3, gap_percent: 1.3, status: 'OK' as const },
+  { string_number: 1, voltage: 542.0, current: 10.8, power: 5853.6, gap_percent: 2.1, status: 'NORMAL' as const },
+  { string_number: 2, voltage: 540.5, current: 11.0, power: 5945.5, gap_percent: 0.4, status: 'NORMAL' as const },
+  { string_number: 3, voltage: 539.2, current: 10.9, power: 5877.3, gap_percent: 1.3, status: 'NORMAL' as const },
   { string_number: 4, voltage: 541.8, current: 7.8, power: 4226.0, gap_percent: 29.4, status: 'WARNING' as const },
-  { string_number: 5, voltage: 538.0, current: 11.2, power: 6025.6, gap_percent: 0.7, status: 'OK' as const },
-  { string_number: 6, voltage: 540.3, current: 10.7, power: 5781.2, gap_percent: 3.1, status: 'OK' as const },
+  { string_number: 5, voltage: 538.0, current: 11.2, power: 6025.6, gap_percent: 0.7, status: 'NORMAL' as const },
+  { string_number: 6, voltage: 540.3, current: 10.7, power: 5781.2, gap_percent: 3.1, status: 'NORMAL' as const },
   { string_number: 7, voltage: 537.9, current: 3.1, power: 1667.5, gap_percent: 71.9, status: 'CRITICAL' as const },
-  { string_number: 8, voltage: 541.5, current: 11.1, power: 6010.7, gap_percent: 0.5, status: 'OK' as const },
-  { string_number: 9, voltage: 539.8, current: 10.6, power: 5721.9, gap_percent: 4.0, status: 'OK' as const },
-  { string_number: 10, voltage: 540.0, current: 11.0, power: 5940.0, gap_percent: 0.4, status: 'OK' as const },
-  { string_number: 11, voltage: 538.5, current: 0, power: 0, gap_percent: 0, status: 'OFFLINE' as const },
-  { string_number: 12, voltage: 539.1, current: 0, power: 0, gap_percent: 0, status: 'OFFLINE' as const },
+  { string_number: 8, voltage: 541.5, current: 11.1, power: 6010.7, gap_percent: 0.5, status: 'NORMAL' as const },
+  { string_number: 9, voltage: 539.8, current: 10.6, power: 5721.9, gap_percent: 4.0, status: 'NORMAL' as const },
+  { string_number: 10, voltage: 540.0, current: 11.0, power: 5940.0, gap_percent: 0.4, status: 'NORMAL' as const },
+  { string_number: 11, voltage: 538.5, current: 0, power: 0, gap_percent: 0, status: 'OPEN_CIRCUIT' as const },
+  { string_number: 12, voltage: 539.1, current: 0, power: 0, gap_percent: 0, status: 'OPEN_CIRCUIT' as const },
 ]
 
 // ─── Dummy Alerts ───────────────────────────────────────────────
@@ -137,10 +137,10 @@ export default function PlantPreviewPage() {
   const [alerts, setAlerts] = useState([...ALERTS_INV1, ...ALERTS_INV2])
 
   const allStrings = [...STRINGS_INV1, ...STRINGS_INV2]
-  const liveStrings = allStrings.filter(s => s.status !== 'OFFLINE')
+  const liveStrings = allStrings.filter(s => s.status === 'NORMAL' || s.status === 'WARNING' || s.status === 'CRITICAL')
   const stringSummary = {
     total: liveStrings.length,
-    ok: allStrings.filter(s => s.status === 'OK').length,
+    ok: allStrings.filter(s => s.status === 'NORMAL').length,
     warning: allStrings.filter(s => s.status === 'WARNING').length,
     critical: allStrings.filter(s => s.status === 'CRITICAL').length,
   }

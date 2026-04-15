@@ -38,7 +38,7 @@ interface StringInfo {
   current: number
   power: number
   gap_percent: number
-  status: 'OK' | 'WARNING' | 'CRITICAL' | 'OFFLINE'
+  status: 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
 }
 
 interface DeviceStrings {
@@ -156,10 +156,10 @@ export function PlantDetailView({
   // ─── Derived Data (plant-level summary) ────────────────────
 
   const allStrings = stringData.flatMap(d => d.strings)
-  const liveStrings = allStrings.filter(s => s.status !== 'OFFLINE')
+  const liveStrings = allStrings.filter(s => s.status !== 'OPEN_CIRCUIT' && s.status !== 'DISCONNECTED')
   const stringSummary = {
     total: liveStrings.length,
-    ok: allStrings.filter(s => s.status === 'OK').length,
+    ok: allStrings.filter(s => s.status === 'NORMAL').length,
     warning: allStrings.filter(s => s.status === 'WARNING').length,
     critical: allStrings.filter(s => s.status === 'CRITICAL').length,
   }
