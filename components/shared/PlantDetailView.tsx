@@ -47,6 +47,7 @@ interface DeviceStrings {
   device_id: string
   device_name: string | null
   strings: StringInfo[]
+  active_avg_current?: number
 }
 
 interface AlertData {
@@ -138,6 +139,7 @@ export function PlantDetailView({
   // ─── Handlers ───────────────────────────────────────────────
 
   const handleRefresh = async () => {
+    if (isRefreshing) return
     setIsRefreshing(true)
     await fetchPlantData(true)
     setIsRefreshing(false)
@@ -172,8 +174,8 @@ export function PlantDetailView({
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto" />
-          <p className="text-xs text-gray-400 mt-2">Loading plant data...</p>
+          <div className="w-5 h-5 border-2 border-[#76b900] border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs text-[#898989] mt-2">Loading plant data...</p>
         </div>
       </div>
     )
@@ -239,7 +241,9 @@ export function PlantDetailView({
           <TabsContent value="overview" className="space-y-5">
             {/* Per-Inverter Sections */}
             {plant.devices.map((device, index) => {
-              const deviceStrings = stringData.find(d => d.device_id === device.id)?.strings || []
+              const deviceData = stringData.find(d => d.device_id === device.id)
+              const deviceStrings = deviceData?.strings || []
+              const deviceAvgCurrent = deviceData?.active_avg_current
               const deviceAlerts = alerts
                 .filter(a => a.device_id === device.id)
                 .map(a => ({ ...a, device_name: device.device_name || device.id }))
@@ -254,6 +258,7 @@ export function PlantDetailView({
                   showResolveAlerts={showResolveAlerts}
                   onResolveAlert={handleResolveAlert}
                   colorIndex={index}
+                  apiAvgCurrent={deviceAvgCurrent}
                 />
               )
             })}

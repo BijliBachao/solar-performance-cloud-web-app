@@ -70,6 +70,8 @@ interface InverterDetailSectionProps {
   dummyTrendData?: any[]
   /** Index for color coding (0-based). Each inverter gets a distinct accent color. */
   colorIndex?: number
+  /** Average current from the API (single source of truth). Falls back to local calc if not provided. */
+  apiAvgCurrent?: number
 }
 
 type TrendPeriod = '24h' | '7d' | '30d'
@@ -147,6 +149,7 @@ export function InverterDetailSection({
   onResolveAlert,
   dummyTrendData,
   colorIndex = 0,
+  apiAvgCurrent,
 }: InverterDetailSectionProps) {
   const color = INVERTER_COLORS[colorIndex % INVERTER_COLORS.length]
 
@@ -167,11 +170,13 @@ export function InverterDetailSection({
   }
   const totalStrings = strings.length
   const totalPower = producingStrings.reduce((sum, s) => sum + s.power, 0)
-  // Average of active strings only (matches API's active_avg_current)
-  const activeForAvg = strings.filter(s => s.current > ACTIVE_CURRENT_THRESHOLD)
-  const avgCurrent = activeForAvg.length > 0
-    ? activeForAvg.reduce((sum, s) => sum + s.current, 0) / activeForAvg.length
-    : 0
+  // Use API's computed average (single source of truth from string-health.ts)
+  // Falls back to local calc only for preview pages without API data
+  const avgCurrent = apiAvgCurrent ?? (
+    strings.filter(s => s.current > ACTIVE_CURRENT_THRESHOLD).length > 0
+      ? strings.filter(s => s.current > ACTIVE_CURRENT_THRESHOLD).reduce((sum, s) => sum + s.current, 0) / strings.filter(s => s.current > ACTIVE_CURRENT_THRESHOLD).length
+      : 0
+  )
   // Health % includes ALL strings in denominator
   const healthPct = totalStrings > 0
     ? Math.round((summary.normal / totalStrings) * 100)
