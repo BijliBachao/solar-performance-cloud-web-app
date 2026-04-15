@@ -69,7 +69,7 @@ export default function DashboardAnalysisPage() {
       setDeviceId('')
       return
     }
-    fetch(`/api/plants/${plantId}`)
+    fetch(`/api/plants/${plantId}`, { credentials: 'include' })
       .then(r => r.json())
       .then(data => {
         const devs = (data.devices || []).map((d: any) => ({
@@ -118,14 +118,14 @@ export default function DashboardAnalysisPage() {
 
       if (tab === 'string') {
         if (deviceId) params.set('device_id', deviceId)
-        const res = await fetch(`/api/dashboard/analysis/string-level?${params}`)
+        const res = await fetch(`/api/dashboard/analysis/string-level?${params}`, { credentials: 'include' })
         if (!res.ok) {
           const err = await res.json()
           throw new Error(err.error || 'Failed to fetch')
         }
         setStringData(await res.json())
       } else {
-        const res = await fetch(`/api/dashboard/analysis/inverter-level?${params}`)
+        const res = await fetch(`/api/dashboard/analysis/inverter-level?${params}`, { credentials: 'include' })
         if (!res.ok) {
           const err = await res.json()
           throw new Error(err.error || 'Failed to fetch')

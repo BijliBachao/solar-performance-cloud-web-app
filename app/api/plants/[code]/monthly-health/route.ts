@@ -179,7 +179,7 @@ function diagnoseString(
     }
   }
 
-  return null // Healthy (>= 90%)
+  return null // Healthy (>= HEALTH_HEALTHY)
 }
 
 function calculateTrend(

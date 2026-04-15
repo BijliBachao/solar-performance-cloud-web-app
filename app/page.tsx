@@ -36,6 +36,7 @@ export default function LandingPage() {
       fetch('/api/auth/user', {
         signal: controller.signal,
         headers: { 'Cache-Control': 'no-cache' },
+        credentials: 'include',
       })
         .then(res => { clearTimeout(timeoutId); return res.json() })
         .then(data => {

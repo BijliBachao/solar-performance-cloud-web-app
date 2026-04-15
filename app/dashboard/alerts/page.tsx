@@ -43,7 +43,7 @@ export default function AlertsPage() {
       params.set('page', String(page))
       params.set('limit', '20')
 
-      const res = await fetch(`/api/alerts?${params.toString()}`)
+      const res = await fetch(`/api/alerts?${params.toString()}`, { credentials: 'include' })
       if (!res.ok) throw new Error('Failed to fetch alerts')
       const data = await res.json()
       setAlerts(data.alerts)
@@ -63,6 +63,7 @@ export default function AlertsPage() {
       const res = await fetch(`/api/alerts/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ resolve: true }),
       })
       if (!res.ok) throw new Error('Failed to resolve alert')
