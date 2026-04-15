@@ -110,6 +110,26 @@ else
   echo -e "${GREEN}PASS: All required exports present in string-health.ts${NC}"
 fi
 
+# ── Check 6: No duplicate StringStatus type definitions ─────────────────────
+VIOLATIONS6=$(grep -rn "'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'" \
+  lib/ app/ components/ \
+  --include="*.ts" --include="*.tsx" \
+  | grep -v "string-health\.ts" \
+  | grep -v "node_modules" \
+  | grep -v "import.*StringStatus" \
+  || true)
+
+if [ -n "$VIOLATIONS6" ]; then
+  echo -e "${RED}FAIL: Duplicate StringStatus type found outside string-health.ts${NC}"
+  echo "$VIOLATIONS6"
+  echo ""
+  echo "  Fix: Import { type StringStatus } from '@/lib/string-health'"
+  echo ""
+  ERRORS=$((ERRORS + 1))
+else
+  echo -e "${GREEN}PASS: No duplicate StringStatus type definitions${NC}"
+fi
+
 # ── Summary ─────────────────────────────────────────────────────────────────
 echo ""
 if [ $ERRORS -gt 0 ]; then

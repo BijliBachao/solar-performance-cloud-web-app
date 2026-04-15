@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { type StringStatus } from '@/lib/string-health'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { PlantHeader } from '@/components/shared/PlantHeader'
 import { InverterDetailSection } from '@/components/shared/InverterDetailSection'
@@ -38,7 +39,7 @@ interface StringInfo {
   current: number
   power: number
   gap_percent: number
-  status: 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
+  status: StringStatus
   energy_kwh?: number
 }
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { cn } from '@/lib/utils'
+import { type StringStatus } from '@/lib/string-health'
 import {
   Tooltip,
   TooltipContent,
@@ -14,7 +15,7 @@ interface StringData {
   current: number
   power: number
   gap_percent: number
-  status: 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
+  status: StringStatus
   energy_kwh?: number
 }
 

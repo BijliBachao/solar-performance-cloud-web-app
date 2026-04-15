@@ -211,7 +211,7 @@ export function MonthlyHealthReport({ data, inverterAvgCurrent }: MonthlyHealthR
   const issueStrings = data.filter(d => d.diagnosis)
 
   // Calculate summary stats
-  const healthyCount = data.filter(d => !d.diagnosis && d.avg_current >= 0.1).length
+  const healthyCount = data.filter(d => !d.diagnosis && d.avg_current >= ACTIVE_CURRENT_THRESHOLD).length
   const issueCount = issueStrings.length
   const offlineCount = data.filter(d => d.avg_current < ACTIVE_CURRENT_THRESHOLD).length
 
@@ -308,7 +308,7 @@ export function MonthlyHealthReport({ data, inverterAvgCurrent }: MonthlyHealthR
                         {getStatusLabel(row)}
                       </span>
                     </div>
-                    {row.trend !== 'offline' && row.avg_current >= 0.1 && (
+                    {row.trend !== 'offline' && row.avg_current >= ACTIVE_CURRENT_THRESHOLD && (
                       <TrendBadge trend={row.trend} />
                     )}
                   </div>

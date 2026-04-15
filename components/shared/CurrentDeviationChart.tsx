@@ -11,12 +11,13 @@ import {
   ReferenceLine,
   Cell,
 } from 'recharts'
+import { type StringStatus } from '@/lib/string-health'
 
 interface StringData {
   string_number: number
   current: number
   gap_percent: number
-  status: 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
+  status: StringStatus
   energy_kwh?: number
 }
 

@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils'
 import { StatusBadge } from './StatusBadge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { GAP_CRITICAL, GAP_INFO, type StringStatus } from '@/lib/string-health'
 
 interface StringData {
   string_number: number
@@ -8,7 +9,7 @@ interface StringData {
   current: number
   power: number
   gap_percent: number
-  status: 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
+  status: StringStatus
   energy_kwh?: number
 }
 
@@ -62,9 +63,9 @@ export function StringComparisonTable({ strings }: StringComparisonTableProps) {
                 <span
                   className={cn(
                     'font-medium',
-                    s.gap_percent > 50 && 'text-red-600',
-                    s.gap_percent > 10 && s.gap_percent <= 50 && 'text-yellow-600',
-                    s.gap_percent <= 10 && 'text-green-600'
+                    s.gap_percent > GAP_CRITICAL && 'text-red-600',
+                    s.gap_percent > GAP_INFO && s.gap_percent <= GAP_CRITICAL && 'text-yellow-600',
+                    s.gap_percent <= GAP_INFO && 'text-green-600'
                   )}
                 >
                   {s.gap_percent.toFixed(1)}%

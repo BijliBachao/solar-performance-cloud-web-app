@@ -1,7 +1,7 @@
 'use client'
 
 import { cn } from '@/lib/utils'
-import { GAP_WARNING, GAP_INFO } from '@/lib/string-health'
+import { GAP_WARNING, GAP_INFO, type StringStatus } from '@/lib/string-health'
 import {
   Droplets, TreePine, Wrench,
   Unplug, PlugZap, TrendingDown, CheckCircle, Cable,
@@ -13,7 +13,7 @@ interface StringData {
   current: number
   power: number
   gap_percent: number
-  status: 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
+  status: StringStatus
 }
 
 interface FaultDiagnosisPanelProps {

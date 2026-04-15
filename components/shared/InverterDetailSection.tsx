@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { cn } from '@/lib/utils'
-import { ACTIVE_CURRENT_THRESHOLD } from '@/lib/string-health'
+import { ACTIVE_CURRENT_THRESHOLD, type StringStatus } from '@/lib/string-health'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { StringHealthMatrix } from '@/components/shared/StringHealthMatrix'
@@ -25,7 +25,7 @@ interface StringInfo {
   current: number
   power: number
   gap_percent: number
-  status: 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
+  status: StringStatus
   energy_kwh?: number
 }
 
