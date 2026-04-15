@@ -198,8 +198,8 @@ export function AlertHistoryLog({
     return (
       <div className={cn('flex items-center justify-center py-12', className)}>
         <div className="text-center">
-          <Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto" />
-          <p className="text-xs text-gray-400 mt-2">Loading alert history...</p>
+          <div className="w-5 h-5 border-2 border-[#76b900] border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs text-[#898989] mt-2">Loading alert history...</p>
         </div>
       </div>
     )

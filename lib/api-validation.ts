@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { MAX_DATE_RANGE_DAYS } from '@/lib/string-health'
 
 // ─── Shared Constants (single source of truth) ────────────────────────
 
@@ -51,7 +52,7 @@ export const DateRangeSchema = z.object({
 ).refine(
   (data) => {
     const diff = (new Date(data.to).getTime() - new Date(data.from).getTime()) / (1000 * 60 * 60 * 24)
-    return diff <= 45
+    return diff <= MAX_DATE_RANGE_DAYS
   },
-  { message: 'Date range must be 1-45 days' }
+  { message: `Date range must be 1-${MAX_DATE_RANGE_DAYS} days` }
 )

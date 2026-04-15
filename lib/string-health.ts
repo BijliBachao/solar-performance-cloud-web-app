@@ -54,6 +54,12 @@ export const PLANT_HEALTH_HEALTHY = 3
 export const PLANT_HEALTH_FAULTY = 2
 export const PLANT_HEALTH_DISCONNECTED = 1
 
+// ── Analysis query constants ────────────────────────────────────────
+/** Maximum date range for analysis queries (days) */
+export const MAX_DATE_RANGE_DAYS = 45
+/** Lookback window to classify a string as "active" (days with recent data) */
+export const ACTIVE_LOOKBACK_DAYS = 14
+
 // ── Staleness (real-time only) ──────────────────────────────────────
 /** Milliseconds after which a measurement is stale vs freshest on device */
 export const STALE_MS = 15 * 60 * 1000

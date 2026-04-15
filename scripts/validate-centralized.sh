@@ -319,7 +319,7 @@ else
 fi
 
 # ── 4.2: All required exports present ──────────────────────────────
-REQUIRED_EXPORTS="ACTIVE_CURRENT_THRESHOLD GAP_CRITICAL GAP_WARNING GAP_INFO HEALTH_HEALTHY HEALTH_WARNING HEALTH_CAUTION HEALTH_SEVERE STALE_MS PLANT_HEALTH_HEALTHY PLANT_HEALTH_FAULTY PLANT_HEALTH_DISCONNECTED isActive isStale classifyRealtime classifyAlertSeverity bucketHealthScore computePerformance computeAvailability computeHealthScore filterActive leaveOneOutAvg activeAvg computeGap canCompare StringStatus AlertSeverity HealthBucket"
+REQUIRED_EXPORTS="ACTIVE_CURRENT_THRESHOLD GAP_CRITICAL GAP_WARNING GAP_INFO HEALTH_HEALTHY HEALTH_WARNING HEALTH_CAUTION HEALTH_SEVERE STALE_MS MAX_DATE_RANGE_DAYS ACTIVE_LOOKBACK_DAYS PLANT_HEALTH_HEALTHY PLANT_HEALTH_FAULTY PLANT_HEALTH_DISCONNECTED isActive isStale classifyRealtime classifyAlertSeverity bucketHealthScore computePerformance computeAvailability computeHealthScore filterActive leaveOneOutAvg activeAvg computeGap canCompare StringStatus AlertSeverity HealthBucket"
 
 MISSING=""
 for export in $REQUIRED_EXPORTS; do

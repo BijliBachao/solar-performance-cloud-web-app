@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { StringLevelTable } from '@/components/shared/StringLevelTable'
-import { HEALTH_HEALTHY, HEALTH_CAUTION, HEALTH_WARNING, HEALTH_SEVERE } from '@/lib/string-health'
+import { HEALTH_HEALTHY, HEALTH_CAUTION, HEALTH_WARNING, HEALTH_SEVERE, MAX_DATE_RANGE_DAYS } from '@/lib/string-health'
 import { InverterLevelTable } from '@/components/shared/InverterLevelTable'
 import { ExportButton } from '@/components/shared/ExportButton'
 import { cn } from '@/lib/utils'
@@ -99,7 +99,7 @@ export default function AnalysisPage() {
     if (toDate > today) return 'End date cannot be in the future.'
 
     const diffDays = Math.ceil((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24))
-    if (diffDays > 45) return `Date range too large (${diffDays} days). Maximum is 45 days.`
+    if (diffDays > MAX_DATE_RANGE_DAYS) return `Date range too large (${diffDays} days). Maximum is ${MAX_DATE_RANGE_DAYS} days.`
 
     return null
   }

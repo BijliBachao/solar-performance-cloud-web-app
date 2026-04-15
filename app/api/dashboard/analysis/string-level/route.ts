@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest, requireOrganization, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { INVERTER_DEVICE_TYPE_IDS } from '@/lib/constants'
-import { bucketHealthScore } from '@/lib/string-health'
+import { bucketHealthScore, MAX_DATE_RANGE_DAYS, ACTIVE_LOOKBACK_DAYS } from '@/lib/string-health'
 
 export async function GET(request: NextRequest) {
   try {
@@ -35,8 +35,8 @@ export async function GET(request: NextRequest) {
     const toDate = new Date(to)
 
     const diffDays = (toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)
-    if (diffDays > 45 || diffDays < 0) {
-      return NextResponse.json({ error: 'Date range must be 1-45 days' }, { status: 400 })
+    if (diffDays > MAX_DATE_RANGE_DAYS || diffDays < 0) {
+      return NextResponse.json({ error: `Date range must be 1-${MAX_DATE_RANGE_DAYS} days` }, { status: 400 })
     }
 
     // 3. Validate plant_id (404 — no info leakage)
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
 
     // ── 3-Category Detection ────────────────────────────────────────
     const fourteenDaysAgo = new Date()
-    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - ACTIVE_LOOKBACK_DAYS)
 
     const recentRecords = await prisma.string_daily.groupBy({
       by: ['device_id', 'string_number'],
