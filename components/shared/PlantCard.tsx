@@ -2,6 +2,7 @@
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Cpu, AlertTriangle, ChevronRight } from 'lucide-react'
+import { PLANT_HEALTH_HEALTHY, PLANT_HEALTH_FAULTY, PLANT_HEALTH_DISCONNECTED } from '@/lib/string-health'
 
 interface PlantCardProps {
   plant: {
@@ -17,21 +18,21 @@ interface PlantCardProps {
 }
 
 const healthLine: Record<number, string> = {
-  1: 'bg-[#898989]',
-  2: 'bg-[#e52020]',
-  3: 'bg-[#76b900]',
+  [PLANT_HEALTH_DISCONNECTED]: 'bg-[#898989]',
+  [PLANT_HEALTH_FAULTY]: 'bg-[#e52020]',
+  [PLANT_HEALTH_HEALTHY]: 'bg-[#76b900]',
 }
 
 const healthLabel: Record<number, { text: string; color: string }> = {
-  1: { text: 'OFFLINE', color: 'text-[#898989]' },
-  2: { text: 'FAULTY', color: 'text-[#e52020]' },
-  3: { text: 'HEALTHY', color: 'text-[#76b900]' },
+  [PLANT_HEALTH_DISCONNECTED]: { text: 'OFFLINE', color: 'text-[#898989]' },
+  [PLANT_HEALTH_FAULTY]: { text: 'FAULTY', color: 'text-[#e52020]' },
+  [PLANT_HEALTH_HEALTHY]: { text: 'HEALTHY', color: 'text-[#76b900]' },
 }
 
 export function PlantCard({ plant, basePath = '/dashboard/plants' }: PlantCardProps) {
   const router = useRouter()
-  const hl = healthLine[plant.health_state || 0] || healthLine[1]
-  const hlabel = healthLabel[plant.health_state || 0] || healthLabel[1]
+  const hl = healthLine[plant.health_state || 0] || healthLine[PLANT_HEALTH_DISCONNECTED]
+  const hlabel = healthLabel[plant.health_state || 0] || healthLabel[PLANT_HEALTH_DISCONNECTED]
 
   return (
     <div
