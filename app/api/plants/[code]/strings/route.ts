@@ -74,12 +74,21 @@ export async function GET(
           todayByString.set(m.string_number, group)
         }
 
-        // Averages
-        const totalCount = latestMeasurements.length
-        const totalCurrent = latestMeasurements.reduce((sum, m) => sum + Number(m.current), 0)
+        // Detect staleness: if a string's latest measurement is >15 min older
+        // than the freshest on this device, it's no longer reporting
+        const STALE_THRESHOLD_MS = 15 * 60 * 1000
+        const freshestTs = latestMeasurements.length > 0
+          ? Math.max(...latestMeasurements.map(m => m.timestamp.getTime()))
+          : 0
+        const isStale = (ts: Date) => freshestTs > 0 && (freshestTs - ts.getTime()) > STALE_THRESHOLD_MS
+
+        // Averages — only from fresh measurements
+        const freshMeasurements = latestMeasurements.filter(m => !isStale(m.timestamp))
+        const totalCount = freshMeasurements.length
+        const totalCurrent = freshMeasurements.reduce((sum, m) => sum + Number(m.current), 0)
         const avgCurrent = totalCount > 0 ? totalCurrent / totalCount : 0
 
-        const activeStrings = latestMeasurements.filter((m) => Number(m.current) > 0.1)
+        const activeStrings = freshMeasurements.filter((m) => Number(m.current) > 0.1)
         const activeAvg = activeStrings.length > 0
           ? activeStrings.reduce((sum, m) => sum + Number(m.current), 0) / activeStrings.length
           : 0
@@ -88,11 +97,16 @@ export async function GET(
         const strings = latestMeasurements.map((m) => {
           const current = Number(m.current)
           const voltage = Number(m.voltage)
+          const stale = isStale(m.timestamp)
 
           let status: StringStatus
           let gapPercent = 0
 
-          if (current > 0.1) {
+          if (stale) {
+            // String stopped reporting — treat as disconnected
+            status = 'DISCONNECTED'
+            gapPercent = 100
+          } else if (current > 0.1) {
             gapPercent = activeAvg > 0 ? ((activeAvg - current) / activeAvg) * 100 : 0
             if (gapPercent > 50) status = 'CRITICAL'
             else if (gapPercent > 10) status = 'WARNING'
