@@ -42,7 +42,7 @@ function getStatusIcon(data: MonthlyHealthData) {
   if (data.trend === 'offline' || data.avg_current < ACTIVE_CURRENT_THRESHOLD) {
     return <Circle className="w-4 h-4 text-gray-400" />
   }
-  if (data.avg_health_score < 50) {
+  if (data.avg_health_score < HEALTH_WARNING) {
     return <XCircle className="w-4 h-4 text-red-500" />
   }
   if (data.avg_health_score < HEALTH_HEALTHY) {
@@ -53,7 +53,7 @@ function getStatusIcon(data: MonthlyHealthData) {
 
 function getStatusLabel(data: MonthlyHealthData): string {
   if (data.trend === 'offline' || data.avg_current < ACTIVE_CURRENT_THRESHOLD) return 'Offline'
-  if (data.avg_health_score < 50) return 'Critical'
+  if (data.avg_health_score < HEALTH_WARNING) return 'Critical'
   if (data.avg_health_score < HEALTH_HEALTHY) return 'Warning'
   return 'Healthy'
 }
