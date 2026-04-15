@@ -208,7 +208,11 @@ async function fetchSolisStringData(client: SolisClient): Promise<void> {
         const current = safeFloat(detail[`iPv${s}`])
         const power = safeFloat(detail[`pow${s}`]) // Solis provides power directly
 
-        if (voltage > 0 || current > 0) {
+        // Solis MPPT topology: 2 strings share 1 MPPT, API reports current
+        // on primary string only. Secondary strings have voltage but always
+        // 0 current — storing them creates false Open Circuit alerts.
+        // Only store strings that have measurable current.
+        if (current > 0) {
           measurements.push({
             device_id: device.id,
             plant_id: device.plant_id,
