@@ -14,7 +14,7 @@ export default function AuthRedirectPage() {
       if (!isLoaded || !userId || !user) return
 
       try {
-        const res = await fetch('/api/auth/user')
+        const res = await fetch('/api/auth/user', { credentials: 'include' })
 
         if (res.ok) {
           const data = await res.json()

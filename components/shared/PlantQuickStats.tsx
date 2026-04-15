@@ -1,6 +1,7 @@
 'use client'
 
 import { Power, Activity, TrendingUp, AlertTriangle } from 'lucide-react'
+import { HEALTH_HEALTHY, HEALTH_CAUTION } from '@/lib/string-health'
 
 interface PlantQuickStatsProps {
   totalPower: number
@@ -52,8 +53,8 @@ export function PlantQuickStats({
         </div>
         <p className={`text-xl font-semibold ${
           stringsTotal === 0 ? 'text-gray-400' :
-          healthPercent >= 90 ? 'text-green-600' :
-          healthPercent >= 70 ? 'text-yellow-600' : 'text-red-600'
+          healthPercent >= HEALTH_HEALTHY ? 'text-green-600' :
+          healthPercent >= HEALTH_CAUTION ? 'text-yellow-600' : 'text-red-600'
         }`}>
           {stringsTotal > 0 ? `${healthPercent}%` : '—'}
         </p>

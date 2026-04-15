@@ -17,7 +17,7 @@ export default function PendingAssignmentPage() {
     // Check every 10 seconds if user has been assigned
     async function checkAssignment() {
       try {
-        const res = await fetch('/api/auth/user')
+        const res = await fetch('/api/auth/user', { credentials: 'include' })
         if (res.ok) {
           const data = await res.json()
           if (data.profile.status !== 'PENDING_ASSIGNMENT') {

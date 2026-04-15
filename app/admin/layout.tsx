@@ -11,7 +11,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     async function checkAuth() {
       try {
-        const res = await fetch('/api/auth/user')
+        const res = await fetch('/api/auth/user', { credentials: 'include' })
         if (!res.ok) { router.push('/sign-in'); return }
         const data = await res.json()
         if (data.profile.role !== 'SUPER_ADMIN') {

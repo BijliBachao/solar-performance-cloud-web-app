@@ -50,7 +50,7 @@ export default function AnalysisPage() {
 
   // Load plant list for filter dropdown
   useEffect(() => {
-    fetch('/api/admin/plants')
+    fetch('/api/admin/plants', { credentials: 'include' })
       .then(r => r.json())
       .then(data => {
         const pl = (data.plants || []).map((p: any) => ({

@@ -24,7 +24,7 @@ export default function AlertsPage() {
 
   // Load plant list for filter
   useEffect(() => {
-    fetch('/api/dashboard/main')
+    fetch('/api/dashboard/main', { credentials: 'include' })
       .then(r => r.json())
       .then(data => {
         setPlants((data.plants || []).map((p: any) => ({ id: p.id, plant_name: p.plant_name })))

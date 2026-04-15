@@ -50,7 +50,7 @@ export default function DashboardAnalysisPage() {
 
   // Load user's assigned plants
   useEffect(() => {
-    fetch('/api/dashboard/main')
+    fetch('/api/dashboard/main', { credentials: 'include' })
       .then(r => r.json())
       .then(data => {
         const pl = (data.plants || []).map((p: any) => ({

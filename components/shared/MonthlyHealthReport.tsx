@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { AlertTriangle, CheckCircle, XCircle, Circle, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { useState } from 'react'
-import { ACTIVE_CURRENT_THRESHOLD, HEALTH_HEALTHY, HEALTH_WARNING } from '@/lib/string-health'
+import { ACTIVE_CURRENT_THRESHOLD, HEALTH_HEALTHY, HEALTH_CAUTION, HEALTH_WARNING } from '@/lib/string-health'
 
 interface Diagnosis {
   issue: string
@@ -284,8 +284,8 @@ export function MonthlyHealthReport({ data, inverterAvgCurrent }: MonthlyHealthR
                   <span
                     className={cn(
                       'text-xs',
-                      row.uptime_percent >= 90 ? 'text-emerald-600'
-                        : row.uptime_percent >= 70 ? 'text-amber-600'
+                      row.uptime_percent >= HEALTH_HEALTHY ? 'text-emerald-600'
+                        : row.uptime_percent >= HEALTH_CAUTION ? 'text-amber-600'
                         : 'text-red-500'
                     )}
                   >

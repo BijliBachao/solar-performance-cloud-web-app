@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { HEALTH_HEALTHY, HEALTH_WARNING } from '@/lib/string-health'
 import { PageWrapper } from '@/components/layout/PageWrapper'
 import { KpiCard } from '@/components/shared/KpiCard'
 import { PlantCard } from '@/components/shared/PlantCard'
@@ -22,7 +23,7 @@ export default function DashboardOverviewPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await fetch('/api/dashboard/main')
+        const res = await fetch('/api/dashboard/main', { credentials: 'include' })
         if (!res.ok) throw new Error('Failed to fetch dashboard data')
         setData(await res.json())
       } catch (err: any) { setError(err.message) } finally { setLoading(false) }
@@ -48,7 +49,7 @@ export default function DashboardOverviewPage() {
               title="String Health"
               value={`${data.stats.avgStringHealth}%`}
               icon={Activity}
-              accent={data.stats.avgStringHealth >= 90 ? 'green' : data.stats.avgStringHealth >= 50 ? 'amber' : 'red'}
+              accent={data.stats.avgStringHealth >= HEALTH_HEALTHY ? 'green' : data.stats.avgStringHealth >= HEALTH_WARNING ? 'amber' : 'red'}
             />
             <KpiCard
               title="Last Sync"

@@ -15,7 +15,7 @@ export default function SettingsPage() {
   useEffect(() => {
     async function fetchUser() {
       try {
-        const res = await fetch('/api/auth/user')
+        const res = await fetch('/api/auth/user', { credentials: 'include' })
         if (res.ok) setUser(await res.json())
       } catch { /* handle */ } finally { setLoading(false) }
     }
