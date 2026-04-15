@@ -115,7 +115,7 @@ function CollapsibleSection({
 }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="border-t border-gray-100">
+    <div className="border-t border-[#e5e5e5]">
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center gap-2 w-full py-3 text-left group"
@@ -248,14 +248,14 @@ export function InverterDetailSection({
 
   return (
     <div
-      className="bg-white rounded-xl border border-gray-200 overflow-hidden"
+      className="bg-white rounded-sm border border-[#e5e5e5] overflow-hidden"
       style={{ borderTopWidth: 3, borderTopColor: color.accent }}
     >
       {/* ── Inverter KPI Header ────────────────────────────────── */}
       <div className="px-4 sm:px-5 pt-4 pb-3">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div className="flex items-center gap-2.5">
-            <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center', color.iconBg)}>
+            <div className={cn('w-8 h-8 rounded-sm flex items-center justify-center', color.iconBg)}>
               <Cpu className={cn('w-4 h-4', color.iconText)} />
             </div>
             <div>
@@ -270,20 +270,20 @@ export function InverterDetailSection({
 
           {/* KPI pills */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md bg-gray-50 text-gray-600">
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-sm bg-gray-50 text-gray-600">
               <Zap className="w-3 h-3 text-amber-500" />
               {formatPower(totalPower)}
             </span>
             {strings.some(s => s.energy_kwh != null) && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md bg-gray-50 text-gray-600">
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-sm bg-gray-50 text-gray-600">
                 {strings.reduce((sum, s) => sum + (s.energy_kwh || 0), 0).toFixed(1)} kWh today
               </span>
             )}
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md bg-gray-50 text-gray-600">
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-sm bg-gray-50 text-gray-600">
               <Activity className="w-3 h-3 text-blue-500" />
               {avgCurrent > 0 ? `${avgCurrent.toFixed(2)}A avg` : '—'}
             </span>
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md bg-gray-50 text-gray-600">
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-sm bg-gray-50 text-gray-600">
               {producingStrings.length} producing{deadStrings.length > 0 ? ` / ${totalStrings} total` : ''} strings
             </span>
             {alerts.length > 0 && (
@@ -337,7 +337,7 @@ export function InverterDetailSection({
       <div className="px-4 sm:px-5 pb-4 space-y-0">
         {/* ── String Health Matrix ──────────────────────────────── */}
         {strings.length > 0 && (
-          <div className="py-4 border-t border-gray-100">
+          <div className="py-4 border-t border-[#e5e5e5]">
             <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-3">
               String Health Map
             </h4>
@@ -347,7 +347,7 @@ export function InverterDetailSection({
 
         {/* ── String Comparison Table (primary data view) ────── */}
         {strings.length > 0 && (
-          <div className="py-4 border-t border-gray-100">
+          <div className="py-4 border-t border-[#e5e5e5]">
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                 <Table2 className="w-3.5 h-3.5" /> String Comparison
@@ -359,7 +359,7 @@ export function InverterDetailSection({
               )}
             </div>
             {/* Status Legend */}
-            <div className="mb-3 p-2.5 bg-gray-50 rounded-lg border border-gray-100">
+            <div className="mb-3 p-2.5 bg-gray-50 rounded-sm border border-[#e5e5e5]">
               <p className="text-[10px] font-medium text-gray-500 mb-1.5">Status Guide (IEC 62446)</p>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-gray-600">
                 <span className="flex items-center gap-1">
@@ -392,7 +392,7 @@ export function InverterDetailSection({
 
         {/* ── Performance vs Average Chart ─────────────────────── */}
         {strings.length > 0 && (
-          <div className="py-4 border-t border-gray-100">
+          <div className="py-4 border-t border-[#e5e5e5]">
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
                 String Current Comparison
@@ -407,7 +407,7 @@ export function InverterDetailSection({
 
         {/* ── Active Alerts ────────────────────────────────────── */}
         {alerts.length > 0 && (
-          <div className="py-4 border-t border-gray-100">
+          <div className="py-4 border-t border-[#e5e5e5]">
             <div className="flex items-center gap-2 mb-3">
               <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
                 Active Alerts
@@ -424,7 +424,7 @@ export function InverterDetailSection({
         )}
 
         {/* ── String Trend Chart ───────────────────────────────── */}
-        <div className="py-4 border-t border-gray-100">
+        <div className="py-4 border-t border-[#e5e5e5]">
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
               String Current Trend
@@ -452,14 +452,14 @@ export function InverterDetailSection({
         </div>
 
         {/* ── Collapsible: Fault Diagnosis ─────────────────────── */}
-        {strings.length > 0 && (summary.warning > 0 || summary.critical > 0) && (
+        {strings.length > 0 && (summary.warning > 0 || summary.critical > 0 || summary.openCircuit > 0 || summary.disconnected > 0) && (
           <CollapsibleSection
             title="Fault Diagnosis"
             icon={Stethoscope}
-            defaultOpen={summary.critical > 0}
+            defaultOpen={summary.critical > 0 || summary.openCircuit > 0}
             badge={
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 ml-1">
-                {summary.warning + summary.critical} issue{summary.warning + summary.critical !== 1 ? 's' : ''}
+                {summary.warning + summary.critical + summary.openCircuit + summary.disconnected} issue{summary.warning + summary.critical + summary.openCircuit + summary.disconnected !== 1 ? 's' : ''}
               </Badge>
             }
           >

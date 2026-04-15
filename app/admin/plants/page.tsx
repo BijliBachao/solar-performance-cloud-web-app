@@ -219,17 +219,20 @@ export default function AdminPlantsPage() {
 
   if (loading && plants.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="flex items-center gap-3">
+          <div className="w-5 h-5 border-2 border-[#76b900] border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm font-semibold text-[#898989]">Loading...</span>
+        </div>
       </div>
     )
   }
 
   if (error && plants.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
-          <p className="text-red-400 mb-4 text-sm">{error}</p>
+          <p className="text-[#e52020] mb-4 text-sm font-semibold">{error}</p>
           <Button variant="outline" onClick={fetchPlants}>Retry</Button>
         </div>
       </div>
@@ -237,13 +240,13 @@ export default function AdminPlantsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div>
       {/* Header Bar */}
-      <div className="border-b border-gray-200 bg-white">
+      <div className="border-b border-[#e5e5e5] bg-white">
         <div className="px-4 sm:px-6 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
-              <h1 className="text-lg font-semibold text-gray-900">Plants</h1>
+              <h1 className="text-base font-bold text-[#0a0a0a]">Plants</h1>
               <div className="flex items-center gap-3 sm:gap-4 text-xs overflow-x-auto pb-1">
                 <div className="flex items-center gap-1.5 whitespace-nowrap">
                   <span className="w-2 h-2 rounded-full bg-blue-500"></span>
@@ -322,19 +325,19 @@ export default function AdminPlantsPage() {
 
       {/* Messages */}
       {successMsg && (
-        <div className="mx-4 sm:mx-6 mt-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700 flex items-center gap-2">
+        <div className="mx-4 sm:mx-6 mt-4 p-3 bg-green-50 border border-green-200 rounded-sm text-sm text-green-700 flex items-center gap-2">
           <CheckCircle className="w-4 h-4" /> {successMsg}
         </div>
       )}
       {errorMsg && (
-        <div className="mx-4 sm:mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+        <div className="mx-4 sm:mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-sm text-sm text-red-700">
           {errorMsg}
         </div>
       )}
 
       {/* Table */}
       <div className="px-4 sm:px-6 py-4">
-        <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+        <div className="border border-gray-200 rounded-sm overflow-hidden bg-white">
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">

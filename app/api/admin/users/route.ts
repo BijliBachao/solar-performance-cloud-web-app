@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    const [users, total] = await Promise.all([
+    const [users, total, activeCount, pendingCount, inactiveCount] = await Promise.all([
       prisma.users.findMany({
         where,
         include: {
@@ -39,11 +39,15 @@ export async function GET(request: NextRequest) {
         take: limit,
       }),
       prisma.users.count({ where }),
+      prisma.users.count({ where: { status: 'ACTIVE' } }),
+      prisma.users.count({ where: { status: 'PENDING_ASSIGNMENT' } }),
+      prisma.users.count({ where: { status: 'INACTIVE' } }),
     ])
 
     return NextResponse.json({
       users,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      statusCounts: { active: activeCount, pending: pendingCount, inactive: inactiveCount },
     })
   } catch (error) {
     if (error instanceof ApiAuthError) return createErrorResponse(error)

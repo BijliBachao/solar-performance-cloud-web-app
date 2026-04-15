@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       where.status = status
     }
 
-    const [organizations, total] = await Promise.all([
+    const [organizations, total, activeCount, inactiveCount, totalUsers, totalPlants] = await Promise.all([
       prisma.organizations.findMany({
         where,
         include: {
@@ -39,11 +39,16 @@ export async function GET(request: NextRequest) {
         take: limit,
       }),
       prisma.organizations.count({ where }),
+      prisma.organizations.count({ where: { status: 'ACTIVE' } }),
+      prisma.organizations.count({ where: { status: { not: 'ACTIVE' } } }),
+      prisma.users.count({ where: { organization_id: { not: null } } }),
+      prisma.plant_assignments.count(),
     ])
 
     return NextResponse.json({
       organizations,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      globalStats: { total: activeCount + inactiveCount, active: activeCount, inactive: inactiveCount, totalUsers, totalPlants },
     })
   } catch (error) {
     if (error instanceof ApiAuthError) return createErrorResponse(error)

@@ -46,6 +46,7 @@ export default function AdminUsersPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
+  const [statusCounts, setStatusCounts] = useState({ active: 0, pending: 0, inactive: 0 })
 
   // Assign modal
   const [assignUser, setAssignUser] = useState<User | null>(null)
@@ -76,6 +77,7 @@ export default function AdminUsersPage() {
       setUsers(data.users)
       setTotalPages(data.pagination.totalPages)
       setTotalCount(data.pagination.total)
+      if (data.statusCounts) setStatusCounts(data.statusCounts)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
@@ -87,7 +89,7 @@ export default function AdminUsersPage() {
 
   const fetchOrgs = async () => {
     try {
-      const res = await fetch('/api/admin/organizations?limit=100', { credentials: 'include' })
+      const res = await fetch('/api/admin/organizations?limit=100&status=ACTIVE', { credentials: 'include' })
       if (!res.ok) return
       const data = await res.json()
       setOrgs(data.organizations)
@@ -159,12 +161,12 @@ export default function AdminUsersPage() {
 
   const userName = (u: User) => [u.first_name, u.last_name].filter(Boolean).join(' ') || null
 
-  // Stats from loaded data
+  // Stats from API (global counts, not page-scoped)
   const stats = {
     total: totalCount,
-    active: users.filter(u => u.status === 'ACTIVE').length,
-    pending: users.filter(u => u.status === 'PENDING_ASSIGNMENT').length,
-    inactive: users.filter(u => u.status === 'INACTIVE').length,
+    active: statusCounts.active,
+    pending: statusCounts.pending,
+    inactive: statusCounts.inactive,
   }
 
   const getStatusBadge = (status: string): 'success' | 'warning' | 'secondary' => {
@@ -186,17 +188,20 @@ export default function AdminUsersPage() {
 
   if (loading && users.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="flex items-center gap-3">
+          <div className="w-5 h-5 border-2 border-[#76b900] border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm font-semibold text-[#898989]">Loading...</span>
+        </div>
       </div>
     )
   }
 
   if (error && users.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
-          <p className="text-red-400 mb-4 text-sm">{error}</p>
+          <p className="text-[#e52020] mb-4 text-sm font-semibold">{error}</p>
           <Button variant="outline" onClick={fetchUsers}>Retry</Button>
         </div>
       </div>
@@ -204,13 +209,13 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div>
       {/* Header Bar */}
-      <div className="border-b border-gray-200 bg-white">
+      <div className="border-b border-[#e5e5e5] bg-white">
         <div className="px-4 sm:px-6 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
-              <h1 className="text-lg font-semibold text-gray-900">Users</h1>
+              <h1 className="text-base font-bold text-[#0a0a0a]">Users</h1>
               <div className="flex items-center gap-3 sm:gap-4 text-xs overflow-x-auto pb-1">
                 <div className="flex items-center gap-1.5 whitespace-nowrap">
                   <span className="w-2 h-2 rounded-full bg-blue-500"></span>
@@ -247,10 +252,10 @@ export default function AdminUsersPage() {
                 <button
                   key={tab.key}
                   onClick={() => { setFilter(tab.key); setCurrentPage(1) }}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors whitespace-nowrap ${
+                  className={`px-3 py-1.5 rounded-sm text-xs font-bold transition-colors whitespace-nowrap ${
                     filter === tab.key
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      ? 'bg-[#76b900]/10 text-[#76b900] border border-[#76b900]/30'
+                      : 'bg-[#f5f5f5] text-[#525252] hover:bg-[#e5e5e5]'
                   }`}
                 >
                   {tab.label}
@@ -274,19 +279,19 @@ export default function AdminUsersPage() {
 
       {/* Messages */}
       {successMsg && (
-        <div className="mx-4 sm:mx-6 mt-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700 flex items-center gap-2">
+        <div className="mx-4 sm:mx-6 mt-4 p-3 bg-green-50 border border-green-200 rounded-sm text-sm text-green-700 flex items-center gap-2">
           <CheckCircle className="w-4 h-4" /> {successMsg}
         </div>
       )}
       {errorMsg && (
-        <div className="mx-4 sm:mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+        <div className="mx-4 sm:mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-sm text-sm text-red-700">
           {errorMsg}
         </div>
       )}
 
       {/* Table */}
       <div className="px-4 sm:px-6 py-4">
-        <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+        <div className="border border-gray-200 rounded-sm overflow-hidden bg-white">
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">

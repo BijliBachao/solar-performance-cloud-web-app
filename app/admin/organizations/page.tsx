@@ -49,6 +49,9 @@ export default function AdminOrganizationsPage() {
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
+  // Stats from API (global counts, not filtered-scoped)
+  const [globalStats, setGlobalStats] = useState({ total: 0, active: 0, inactive: 0, totalUsers: 0, totalPlants: 0 })
+
   // Messages
   const [successMsg, setSuccessMsg] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
@@ -68,6 +71,7 @@ export default function AdminOrganizationsPage() {
       }
       const data = await res.json()
       setOrgs(data.organizations)
+      if (data.globalStats) setGlobalStats(data.globalStats)
     } catch (err) {
       console.error('Error fetching organizations:', err)
       setError(err instanceof Error ? err.message : 'Something went wrong')
@@ -136,28 +140,22 @@ export default function AdminOrganizationsPage() {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
-  // Stats
-  const stats = {
-    total: orgs.length,
-    active: orgs.filter(o => o.status === 'ACTIVE').length,
-    inactive: orgs.filter(o => o.status !== 'ACTIVE').length,
-    totalUsers: orgs.reduce((sum, o) => sum + o._count.users, 0),
-    totalPlants: orgs.reduce((sum, o) => sum + o._count.plant_assignments, 0),
-  }
-
   if (loading && orgs.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="flex items-center gap-3">
+          <div className="w-5 h-5 border-2 border-[#76b900] border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm font-semibold text-[#898989]">Loading...</span>
+        </div>
       </div>
     )
   }
 
   if (error && orgs.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
-          <p className="text-red-400 mb-4 text-sm">{error}</p>
+          <p className="text-[#e52020] mb-4 text-sm font-semibold">{error}</p>
           <Button variant="outline" onClick={fetchOrgs}>Retry</Button>
         </div>
       </div>
@@ -165,29 +163,29 @@ export default function AdminOrganizationsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div>
       {/* Header Bar */}
-      <div className="border-b border-gray-200 bg-white">
+      <div className="border-b border-[#e5e5e5] bg-white">
         <div className="px-4 sm:px-6 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
-              <h1 className="text-lg font-semibold text-gray-900">Organizations</h1>
+              <h1 className="text-base font-bold text-[#0a0a0a]">Organizations</h1>
               <div className="flex items-center gap-3 sm:gap-4 text-xs overflow-x-auto pb-1">
                 <div className="flex items-center gap-1.5 whitespace-nowrap">
                   <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                  <span className="text-gray-500">{stats.total} total</span>
+                  <span className="text-gray-500">{globalStats.total} total</span>
                 </div>
                 <div className="flex items-center gap-1.5 whitespace-nowrap">
                   <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                  <span className="text-gray-500">{stats.active} active</span>
+                  <span className="text-gray-500">{globalStats.active} active</span>
                 </div>
                 <div className="flex items-center gap-1.5 whitespace-nowrap">
                   <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
-                  <span className="text-gray-500">{stats.inactive} inactive</span>
+                  <span className="text-gray-500">{globalStats.inactive} inactive</span>
                 </div>
                 <span className="text-gray-600 hidden sm:inline">|</span>
-                <span className="text-gray-500 whitespace-nowrap">{stats.totalUsers} users</span>
-                <span className="text-gray-500 whitespace-nowrap">{stats.totalPlants} plants</span>
+                <span className="text-gray-500 whitespace-nowrap">{globalStats.totalUsers} users</span>
+                <span className="text-gray-500 whitespace-nowrap">{globalStats.totalPlants} plants</span>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -227,19 +225,19 @@ export default function AdminOrganizationsPage() {
 
       {/* Messages */}
       {successMsg && (
-        <div className="mx-4 sm:mx-6 mt-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700 flex items-center gap-2">
+        <div className="mx-4 sm:mx-6 mt-4 p-3 bg-green-50 border border-green-200 rounded-sm text-sm text-green-700 flex items-center gap-2">
           <CheckCircle className="w-4 h-4" /> {successMsg}
         </div>
       )}
       {errorMsg && (
-        <div className="mx-4 sm:mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+        <div className="mx-4 sm:mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-sm text-sm text-red-700">
           {errorMsg}
         </div>
       )}
 
       {/* Table */}
       <div className="px-4 sm:px-6 py-4">
-        <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+        <div className="border border-gray-200 rounded-sm overflow-hidden bg-white">
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-50">
@@ -276,7 +274,7 @@ export default function AdminOrganizationsPage() {
                       </span>
                     </TableCell>
                     <TableCell className="text-center">
-                      <span className={`text-sm font-mono ${org._count.users > 0 ? 'text-blue-500' : 'text-gray-600'}`}>
+                      <span className={`text-sm font-mono ${org._count.users > 0 ? 'text-[#76b900]' : 'text-gray-600'}`}>
                         {org._count.users}
                       </span>
                     </TableCell>

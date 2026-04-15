@@ -67,7 +67,7 @@ export default function AdminOrgDetailPage() {
       action={<Button variant="outline" onClick={() => router.push('/admin/organizations')}><ArrowLeft className="h-4 w-4 mr-2" />Back</Button>}>
       {org && (
         <div className="space-y-6">
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="bg-white rounded-sm border border-gray-200 p-6">
             <h3 className="text-lg font-semibold mb-4">Organization Info</h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><span className="text-gray-500">Email:</span> <span className="text-gray-900">{org.email || 'N/A'}</span></div>
@@ -77,7 +77,7 @@ export default function AdminOrgDetailPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="bg-white rounded-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Assigned Plants</h3>
               <Button size="sm" disabled={assignLoading} onClick={openAssignDialog}><Plus className="h-4 w-4 mr-1" />Assign Plant</Button>
@@ -98,7 +98,7 @@ export default function AdminOrgDetailPage() {
             </Table>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="bg-white rounded-sm border border-gray-200 p-6">
             <h3 className="text-lg font-semibold mb-4">Users</h3>
             <Table>
               <TableHeader><TableRow><TableHead>Email</TableHead><TableHead>Name</TableHead><TableHead>Role</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>

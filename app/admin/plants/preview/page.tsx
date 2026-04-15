@@ -150,7 +150,7 @@ export default function PlantPreviewPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#f5f5f5]">
       <PlantHeader
         plantName="Gulberg 5t"
         healthState={3}
