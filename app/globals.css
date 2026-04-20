@@ -2,8 +2,81 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────────
+   SPC Design Tokens (CSS variables)
+   Single source: /DESIGN.md + /tailwind.config.ts + /lib/design-tokens.ts
+   Rule: no pure black anywhere. Slate 900 replaces black.
+   ───────────────────────────────────────────────────────────── */
+
 @layer base {
   :root {
+    /* ━━ Brand ━━ */
+    --spc-green: #76b900;
+    --spc-green-light: #bff230;
+    --spc-green-dark: #5a8f00;
+    --spc-green-tint: #e8f5d0;
+
+    /* ━━ Surfaces ━━ */
+    --bg-page: #f8fafc;           /* slate-50 — page background */
+    --bg-card: #ffffff;           /* white — card surface */
+    --bg-subtle: #f8fafc;         /* subtle alt surface */
+    --bg-hover: #f1f5f9;          /* slate-100 — row/item hover */
+    --bg-sidebar: #0f172a;        /* slate-900 — REPLACES black sidebar */
+    --bg-sidebar-hover: #1e293b;  /* slate-800 — sidebar nav hover */
+    --bg-dark-card: #1e293b;      /* slate-800 — REPLACES #1a1a1a cards */
+
+    /* ━━ Text ━━ */
+    --text-primary: #0f172a;      /* slate-900 — REPLACES black text */
+    --text-secondary: #475569;    /* slate-600 — body */
+    --text-muted: #94a3b8;        /* slate-400 — metadata */
+    --text-disabled: #cbd5e1;     /* slate-300 */
+    --text-on-dark: #f8fafc;      /* slate-50 — on dark surfaces */
+    --text-on-dark-muted: #94a3b8;
+
+    /* ━━ Borders ━━ */
+    --border-default: #e2e8f0;    /* slate-200 — cards, dividers */
+    --border-subtle: #f1f5f9;     /* slate-100 — soft dividers */
+    --border-strong: #cbd5e1;     /* slate-300 — emphasis */
+    --border-focus: #76b900;      /* brand green */
+    --border-dark: #334155;       /* slate-700 — on dark surfaces */
+
+    /* ━━ Status (semantic) ━━ */
+    --status-healthy: #059669;
+    --status-healthy-bg: #ecfdf5;
+    --status-healthy-border: #a7f3d0;
+
+    --status-caution: #b45309;
+    --status-caution-bg: #fef3c7;
+
+    --status-warning: #d97706;
+    --status-warning-bg: #fffbeb;
+    --status-warning-border: #fcd34d;
+
+    --status-critical: #dc2626;
+    --status-critical-bg: #fef2f2;
+    --status-critical-border: #fca5a5;
+
+    --status-severe: #991b1b;
+    --status-severe-bg: #fee2e2;
+
+    --status-open-circuit: #7c3aed;
+    --status-open-circuit-bg: #f5f3ff;
+    --status-open-circuit-border: #c4b5fd;
+
+    --status-offline: #64748b;
+    --status-offline-bg: #f1f5f9;
+    --status-offline-border: #cbd5e1;
+
+    --status-info: #0046a4;
+    --status-info-bg: #eff6ff;
+    --status-info-border: #bfdbfe;
+
+    /* ━━ Shadows (slate-tinted, never pure black) ━━ */
+    --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
+    --shadow-hover: 0 4px 12px rgba(15, 23, 42, 0.10);
+    --shadow-modal: 0 20px 40px rgba(15, 23, 42, 0.15);
+
+    /* ━━ shadcn/ui compatibility (unchanged for Phase 1) ━━ */
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
   }
@@ -20,8 +93,11 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Custom scrollbar */
+/* Scrollbar — slate-tinted, matches design system */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }

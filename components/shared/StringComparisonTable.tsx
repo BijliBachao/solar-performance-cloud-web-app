@@ -1,7 +1,10 @@
 import { cn } from '@/lib/utils'
-import { StatusBadge } from './StatusBadge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { GAP_CRITICAL, GAP_INFO, type StringStatus } from '@/lib/string-health'
+import {
+  STATUS_STYLES,
+  statusKeyFromStringStatus,
+} from '@/lib/design-tokens'
 
 interface StringData {
   string_number: number
@@ -17,19 +20,23 @@ interface StringComparisonTableProps {
   strings: StringData[]
 }
 
-const rowStyle: Record<string, string> = {
-  CRITICAL: 'bg-red-50',
-  WARNING: 'bg-yellow-50',
-  OPEN_CIRCUIT: 'bg-red-100 font-semibold',
-  DISCONNECTED: 'bg-gray-100 font-semibold',
+/**
+ * Row tint + font-weight per string status. Tints are a lightened variant
+ * of the status background so the row reads as a status cue without
+ * competing with the badge/fg color in the Status cell.
+ */
+const rowTintByStatus: Record<StringStatus, string> = {
+  NORMAL: '',
+  WARNING: 'bg-amber-50/60',
+  CRITICAL: 'bg-red-50/60',
+  OPEN_CIRCUIT: 'bg-violet-50 font-semibold',
+  DISCONNECTED: 'bg-slate-100 font-semibold',
 }
 
-const statusLabel: Record<string, { text: string; color: string }> = {
-  NORMAL: { text: 'Normal', color: 'text-emerald-600' },
-  WARNING: { text: 'Warning', color: 'text-amber-600' },
-  CRITICAL: { text: 'Critical', color: 'text-red-600' },
-  OPEN_CIRCUIT: { text: 'Open Circuit', color: 'text-red-800' },
-  DISCONNECTED: { text: 'Disconnected', color: 'text-gray-700' },
+function gapColorClass(gap: number): string {
+  if (gap > GAP_CRITICAL) return STATUS_STYLES.critical.fg
+  if (gap > GAP_INFO) return STATUS_STYLES.warning.fg
+  return STATUS_STYLES.healthy.fg
 }
 
 export function StringComparisonTable({ strings }: StringComparisonTableProps) {
@@ -48,31 +55,25 @@ export function StringComparisonTable({ strings }: StringComparisonTableProps) {
       </TableHeader>
       <TableBody>
         {strings.map((s) => {
-          const sl = statusLabel[s.status] || statusLabel.NORMAL
+          const statusStyle = STATUS_STYLES[statusKeyFromStringStatus(s.status)]
           return (
-            <TableRow
-              key={s.string_number}
-              className={rowStyle[s.status] || ''}
-            >
-              <TableCell className="font-medium">PV{s.string_number}</TableCell>
-              <TableCell>{s.voltage.toFixed(1)}</TableCell>
-              <TableCell>{s.current.toFixed(2)}</TableCell>
-              <TableCell>{s.power.toFixed(1)}</TableCell>
-              <TableCell className="font-mono">{s.energy_kwh != null ? s.energy_kwh.toFixed(1) : '—'}</TableCell>
+            <TableRow key={s.string_number} className={rowTintByStatus[s.status]}>
+              <TableCell className="font-semibold font-mono text-slate-900">PV{s.string_number}</TableCell>
+              <TableCell className="font-mono text-slate-700">{s.voltage.toFixed(1)}</TableCell>
+              <TableCell className="font-mono text-slate-700">{s.current.toFixed(2)}</TableCell>
+              <TableCell className="font-mono text-slate-700">{s.power.toFixed(1)}</TableCell>
+              <TableCell className="font-mono text-slate-700">
+                {s.energy_kwh != null ? s.energy_kwh.toFixed(1) : '—'}
+              </TableCell>
               <TableCell>
-                <span
-                  className={cn(
-                    'font-medium',
-                    s.gap_percent > GAP_CRITICAL && 'text-red-600',
-                    s.gap_percent > GAP_INFO && s.gap_percent <= GAP_CRITICAL && 'text-yellow-600',
-                    s.gap_percent <= GAP_INFO && 'text-green-600'
-                  )}
-                >
+                <span className={cn('font-mono font-semibold', gapColorClass(s.gap_percent))}>
                   {s.gap_percent.toFixed(1)}%
                 </span>
               </TableCell>
               <TableCell>
-                <span className={cn('text-xs font-semibold', sl.color)}>{sl.text}</span>
+                <span className={cn('text-xs font-semibold', statusStyle.fg)}>
+                  {statusStyle.label}
+                </span>
               </TableCell>
             </TableRow>
           )

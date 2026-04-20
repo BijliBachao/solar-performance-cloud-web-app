@@ -1,8 +1,19 @@
 import { cn } from '@/lib/utils'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { AlertTriangle, CheckCircle, XCircle, Circle, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import {
+  AlertTriangle, CheckCircle, XCircle, Circle, HelpCircle, ChevronDown, ChevronUp,
+} from 'lucide-react'
 import { useState } from 'react'
-import { ACTIVE_CURRENT_THRESHOLD, HEALTH_HEALTHY, HEALTH_CAUTION, HEALTH_WARNING } from '@/lib/string-health'
+import {
+  ACTIVE_CURRENT_THRESHOLD,
+  HEALTH_HEALTHY,
+  HEALTH_CAUTION,
+  HEALTH_WARNING,
+} from '@/lib/string-health'
+import {
+  STATUS_STYLES,
+  type StatusKey,
+} from '@/lib/design-tokens'
 
 interface Diagnosis {
   issue: string
@@ -32,23 +43,23 @@ interface MonthlyHealthReportProps {
   inverterAvgCurrent?: number
 }
 
-function getAlertColor(count: number): string {
-  if (count === 0) return 'text-gray-400'
-  if (count <= 5) return 'text-orange-500'
-  return 'text-red-600 font-semibold'
+function getAlertCountClass(count: number): string {
+  if (count === 0) return 'text-slate-400'
+  if (count <= 5) return 'text-amber-600'
+  return 'text-red-700 font-bold'
 }
 
 function getStatusIcon(data: MonthlyHealthData) {
   if (data.trend === 'offline' || data.avg_current < ACTIVE_CURRENT_THRESHOLD) {
-    return <Circle className="w-4 h-4 text-gray-400" />
+    return <Circle className="w-4 h-4 text-slate-400" strokeWidth={2} />
   }
   if (data.avg_health_score < HEALTH_WARNING) {
-    return <XCircle className="w-4 h-4 text-red-500" />
+    return <XCircle className={cn('w-4 h-4', STATUS_STYLES.critical.fg)} strokeWidth={2} />
   }
   if (data.avg_health_score < HEALTH_HEALTHY) {
-    return <AlertTriangle className="w-4 h-4 text-amber-500" />
+    return <AlertTriangle className={cn('w-4 h-4', STATUS_STYLES.warning.fg)} strokeWidth={2} />
   }
-  return <CheckCircle className="w-4 h-4 text-emerald-500" />
+  return <CheckCircle className={cn('w-4 h-4', STATUS_STYLES.healthy.fg)} strokeWidth={2} />
 }
 
 function getStatusLabel(data: MonthlyHealthData): string {
@@ -58,11 +69,21 @@ function getStatusLabel(data: MonthlyHealthData): string {
   return 'Healthy'
 }
 
+/**
+ * Segmented health bar (4 cells). Filled segments use STATUS_STYLES.*.dot
+ * so the color vocabulary matches the rest of the app.
+ */
 function HealthBar({ score }: { score: number }) {
   const segments = 4
-  // Cap score at 100 for display
   const cappedScore = Math.min(100, score)
   const filledSegments = Math.round((cappedScore / 100) * segments)
+
+  const filledDotClass =
+    cappedScore >= HEALTH_HEALTHY
+      ? STATUS_STYLES.healthy.dot
+      : cappedScore >= HEALTH_WARNING
+        ? STATUS_STYLES.warning.dot
+        : STATUS_STYLES.critical.dot
 
   return (
     <div className="flex items-center gap-1.5 whitespace-nowrap">
@@ -71,17 +92,13 @@ function HealthBar({ score }: { score: number }) {
           <div
             key={i}
             className={cn(
-              'w-2.5 h-3 rounded-sm flex-shrink-0',
-              i < filledSegments
-                ? cappedScore >= HEALTH_HEALTHY ? 'bg-emerald-500'
-                  : cappedScore >= HEALTH_WARNING ? 'bg-amber-500'
-                  : 'bg-red-500'
-                : 'bg-gray-200'
+              'w-2.5 h-3 rounded-sm shrink-0',
+              i < filledSegments ? filledDotClass : 'bg-slate-200',
             )}
           />
         ))}
       </div>
-      <span className="text-xs text-gray-600 ml-1 whitespace-nowrap">
+      <span className="text-xs font-mono text-slate-700 ml-1 whitespace-nowrap">
         {cappedScore > 0 ? `${Math.round(cappedScore)}%` : '—'}
       </span>
     </div>
@@ -89,105 +106,105 @@ function HealthBar({ score }: { score: number }) {
 }
 
 function TrendBadge({ trend }: { trend: MonthlyHealthData['trend'] }) {
-  const styles: Record<typeof trend, string> = {
-    stable: 'text-gray-500',
-    improving: 'text-emerald-600',
-    declining: 'text-red-500',
-    offline: 'text-gray-400'
+  const styleByTrend: Record<typeof trend, string> = {
+    stable: 'text-slate-500',
+    improving: STATUS_STYLES.healthy.fg,
+    declining: STATUS_STYLES.critical.fg,
+    offline: 'text-slate-400',
   }
-  const labels: Record<typeof trend, string> = {
+  const label: Record<typeof trend, string> = {
     stable: 'Stable',
     improving: 'Improving',
     declining: 'Declining',
-    offline: 'Offline'
+    offline: 'Offline',
   }
   return (
-    <span className={cn('text-[10px]', styles[trend])}>
-      {labels[trend]}
+    <span className={cn('text-[10px] font-semibold', styleByTrend[trend])}>
+      {label[trend]}
     </span>
   )
 }
 
-// Help Guide Component
+// Help Guide — collapsible explanation panel
 function HealthGuide({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) {
+  const info = STATUS_STYLES.info
   return (
-    <div className="mb-4 border border-blue-200 rounded-lg overflow-hidden">
+    <div className={cn('mb-4 border rounded-sm overflow-hidden', info.border)}>
       <button
         onClick={onToggle}
-        className="w-full px-3 py-2 bg-blue-50 flex items-center justify-between text-left hover:bg-blue-100 transition-colors"
+        className={cn(
+          'w-full px-3 py-2 flex items-center justify-between text-left transition-colors',
+          info.bg,
+          'hover:bg-blue-100',
+        )}
       >
         <div className="flex items-center gap-2">
-          <HelpCircle className="w-4 h-4 text-blue-600" />
-          <span className="text-xs font-medium text-blue-800">Understanding This Report</span>
+          <HelpCircle className={cn('w-4 h-4', info.fg)} strokeWidth={2} />
+          <span className={cn('text-xs font-bold', info.fg)}>Understanding This Report</span>
         </div>
         {isOpen ? (
-          <ChevronUp className="w-4 h-4 text-blue-600" />
+          <ChevronUp className={cn('w-4 h-4', info.fg)} strokeWidth={2} />
         ) : (
-          <ChevronDown className="w-4 h-4 text-blue-600" />
+          <ChevronDown className={cn('w-4 h-4', info.fg)} strokeWidth={2} />
         )}
       </button>
 
       {isOpen && (
         <div className="p-3 bg-white text-xs space-y-3">
-          {/* What This Report Shows */}
           <div>
-            <h4 className="font-semibold text-gray-800 mb-1">What This Report Shows</h4>
-            <p className="text-gray-600">
+            <h4 className="font-bold text-slate-900 mb-1">What This Report Shows</h4>
+            <p className="text-slate-600">
               Each PV string (group of panels) should produce similar current. This report compares
               strings to detect problems like dirty panels, shading, or faulty connections.
             </p>
           </div>
 
-          {/* Column Explanations */}
           <div>
-            <h4 className="font-semibold text-gray-800 mb-1">Column Guide</h4>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-600">
-              <div><span className="font-medium">Current:</span> Avg amps this month</div>
-              <div><span className="font-medium">Uptime:</span> % of daylight hours active</div>
-              <div><span className="font-medium">Alerts:</span> Issues detected this month</div>
-              <div><span className="font-medium">Health:</span> Performance vs other strings</div>
+            <h4 className="font-bold text-slate-900 mb-1">Column Guide</h4>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-600">
+              <div><span className="font-semibold">Current:</span> Avg amps this month</div>
+              <div><span className="font-semibold">Uptime:</span> % of daylight hours active</div>
+              <div><span className="font-semibold">Alerts:</span> Issues detected this month</div>
+              <div><span className="font-semibold">Health:</span> Performance vs other strings</div>
             </div>
           </div>
 
-          {/* Problem Detection */}
           <div>
-            <h4 className="font-semibold text-gray-800 mb-1">What We Detect</h4>
-            <div className="grid grid-cols-1 gap-1 text-gray-600">
+            <h4 className="font-bold text-slate-900 mb-1">What We Detect</h4>
+            <div className="grid grid-cols-1 gap-1 text-slate-600">
               <div className="flex items-center gap-2">
-                <XCircle className="w-3 h-3 text-red-500 flex-shrink-0" />
-                <span><span className="font-medium">Critical:</span> &lt;50% performance — faulty panel, major issue</span>
+                <XCircle className={cn('w-3 h-3 shrink-0', STATUS_STYLES.critical.fg)} strokeWidth={2} />
+                <span><span className="font-semibold">Critical:</span> &lt;50% performance — faulty panel, major issue</span>
               </div>
               <div className="flex items-center gap-2">
-                <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0" />
-                <span><span className="font-medium">Warning:</span> &lt;75% performance — dirty panels, shading</span>
+                <AlertTriangle className={cn('w-3 h-3 shrink-0', STATUS_STYLES.warning.fg)} strokeWidth={2} />
+                <span><span className="font-semibold">Warning:</span> &lt;75% performance — dirty panels, shading</span>
               </div>
               <div className="flex items-center gap-2">
-                <Circle className="w-3 h-3 text-blue-500 flex-shrink-0" />
-                <span><span className="font-medium">Monitor:</span> &lt;90% performance — minor dust, watch trend</span>
+                <Circle className={cn('w-3 h-3 shrink-0', STATUS_STYLES.info.fg)} strokeWidth={2} />
+                <span><span className="font-semibold">Monitor:</span> &lt;90% performance — minor dust, watch trend</span>
               </div>
               <div className="flex items-center gap-2">
-                <Circle className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                <span><span className="font-medium">Offline:</span> No output — disconnected or not installed</span>
+                <Circle className="w-3 h-3 text-slate-400 shrink-0" strokeWidth={2} />
+                <span><span className="font-semibold">Offline:</span> No output — disconnected or not installed</span>
               </div>
             </div>
           </div>
 
-          {/* Shading Detection */}
           <div>
-            <h4 className="font-semibold text-gray-800 mb-1">Tree Shadow Detection</h4>
-            <p className="text-gray-600">
+            <h4 className="font-bold text-slate-900 mb-1">Tree Shadow Detection</h4>
+            <p className="text-slate-600">
               If a string drops 15%+ at specific hours (e.g., 3-5 PM) while others don&apos;t,
               it&apos;s likely shaded by a tree or building. The report shows affected hours.
             </p>
           </div>
 
-          {/* Trend */}
           <div>
-            <h4 className="font-semibold text-gray-800 mb-1">Trend Indicators</h4>
-            <div className="flex gap-4 text-gray-600">
-              <span><span className="text-emerald-600">Improving</span> — Getting better</span>
-              <span><span className="text-gray-500">Stable</span> — No change</span>
-              <span><span className="text-red-500">Declining</span> — Getting worse</span>
+            <h4 className="font-bold text-slate-900 mb-1">Trend Indicators</h4>
+            <div className="flex gap-4 text-slate-600">
+              <span><span className={STATUS_STYLES.healthy.fg}>Improving</span> — Getting better</span>
+              <span><span className="text-slate-500">Stable</span> — No change</span>
+              <span><span className={STATUS_STYLES.critical.fg}>Declining</span> — Getting worse</span>
             </div>
           </div>
         </div>
@@ -196,12 +213,20 @@ function HealthGuide({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => vo
   )
 }
 
+/** Severity badges for diagnosis buckets (critical / warning / info / offline). */
+const SEVERITY_KEY: Record<Diagnosis['severity'], StatusKey> = {
+  critical: 'critical',
+  warning: 'warning',
+  info: 'info',
+  offline: 'offline',
+}
+
 export function MonthlyHealthReport({ data, inverterAvgCurrent }: MonthlyHealthReportProps) {
   const [showGuide, setShowGuide] = useState(false)
 
   if (!data || data.length === 0) {
     return (
-      <p className="text-center text-gray-500 py-4">
+      <p className="text-center text-slate-500 py-4">
         No health data available for this period.
       </p>
     )
@@ -225,26 +250,32 @@ export function MonthlyHealthReport({ data, inverterAvgCurrent }: MonthlyHealthR
         <div className="flex items-center gap-4">
           {healthyCount > 0 && (
             <span className="flex items-center gap-1">
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-              <span className="text-gray-600">{healthyCount} Healthy</span>
+              <CheckCircle className={cn('w-3.5 h-3.5', STATUS_STYLES.healthy.fg)} strokeWidth={2} />
+              <span className="text-slate-600">
+                <span className="font-mono font-semibold text-slate-900">{healthyCount}</span> Healthy
+              </span>
             </span>
           )}
           {issueCount > 0 && (
             <span className="flex items-center gap-1">
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-              <span className="text-gray-600">{issueCount} Need Attention</span>
+              <AlertTriangle className={cn('w-3.5 h-3.5', STATUS_STYLES.warning.fg)} strokeWidth={2} />
+              <span className="text-slate-600">
+                <span className="font-mono font-semibold text-slate-900">{issueCount}</span> Need Attention
+              </span>
             </span>
           )}
           {offlineCount > 0 && (
             <span className="flex items-center gap-1">
-              <Circle className="w-3.5 h-3.5 text-gray-400" />
-              <span className="text-gray-600">{offlineCount} Offline</span>
+              <Circle className="w-3.5 h-3.5 text-slate-400" strokeWidth={2} />
+              <span className="text-slate-600">
+                <span className="font-mono font-semibold text-slate-900">{offlineCount}</span> Offline
+              </span>
             </span>
           )}
         </div>
         {inverterAvgCurrent !== undefined && inverterAvgCurrent > 0 && (
-          <div className="text-gray-500">
-            Avg: <span className="font-medium text-gray-700">{inverterAvgCurrent.toFixed(2)}A</span>
+          <div className="text-slate-500">
+            Avg: <span className="font-mono font-semibold text-slate-900">{inverterAvgCurrent.toFixed(2)}A</span>
           </div>
         )}
       </div>
@@ -266,34 +297,34 @@ export function MonthlyHealthReport({ data, inverterAvgCurrent }: MonthlyHealthR
             {data.map((row) => (
               <TableRow
                 key={row.string_number}
-                className={cn(
-                  row.diagnosis && 'bg-amber-50/50'
-                )}
+                className={row.diagnosis ? 'bg-amber-50/40' : ''}
               >
-                <TableCell className="font-medium text-gray-900">
+                <TableCell className="font-semibold font-mono text-slate-900">
                   PV{row.string_number}
                 </TableCell>
                 <TableCell>
                   {row.avg_current > 0 ? (
-                    <span className="text-gray-700">{row.avg_current.toFixed(2)}A</span>
+                    <span className="font-mono text-slate-700">{row.avg_current.toFixed(2)}A</span>
                   ) : (
-                    <span className="text-gray-400">0.00A</span>
+                    <span className="font-mono text-slate-400">0.00A</span>
                   )}
                 </TableCell>
                 <TableCell>
                   <span
                     className={cn(
-                      'text-xs',
-                      row.uptime_percent >= HEALTH_HEALTHY ? 'text-emerald-600'
-                        : row.uptime_percent >= HEALTH_CAUTION ? 'text-amber-600'
-                        : 'text-red-500'
+                      'text-xs font-mono font-semibold',
+                      row.uptime_percent >= HEALTH_HEALTHY
+                        ? STATUS_STYLES.healthy.fg
+                        : row.uptime_percent >= HEALTH_CAUTION
+                          ? STATUS_STYLES.warning.fg
+                          : STATUS_STYLES.critical.fg,
                     )}
                   >
                     {row.uptime_percent > 0 ? `${Math.round(row.uptime_percent)}%` : '—'}
                   </span>
                 </TableCell>
                 <TableCell>
-                  <span className={getAlertColor(row.alert_count)}>
+                  <span className={cn('font-mono', getAlertCountClass(row.alert_count))}>
                     {row.alert_count}
                   </span>
                 </TableCell>
@@ -304,7 +335,7 @@ export function MonthlyHealthReport({ data, inverterAvgCurrent }: MonthlyHealthR
                   <div className="flex flex-col">
                     <div className="flex items-center gap-1.5">
                       {getStatusIcon(row)}
-                      <span className="text-xs text-gray-600">
+                      <span className="text-xs text-slate-700">
                         {getStatusLabel(row)}
                       </span>
                     </div>
@@ -323,101 +354,51 @@ export function MonthlyHealthReport({ data, inverterAvgCurrent }: MonthlyHealthR
       {issueStrings.length > 0 && (() => {
         const severityOrder = { critical: 0, warning: 1, info: 2, offline: 3 }
         const sortedIssues = [...issueStrings].sort((a, b) =>
-          (severityOrder[a.diagnosis!.severity] || 4) - (severityOrder[b.diagnosis!.severity] || 4)
+          (severityOrder[a.diagnosis!.severity] || 4) - (severityOrder[b.diagnosis!.severity] || 4),
         )
-        const criticalCount = sortedIssues.filter(s => s.diagnosis!.severity === 'critical').length
-        const warningCount = sortedIssues.filter(s => s.diagnosis!.severity === 'warning').length
-        const infoCount = sortedIssues.filter(s => s.diagnosis!.severity === 'info').length
-        const offlineCount = sortedIssues.filter(s => s.diagnosis!.severity === 'offline').length
+        const buckets: Array<{
+          severity: Diagnosis['severity']
+          icon: any
+          label: string
+        }> = [
+          { severity: 'critical', icon: XCircle, label: 'Critical' },
+          { severity: 'warning', icon: AlertTriangle, label: 'Warning' },
+          { severity: 'info', icon: Circle, label: 'Monitor' },
+          { severity: 'offline', icon: Circle, label: 'Offline' },
+        ]
 
         return (
           <div className="mt-4 space-y-3">
-            {/* Critical Issues */}
-            {criticalCount > 0 && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <XCircle className="w-4 h-4 text-red-600" />
-                  <span className="text-sm font-medium text-red-800">
-                    Critical ({criticalCount})
-                  </span>
+            {buckets.map(({ severity, icon: Icon, label }) => {
+              const rows = sortedIssues.filter(s => s.diagnosis!.severity === severity)
+              if (rows.length === 0) return null
+              const style = STATUS_STYLES[SEVERITY_KEY[severity]]
+              return (
+                <div
+                  key={severity}
+                  className={cn('p-3 rounded-sm border', style.bg, style.border)}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Icon className={cn('w-4 h-4', style.fg)} strokeWidth={2} />
+                    <span className={cn('text-sm font-bold', style.fg)}>
+                      {label} ({rows.length})
+                    </span>
+                  </div>
+                  <ul className="space-y-1">
+                    {rows.map((row) => (
+                      <li key={row.string_number} className="text-xs text-slate-700">
+                        <span className="font-mono font-semibold text-slate-900">PV{row.string_number}:</span>{' '}
+                        <span className={style.fg}>{row.diagnosis!.issue}</span>
+                        {' — '}<span className="text-slate-600">{row.diagnosis!.action}</span>
+                        {severity === 'warning' && row.alert_count > 0 && (
+                          <span className="text-slate-400 ml-1 font-mono">({row.alert_count} alerts)</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <ul className="space-y-1">
-                  {sortedIssues.filter(s => s.diagnosis!.severity === 'critical').map((row) => (
-                    <li key={row.string_number} className="text-xs text-gray-700">
-                      <span className="font-medium">PV{row.string_number}:</span>{' '}
-                      <span className="text-red-700">{row.diagnosis!.issue}</span>
-                      {' — '}<span className="text-gray-600">{row.diagnosis!.action}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Warning Issues */}
-            {warningCount > 0 && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-600" />
-                  <span className="text-sm font-medium text-amber-800">
-                    Warning ({warningCount})
-                  </span>
-                </div>
-                <ul className="space-y-1">
-                  {sortedIssues.filter(s => s.diagnosis!.severity === 'warning').map((row) => (
-                    <li key={row.string_number} className="text-xs text-gray-700">
-                      <span className="font-medium">PV{row.string_number}:</span>{' '}
-                      <span className="text-amber-700">{row.diagnosis!.issue}</span>
-                      {' — '}<span className="text-gray-600">{row.diagnosis!.action}</span>
-                      {row.alert_count > 0 && (
-                        <span className="text-gray-400 ml-1">({row.alert_count} alerts)</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Info Issues */}
-            {infoCount > 0 && (
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <Circle className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-medium text-blue-800">
-                    Monitor ({infoCount})
-                  </span>
-                </div>
-                <ul className="space-y-1">
-                  {sortedIssues.filter(s => s.diagnosis!.severity === 'info').map((row) => (
-                    <li key={row.string_number} className="text-xs text-gray-700">
-                      <span className="font-medium">PV{row.string_number}:</span>{' '}
-                      <span className="text-blue-700">{row.diagnosis!.issue}</span>
-                      {' — '}<span className="text-gray-600">{row.diagnosis!.action}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Offline Issues */}
-            {offlineCount > 0 && (
-              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <Circle className="w-4 h-4 text-gray-500" />
-                  <span className="text-sm font-medium text-gray-700">
-                    Offline ({offlineCount})
-                  </span>
-                </div>
-                <ul className="space-y-1">
-                  {sortedIssues.filter(s => s.diagnosis!.severity === 'offline').map((row) => (
-                    <li key={row.string_number} className="text-xs text-gray-700">
-                      <span className="font-medium">PV{row.string_number}:</span>{' '}
-                      <span className="text-gray-600">{row.diagnosis!.issue}</span>
-                      {' — '}<span className="text-gray-500">{row.diagnosis!.action}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+              )
+            })}
           </div>
         )
       })()}

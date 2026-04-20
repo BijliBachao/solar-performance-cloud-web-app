@@ -150,7 +150,7 @@ export default function PlantPreviewPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5]">
+    <div className="min-h-screen bg-slate-50">
       <PlantHeader
         plantName="Gulberg 5t"
         healthState={3}
@@ -167,7 +167,7 @@ export default function PlantPreviewPage() {
         onRefresh={() => {}}
       />
 
-      <div className="px-4 sm:px-6 py-5 space-y-5 max-w-[1400px] mx-auto">
+      <div className="px-4 sm:px-6 py-5 space-y-5 max-w-[1440px] mx-auto">
         {/* Inverter 1 */}
         <InverterDetailSection
           device={INV1}

@@ -20,12 +20,33 @@ interface StringTrendChartProps {
   data: TrendDataPoint[]
 }
 
-const COLORS = [
-  '#22c55e', '#3b82f6', '#f97316', '#ef4444', '#8b5cf6',
-  '#06b6d4', '#ec4899', '#84cc16', '#f59e0b', '#6366f1',
-  '#14b8a6', '#e11d48', '#a855f7', '#0ea5e9', '#d97706',
-  '#10b981', '#7c3aed', '#f43f5e', '#059669', '#2563eb',
-  '#dc2626', '#4f46e5', '#16a34a', '#ca8a04',
+// Distinct palette for overlaid trend lines. Values chosen to be readable
+// on a white background and remain distinguishable when many strings overlap.
+const TREND_LINE_COLORS = [
+  '#76b900', // spc-green
+  '#2563eb', // blue-600
+  '#ea580c', // orange-600
+  '#dc2626', // red-600
+  '#7c3aed', // violet-600
+  '#0891b2', // cyan-600
+  '#be185d', // pink-700
+  '#65a30d', // lime-600
+  '#d97706', // amber-600
+  '#4f46e5', // indigo-600
+  '#0d9488', // teal-600
+  '#e11d48', // rose-600
+  '#a855f7', // purple-500
+  '#0284c7', // sky-600
+  '#b45309', // amber-700
+  '#059669', // emerald-600
+  '#6d28d9', // violet-700
+  '#f43f5e', // rose-500
+  '#047857', // emerald-700
+  '#1d4ed8', // blue-700
+  '#b91c1c', // red-700
+  '#4338ca', // indigo-700
+  '#16a34a', // green-600
+  '#a16207', // yellow-700
 ]
 
 export function StringTrendChart({ data }: StringTrendChartProps) {
@@ -54,25 +75,41 @@ export function StringTrendChart({ data }: StringTrendChartProps) {
           data={chartData}
           margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-          <XAxis dataKey="time" tick={{ fontSize: 11 }} />
+          <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+          <XAxis
+            dataKey="time"
+            tick={{ fontSize: 11, fill: '#94A3B8' }}
+            axisLine={{ stroke: '#E2E8F0' }}
+            tickLine={false}
+          />
           <YAxis
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 11, fill: '#94A3B8' }}
+            axisLine={false}
+            tickLine={false}
             label={{
               value: 'Current (A)',
               angle: -90,
               position: 'insideLeft',
-              style: { fontSize: 12 },
+              style: { fontSize: 11, fill: '#475569' },
             }}
           />
-          <Tooltip />
-          <Legend />
+          <Tooltip
+            contentStyle={{
+              fontSize: 12,
+              borderRadius: 2,
+              border: '1px solid #E2E8F0',
+              backgroundColor: '#FFFFFF',
+              color: '#0F172A',
+            }}
+            labelStyle={{ color: '#475569', fontWeight: 600 }}
+          />
+          <Legend wrapperStyle={{ fontSize: 11 }} />
           {stringNumbers.map((num, idx) => (
             <Line
               key={num}
               type="monotone"
               dataKey={`PV${num}`}
-              stroke={COLORS[idx % COLORS.length]}
+              stroke={TREND_LINE_COLORS[idx % TREND_LINE_COLORS.length]}
               strokeWidth={2}
               dot={false}
               activeDot={{ r: 4 }}

@@ -9,7 +9,7 @@ import { PlantHeader } from '@/components/shared/PlantHeader'
 import { InverterDetailSection } from '@/components/shared/InverterDetailSection'
 import { AlertHistoryLog } from '@/components/shared/AlertHistoryLog'
 import {
-  Loader2, AlertTriangle, RefreshCw, ArrowLeft, Activity, ClipboardList,
+  AlertTriangle, RefreshCw, ArrowLeft, Activity, ClipboardList,
 } from 'lucide-react'
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -174,8 +174,8 @@ export function PlantDetailView({
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-5 h-5 border-2 border-[#76b900] border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs text-[#898989] mt-2">Loading plant data...</p>
+          <div className="w-5 h-5 border-2 border-spc-green border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs font-semibold text-slate-400 mt-2">Loading plant data...</p>
         </div>
       </div>
     )
@@ -187,14 +187,14 @@ export function PlantDetailView({
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
-          <AlertTriangle className="w-8 h-8 text-red-300 mx-auto mb-3" />
-          <p className="text-red-500 mb-4 text-sm">{error || 'Plant not found'}</p>
+          <AlertTriangle className="w-8 h-8 text-red-600 mx-auto mb-3" strokeWidth={2} />
+          <p className="text-red-700 mb-4 text-sm font-semibold">{error || 'Plant not found'}</p>
           <div className="flex gap-2 justify-center">
             <Button variant="outline" size="sm" onClick={() => router.push(backPath)}>
-              <ArrowLeft className="h-4 w-4 mr-1" /> {backLabel}
+              <ArrowLeft className="h-4 w-4 mr-1" strokeWidth={2} /> {backLabel}
             </Button>
             <Button variant="outline" size="sm" onClick={() => fetchPlantData()}>
-              <RefreshCw className="h-4 w-4 mr-1" /> Retry
+              <RefreshCw className="h-4 w-4 mr-1" strokeWidth={2} /> Retry
             </Button>
           </div>
         </div>
@@ -205,7 +205,7 @@ export function PlantDetailView({
   // ─── Render ────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5]">
+    <div className="min-h-screen bg-slate-50">
       <PlantHeader
         plantName={plant.plant_name}
         healthState={plant.health_state}
@@ -224,20 +224,20 @@ export function PlantDetailView({
         onRefresh={handleRefresh}
       />
 
-      <div className="px-4 sm:px-6 py-5 max-w-[1400px] mx-auto">
+      <div className="px-4 sm:px-6 py-5 max-w-[1440px] mx-auto">
         <Tabs defaultValue="overview" className="w-full">
           <TabsList className="mb-5">
             <TabsTrigger value="overview" className="flex items-center gap-1.5">
-              <Activity className="w-4 h-4" />
+              <Activity className="w-4 h-4" strokeWidth={2} />
               Overview
             </TabsTrigger>
             <TabsTrigger value="history" className="flex items-center gap-1.5">
-              <ClipboardList className="w-4 h-4" />
+              <ClipboardList className="w-4 h-4" strokeWidth={2} />
               Alert History
             </TabsTrigger>
           </TabsList>
 
-          {/* Overview Tab - Existing Content */}
+          {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-5">
             {/* Per-Inverter Sections */}
             {plant.devices.map((device, index) => {
@@ -265,18 +265,20 @@ export function PlantDetailView({
 
             {/* Empty state if no inverters */}
             {plant.devices.length === 0 && (
-              <div className="bg-[#1a1a1a] rounded-sm p-8 text-center">
-                <Activity className="w-8 h-8 text-[#333] mx-auto mb-3" />
-                <p className="text-sm font-bold text-[#5e5e5e]">No inverters found</p>
-                <p className="text-[11px] text-[#525252] mt-1">Devices will appear once the poller syncs from your inverter provider.</p>
+              <div className="bg-white rounded-sm border border-slate-200 p-8 text-center">
+                <Activity className="w-8 h-8 text-slate-300 mx-auto mb-3" strokeWidth={2} />
+                <p className="text-sm font-bold text-slate-600">No inverters found</p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Devices will appear once the poller syncs from your inverter provider.
+                </p>
               </div>
             )}
           </TabsContent>
 
           {/* Alert History Tab */}
           <TabsContent value="history">
-            <div className="bg-white rounded-sm border border-gray-200 p-5">
-              <h2 className="text-base font-bold text-gray-900 mb-4">Alert History</h2>
+            <div className="bg-white rounded-sm border border-slate-200 p-5">
+              <h2 className="text-base font-bold text-slate-900 mb-4">Alert History</h2>
               <AlertHistoryLog
                 plantId={plantCode}
                 showResolveButton={showResolveAlerts}

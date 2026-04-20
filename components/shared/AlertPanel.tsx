@@ -1,7 +1,13 @@
 'use client'
+
 import { cn } from '@/lib/utils'
 import { format, differenceInMinutes, differenceInHours, differenceInDays } from 'date-fns'
-import { AlertTriangle, Info, XCircle, CheckCircle, Clock, Calendar } from 'lucide-react'
+import { AlertTriangle, Info, XCircle, CheckCircle } from 'lucide-react'
+import {
+  STATUS_STYLES,
+  statusKeyFromSeverity,
+  type StatusKey,
+} from '@/lib/design-tokens'
 
 interface Alert {
   id: number
@@ -20,25 +26,28 @@ interface AlertPanelProps {
   onResolve?: (id: number) => void
 }
 
-const severityConfig: Record<string, { icon: any; accent: string; badge: string; label: string }> = {
-  CRITICAL: {
-    icon: XCircle,
-    accent: 'border-l-[#e52020]',
-    badge: 'text-[#e52020]',
-    label: 'CRITICAL',
-  },
-  WARNING: {
-    icon: AlertTriangle,
-    accent: 'border-l-[#ef9100]',
-    badge: 'text-[#ef9100]',
-    label: 'WARNING',
-  },
-  INFO: {
-    icon: Info,
-    accent: 'border-l-[#0046a4]',
-    badge: 'text-[#5e9ed6]',
-    label: 'INFO',
-  },
+/**
+ * Per-severity icon + left-border-accent color class.
+ * The left-border color maps to the vivid dot variant of the status so the
+ * accent reads as "this item is critical" at a glance without repeating the
+ * background wash color.
+ */
+const ICONS_BY_KEY: Record<StatusKey, any> = {
+  critical: XCircle,
+  warning: AlertTriangle,
+  info: Info,
+  healthy: CheckCircle,
+  offline: Info,
+  'open-circuit': XCircle,
+}
+
+const LEFT_BORDER_BY_KEY: Record<StatusKey, string> = {
+  critical: 'border-l-red-600',
+  warning: 'border-l-amber-600',
+  info: 'border-l-blue-700',
+  healthy: 'border-l-emerald-600',
+  offline: 'border-l-slate-500',
+  'open-circuit': 'border-l-violet-600',
 }
 
 function formatDuration(createdAt: string): string {
@@ -66,8 +75,8 @@ export function AlertPanel({ alerts, onResolve }: AlertPanelProps) {
   if (alerts.length === 0) {
     return (
       <div className="text-center py-10">
-        <CheckCircle className="h-6 w-6 mx-auto mb-2 text-[#333]" />
-        <p className="text-xs font-bold text-[#5e5e5e]">No active alerts</p>
+        <CheckCircle className="h-6 w-6 mx-auto mb-2 text-slate-300" strokeWidth={2} />
+        <p className="text-xs font-bold text-slate-500">No active alerts</p>
       </div>
     )
   }
@@ -80,44 +89,58 @@ export function AlertPanel({ alerts, onResolve }: AlertPanelProps) {
   })
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5">
       {sorted.map((alert) => {
-        const config = severityConfig[alert.severity] || severityConfig.INFO
-        const Icon = config.icon
+        const key = statusKeyFromSeverity(alert.severity)
+        const style = STATUS_STYLES[key]
+        const Icon = ICONS_BY_KEY[key]
+        const leftBorder = LEFT_BORDER_BY_KEY[key]
 
         return (
           <div
             key={alert.id}
             className={cn(
-              'border-l-[3px] bg-[#252525] rounded-sm px-4 py-3',
-              config.accent
+              'bg-white rounded-sm border border-slate-200 border-l-[3px] px-4 py-3',
+              leftBorder,
             )}
           >
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className={cn('text-[10px] font-bold uppercase tracking-widest', config.badge)}>
-                    {config.label}
-                  </span>
-                  <span className="text-xs font-bold text-white">
-                    {alert.device_name ? `${alert.device_name} → ` : ''}PV{alert.string_number}
-                  </span>
-                  {alert.gap_percent != null && (
-                    <span className="text-[10px] font-mono text-[#898989]">
-                      {Number(alert.gap_percent).toFixed(1)}% below avg
+              <div className="flex items-start gap-2.5 min-w-0">
+                <Icon className={cn('w-4 h-4 mt-0.5 shrink-0', style.fg)} strokeWidth={2} />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span
+                      className={cn(
+                        'text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-sm',
+                        style.bg,
+                        style.fg,
+                      )}
+                    >
+                      {alert.severity}
                     </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-3 mt-1.5 text-[10px] text-[#5e5e5e]">
-                  <span>{formatStartTime(alert.created_at)}</span>
-                  <span className="font-bold text-[#898989]">{formatDuration(alert.created_at)}</span>
+                    <span className="text-xs font-bold text-slate-900">
+                      {alert.device_name ? `${alert.device_name} → ` : ''}PV{alert.string_number}
+                    </span>
+                    {alert.gap_percent != null && (
+                      <span className="text-[10px] font-mono text-slate-500">
+                        {Number(alert.gap_percent).toFixed(1)}% below avg
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-500">
+                    <span>{formatStartTime(alert.created_at)}</span>
+                    <span className="font-bold text-slate-600">{formatDuration(alert.created_at)}</span>
+                  </div>
                 </div>
               </div>
 
               {onResolve && (
                 <button
-                  onClick={(e) => { e.stopPropagation(); onResolve(alert.id) }}
-                  className="flex-shrink-0 text-[10px] font-bold text-[#76b900] border border-[#76b900] rounded-sm px-2 py-1 hover:bg-[#76b900] hover:text-black transition-colors uppercase tracking-wider"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onResolve(alert.id)
+                  }}
+                  className="shrink-0 text-[10px] font-bold text-spc-green border-2 border-spc-green rounded-sm px-2 py-1 hover:bg-spc-green hover:text-white transition-colors uppercase tracking-wider"
                 >
                   Resolve
                 </button>

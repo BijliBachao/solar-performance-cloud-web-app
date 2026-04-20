@@ -3,8 +3,11 @@
 import { cn } from '@/lib/utils'
 import { GAP_WARNING, GAP_INFO, type StringStatus } from '@/lib/string-health'
 import {
-  Droplets, TreePine, Wrench,
-  Unplug, PlugZap, TrendingDown, CheckCircle, Cable,
+  STATUS_STYLES,
+  type StatusKey,
+} from '@/lib/design-tokens'
+import {
+  Droplets, TreePine, Wrench, PlugZap, CheckCircle, Cable,
 } from 'lucide-react'
 
 interface StringData {
@@ -21,16 +24,18 @@ interface FaultDiagnosisPanelProps {
   avgCurrent: number
 }
 
+type DiagSeverity = 'critical' | 'warning' | 'info'
+
 interface Diagnosis {
   stringNumbers: number[]
-  severity: 'CRITICAL' | 'WARNING' | 'INFO'
+  severity: DiagSeverity
   cause: string
   pattern: string
   action: string
   icon: any
 }
 
-function diagnoseStrings(strings: StringData[], avgCurrent: number): Diagnosis[] {
+function diagnoseStrings(strings: StringData[], _avgCurrent: number): Diagnosis[] {
   const diagnoses: Diagnosis[] = []
 
   // ── Open Circuit: voltage present, no current (wiring fault) ──
@@ -38,7 +43,7 @@ function diagnoseStrings(strings: StringData[], avgCurrent: number): Diagnosis[]
   if (openCircuit.length > 0) {
     diagnoses.push({
       stringNumbers: openCircuit.map(s => s.string_number),
-      severity: 'CRITICAL',
+      severity: 'critical',
       cause: 'Open Circuit — No Current Flow',
       pattern: `Voltage present (${openCircuit[0].voltage.toFixed(0)}V) but 0A current — panels connected but current cannot flow`,
       action: 'Check MC4 connectors, string fuses, and combiner box switches. Inspect for loose or corroded connections.',
@@ -51,7 +56,7 @@ function diagnoseStrings(strings: StringData[], avgCurrent: number): Diagnosis[]
   if (disconnected.length > 0) {
     diagnoses.push({
       stringNumbers: disconnected.map(s => s.string_number),
-      severity: 'CRITICAL',
+      severity: 'critical',
       cause: 'Disconnected — Total Signal Loss',
       pattern: '0V and 0A — no electrical connection detected',
       action: 'Emergency inspection: check cables for damage, verify inverter input terminals, inspect junction boxes.',
@@ -64,7 +69,7 @@ function diagnoseStrings(strings: StringData[], avgCurrent: number): Diagnosis[]
   if (critical.length > 0) {
     diagnoses.push({
       stringNumbers: critical.map(s => s.string_number),
-      severity: 'CRITICAL',
+      severity: 'critical',
       cause: 'Faulty Panel or Major Obstruction',
       pattern: `Current ${critical[0].gap_percent.toFixed(0)}%+ below average — severe underperformance`,
       action: 'Inspect for broken panel, heavy bird droppings, or major shading obstruction.',
@@ -77,7 +82,7 @@ function diagnoseStrings(strings: StringData[], avgCurrent: number): Diagnosis[]
   if (warning.length > 0) {
     diagnoses.push({
       stringNumbers: warning.map(s => s.string_number),
-      severity: 'WARNING',
+      severity: 'warning',
       cause: 'Partial Shading or Dirty Panels',
       pattern: 'Current 25-50% below average',
       action: 'Schedule cleaning or check for tree shadow during peak hours.',
@@ -90,7 +95,7 @@ function diagnoseStrings(strings: StringData[], avgCurrent: number): Diagnosis[]
   if (mild.length > 0) {
     diagnoses.push({
       stringNumbers: mild.map(s => s.string_number),
-      severity: 'INFO',
+      severity: 'info',
       cause: 'Minor Dust or Light Soiling',
       pattern: 'Current 10-25% below average',
       action: 'Monitor trend; schedule routine cleaning if persistent.',
@@ -103,7 +108,7 @@ function diagnoseStrings(strings: StringData[], avgCurrent: number): Diagnosis[]
   if (diagnoses.length === 0 && normalStrings.length > 0) {
     diagnoses.push({
       stringNumbers: [],
-      severity: 'INFO',
+      severity: 'info',
       cause: 'All Strings Healthy',
       pattern: 'All strings within normal operating range',
       action: 'No action needed — continue monitoring.',
@@ -114,25 +119,23 @@ function diagnoseStrings(strings: StringData[], avgCurrent: number): Diagnosis[]
   return diagnoses
 }
 
-const severityStyle = {
-  CRITICAL: {
-    border: 'border-l-red-500',
-    bg: 'bg-red-50/50',
-    badge: 'bg-red-100 text-red-700',
-    icon: 'text-red-500',
-  },
-  WARNING: {
-    border: 'border-l-amber-500',
-    bg: 'bg-amber-50/50',
-    badge: 'bg-amber-100 text-amber-700',
-    icon: 'text-amber-500',
-  },
-  INFO: {
-    border: 'border-l-blue-500',
-    bg: 'bg-blue-50/50',
-    badge: 'bg-blue-100 text-blue-700',
-    icon: 'text-blue-500',
-  },
+/**
+ * Map diagnosis severity → central status key so all alert/diagnosis styling
+ * flows through the same lookup.
+ */
+const SEVERITY_TO_STATUS: Record<DiagSeverity, StatusKey> = {
+  critical: 'critical',
+  warning: 'warning',
+  info: 'info',
+}
+
+const LEFT_BORDER_BY_KEY: Record<StatusKey, string> = {
+  critical: 'border-l-red-600',
+  warning: 'border-l-amber-600',
+  info: 'border-l-blue-700',
+  healthy: 'border-l-emerald-600',
+  offline: 'border-l-slate-500',
+  'open-circuit': 'border-l-violet-600',
 }
 
 export function FaultDiagnosisPanel({ strings, avgCurrent }: FaultDiagnosisPanelProps) {
@@ -141,27 +144,41 @@ export function FaultDiagnosisPanel({ strings, avgCurrent }: FaultDiagnosisPanel
   return (
     <div className="space-y-2">
       {diagnoses.map((d, i) => {
-        const style = severityStyle[d.severity]
+        const key = SEVERITY_TO_STATUS[d.severity]
+        const style = STATUS_STYLES[key]
+        const leftBorder = LEFT_BORDER_BY_KEY[key]
         const Icon = d.icon
         return (
           <div
             key={i}
-            className={cn('border-l-3 rounded-r-lg p-3 border', style.border, style.bg)}
+            className={cn(
+              'rounded-sm border border-l-[3px] p-3',
+              leftBorder,
+              'border-slate-200',
+              style.bg,
+            )}
           >
             <div className="flex items-start gap-3">
-              <Icon className={cn('w-4 h-4 mt-0.5 flex-shrink-0', style.icon)} />
+              <Icon className={cn('w-4 h-4 mt-0.5 shrink-0', style.fg)} strokeWidth={2} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium text-gray-900">{d.cause}</span>
+                  <span className="text-sm font-bold text-slate-900">{d.cause}</span>
                   {d.stringNumbers.length > 0 && (
-                    <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full', style.badge)}>
+                    <span
+                      className={cn(
+                        'text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-sm border',
+                        style.bg,
+                        style.fg,
+                        style.border,
+                      )}
+                    >
                       {d.stringNumbers.map(n => `PV${n}`).join(', ')}
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 mt-0.5">{d.pattern}</p>
-                <p className="text-xs text-gray-700 mt-1">
-                  <span className="font-medium">Action:</span> {d.action}
+                <p className="text-xs text-slate-500 mt-0.5">{d.pattern}</p>
+                <p className="text-xs text-slate-700 mt-1">
+                  <span className="font-semibold">Action:</span> {d.action}
                 </p>
               </div>
             </div>

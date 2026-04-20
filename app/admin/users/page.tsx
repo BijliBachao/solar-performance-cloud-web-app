@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -16,8 +17,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import {
-  Search, Building2, Shield, Loader2, ArrowLeft, UserPlus, CheckCircle, ChevronLeft, ChevronRight,
+  Search, Building2, Shield, Loader2, ArrowLeft, CheckCircle, ChevronLeft, ChevronRight,
 } from 'lucide-react'
+import { STATUS_STYLES } from '@/lib/design-tokens'
 
 interface User {
   id: string
@@ -169,7 +171,7 @@ export default function AdminUsersPage() {
     inactive: statusCounts.inactive,
   }
 
-  const getStatusBadge = (status: string): 'success' | 'warning' | 'secondary' => {
+  const getStatusBadgeVariant = (status: string): 'success' | 'warning' | 'secondary' => {
     switch (status) {
       case 'ACTIVE': return 'success'
       case 'PENDING_ASSIGNMENT': return 'warning'
@@ -190,8 +192,8 @@ export default function AdminUsersPage() {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="flex items-center gap-3">
-          <div className="w-5 h-5 border-2 border-[#76b900] border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm font-semibold text-[#898989]">Loading...</span>
+          <div className="w-5 h-5 border-2 border-spc-green border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm font-semibold text-slate-400">Loading...</span>
         </div>
       </div>
     )
@@ -201,7 +203,7 @@ export default function AdminUsersPage() {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
-          <p className="text-[#e52020] mb-4 text-sm font-semibold">{error}</p>
+          <p className="text-red-700 mb-4 text-sm font-semibold">{error}</p>
           <Button variant="outline" onClick={fetchUsers}>Retry</Button>
         </div>
       </div>
@@ -210,33 +212,37 @@ export default function AdminUsersPage() {
 
   return (
     <div>
-      {/* Header Bar */}
-      <div className="border-b border-[#e5e5e5] bg-white">
-        <div className="px-4 sm:px-6 py-4">
+      {/* Page Header */}
+      <div className="border-b border-slate-200 bg-white">
+        <div className="px-4 sm:px-6 py-5">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
-              <h1 className="text-base font-bold text-[#0a0a0a]">Users</h1>
+            <div className="flex flex-col sm:flex-row sm:items-baseline gap-3 sm:gap-6">
+              <h1 className="text-2xl font-bold leading-tight tracking-tight text-slate-900">Users</h1>
               <div className="flex items-center gap-3 sm:gap-4 text-xs overflow-x-auto pb-1">
                 <div className="flex items-center gap-1.5 whitespace-nowrap">
-                  <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                  <span className="text-gray-500">{stats.total} total</span>
+                  <span className="w-2 h-2 rounded-full bg-slate-400" />
+                  <span className="font-mono font-semibold text-slate-500">{stats.total}</span>
+                  <span className="text-slate-500">total</span>
                 </div>
                 <div className="flex items-center gap-1.5 whitespace-nowrap">
-                  <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                  <span className="text-gray-500">{stats.active} active</span>
+                  <span className={cn('w-2 h-2 rounded-full', STATUS_STYLES.healthy.dot)} />
+                  <span className="font-mono font-semibold text-slate-700">{stats.active}</span>
+                  <span className="text-slate-500">active</span>
                 </div>
                 <div className="flex items-center gap-1.5 whitespace-nowrap">
-                  <span className="w-2 h-2 rounded-full bg-orange-500"></span>
-                  <span className="text-gray-500">{stats.pending} pending</span>
+                  <span className={cn('w-2 h-2 rounded-full', STATUS_STYLES.warning.dot)} />
+                  <span className="font-mono font-semibold text-slate-700">{stats.pending}</span>
+                  <span className="text-slate-500">pending</span>
                 </div>
                 <div className="flex items-center gap-1.5 whitespace-nowrap">
-                  <span className="w-2 h-2 rounded-full bg-gray-400"></span>
-                  <span className="text-gray-500">{stats.inactive} inactive</span>
+                  <span className={cn('w-2 h-2 rounded-full', STATUS_STYLES.offline.dot)} />
+                  <span className="font-mono font-semibold text-slate-700">{stats.inactive}</span>
+                  <span className="text-slate-500">inactive</span>
                 </div>
               </div>
             </div>
             <Button variant="ghost" size="sm" onClick={() => router.push('/admin')}>
-              <ArrowLeft className="h-4 w-4 mr-1" /> Back
+              <ArrowLeft className="h-4 w-4 mr-1" strokeWidth={2} /> Back
             </Button>
           </div>
 
@@ -252,11 +258,12 @@ export default function AdminUsersPage() {
                 <button
                   key={tab.key}
                   onClick={() => { setFilter(tab.key); setCurrentPage(1) }}
-                  className={`px-3 py-1.5 rounded-sm text-xs font-bold transition-colors whitespace-nowrap ${
+                  className={cn(
+                    'px-3 py-1.5 rounded-sm text-xs font-bold transition-colors whitespace-nowrap border',
                     filter === tab.key
-                      ? 'bg-[#76b900]/10 text-[#76b900] border border-[#76b900]/30'
-                      : 'bg-[#f5f5f5] text-[#525252] hover:bg-[#e5e5e5]'
-                  }`}
+                      ? 'bg-spc-green/10 text-spc-green border-spc-green/30'
+                      : 'bg-slate-50 text-slate-600 border-transparent hover:bg-slate-100',
+                  )}
                 >
                   {tab.label}
                 </button>
@@ -265,7 +272,7 @@ export default function AdminUsersPage() {
 
             {/* Search */}
             <div className="relative flex-1 sm:max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" strokeWidth={2} />
               <Input
                 placeholder="Search..."
                 value={search}
@@ -279,22 +286,28 @@ export default function AdminUsersPage() {
 
       {/* Messages */}
       {successMsg && (
-        <div className="mx-4 sm:mx-6 mt-4 p-3 bg-green-50 border border-green-200 rounded-sm text-sm text-green-700 flex items-center gap-2">
-          <CheckCircle className="w-4 h-4" /> {successMsg}
+        <div className={cn(
+          'mx-4 sm:mx-6 mt-4 p-3 rounded-sm text-sm font-medium flex items-center gap-2 border',
+          STATUS_STYLES.healthy.bg, STATUS_STYLES.healthy.border, STATUS_STYLES.healthy.fg,
+        )}>
+          <CheckCircle className="w-4 h-4" strokeWidth={2} /> {successMsg}
         </div>
       )}
       {errorMsg && (
-        <div className="mx-4 sm:mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-sm text-sm text-red-700">
+        <div className={cn(
+          'mx-4 sm:mx-6 mt-4 p-3 rounded-sm text-sm font-medium border',
+          STATUS_STYLES.critical.bg, STATUS_STYLES.critical.border, STATUS_STYLES.critical.fg,
+        )}>
           {errorMsg}
         </div>
       )}
 
       {/* Table */}
       <div className="px-4 sm:px-6 py-4">
-        <div className="border border-gray-200 rounded-sm overflow-hidden bg-white">
+        <div className="border border-slate-200 rounded-sm overflow-hidden bg-white">
           <Table>
             <TableHeader>
-              <TableRow className="bg-gray-50">
+              <TableRow className="bg-slate-50">
                 <TableHead className="whitespace-nowrap">User</TableHead>
                 <TableHead className="whitespace-nowrap hidden sm:table-cell">Organization</TableHead>
                 <TableHead className="whitespace-nowrap">Role</TableHead>
@@ -306,7 +319,7 @@ export default function AdminUsersPage() {
             <TableBody>
               {users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-gray-500 py-12 text-sm">
+                  <TableCell colSpan={6} className="text-center text-slate-400 py-12 text-sm">
                     No users found
                   </TableCell>
                 </TableRow>
@@ -314,23 +327,23 @@ export default function AdminUsersPage() {
                 users.map(user => (
                   <TableRow key={user.id}>
                     <TableCell>
-                      <div className="font-medium text-gray-900 text-sm">{user.email}</div>
+                      <div className="font-semibold text-slate-900 text-sm">{user.email}</div>
                       {userName(user) && (
-                        <div className="text-xs text-gray-500 mt-0.5">{userName(user)}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">{userName(user)}</div>
                       )}
                       {/* Mobile: show org below */}
-                      <div className="sm:hidden text-xs text-gray-400 mt-0.5">
+                      <div className="sm:hidden text-xs text-slate-400 mt-0.5">
                         {user.organizations?.name || 'Unassigned'}
                       </div>
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
                       {user.organizations ? (
                         <div className="flex items-center gap-1.5">
-                          <Building2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                          <span className="text-sm text-gray-700">{user.organizations.name}</span>
+                          <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={2} />
+                          <span className="text-sm text-slate-700">{user.organizations.name}</span>
                         </div>
                       ) : (
-                        <span className="text-sm text-gray-400 italic">Unassigned</span>
+                        <span className="text-sm text-slate-400 italic">Unassigned</span>
                       )}
                     </TableCell>
                     <TableCell>
@@ -340,29 +353,33 @@ export default function AdminUsersPage() {
                           onChange={(e) => handleRoleChange(user.id, e.target.value)}
                           onBlur={() => setEditingRole(null)}
                           autoFocus
-                          className="px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:border-blue-500"
+                          className="px-2 py-1 border border-slate-200 rounded-sm text-xs text-slate-900 focus:outline-none focus:border-spc-green focus:ring-2 focus:ring-spc-green/20"
                         >
                           <option value="ORG_USER">ORG_USER</option>
                           <option value="SUPER_ADMIN">SUPER_ADMIN</option>
                         </select>
+                      ) : user.role === 'SUPER_ADMIN' ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-sm border bg-violet-50 text-violet-700 border-violet-200">
+                          <Shield className="w-3 h-3" strokeWidth={2} />
+                          {user.role}
+                        </span>
                       ) : (
                         <Badge
-                          variant={user.role === 'SUPER_ADMIN' ? 'default' : 'secondary'}
-                          className={`cursor-pointer ${user.role === 'SUPER_ADMIN' ? 'bg-purple-100 text-purple-700 border-transparent' : ''}`}
-                          onClick={() => user.role !== 'SUPER_ADMIN' && setEditingRole(user.id)}
+                          variant="secondary"
+                          className="cursor-pointer"
+                          onClick={() => setEditingRole(user.id)}
                         >
-                          {user.role === 'SUPER_ADMIN' && <Shield className="w-3 h-3 mr-1" />}
                           {user.role}
                         </Badge>
                       )}
                     </TableCell>
                     <TableCell className="text-center">
-                      <Badge variant={getStatusBadge(user.status)}>
+                      <Badge variant={getStatusBadgeVariant(user.status)}>
                         {statusLabel(user.status)}
                       </Badge>
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
-                      <span className="text-sm text-gray-500">
+                      <span className="text-sm text-slate-500">
                         {user.last_login_at ? formatDate(user.last_login_at) : 'Never'}
                       </span>
                     </TableCell>
@@ -370,7 +387,7 @@ export default function AdminUsersPage() {
                       {user.role !== 'SUPER_ADMIN' && (
                         <button
                           onClick={() => openAssignModal(user)}
-                          className="text-blue-600 hover:text-blue-700 text-xs sm:text-sm font-medium"
+                          className="text-spc-green hover:text-spc-green-dark text-xs sm:text-sm font-semibold transition-colors"
                         >
                           {user.status === 'PENDING_ASSIGNMENT' ? 'Assign' : 'Edit'}
                         </button>
@@ -384,17 +401,17 @@ export default function AdminUsersPage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+            <div className="px-4 py-3 border-t border-slate-200 flex items-center justify-between">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
               >
-                <ChevronLeft className="w-4 h-4 sm:mr-1" />
+                <ChevronLeft className="w-4 h-4 sm:mr-1" strokeWidth={2} />
                 <span className="hidden sm:inline">Previous</span>
               </Button>
-              <span className="text-xs text-gray-500">
+              <span className="text-xs font-mono text-slate-500">
                 {currentPage} / {totalPages}
               </span>
               <Button
@@ -404,7 +421,7 @@ export default function AdminUsersPage() {
                 disabled={currentPage === totalPages}
               >
                 <span className="hidden sm:inline">Next</span>
-                <ChevronRight className="w-4 h-4 sm:ml-1" />
+                <ChevronRight className="w-4 h-4 sm:ml-1" strokeWidth={2} />
               </Button>
             </div>
           )}
@@ -416,11 +433,14 @@ export default function AdminUsersPage() {
         <DialogContent className="sm:max-w-md">
           {assignSuccess ? (
             <div className="text-center py-8">
-              <div className="mx-auto flex items-center justify-center h-14 w-14 rounded-full bg-green-100 mb-4">
-                <CheckCircle className="h-7 w-7 text-green-600" />
+              <div className={cn(
+                'mx-auto flex items-center justify-center h-14 w-14 rounded-full mb-4',
+                STATUS_STYLES.healthy.bg,
+              )}>
+                <CheckCircle className={cn('h-7 w-7', STATUS_STYLES.healthy.fg)} strokeWidth={2} />
               </div>
-              <h3 className="text-base font-semibold text-gray-900 mb-1">Assignment Complete</h3>
-              <p className="text-sm text-gray-500">User has been assigned to the organization.</p>
+              <h3 className="text-base font-bold text-slate-900 mb-1">Assignment Complete</h3>
+              <p className="text-sm text-slate-500">User has been assigned to the organization.</p>
             </div>
           ) : (
             <>
@@ -430,9 +450,8 @@ export default function AdminUsersPage() {
                 </DialogTitle>
                 <DialogDescription>
                   {assignUser?.status === 'PENDING_ASSIGNMENT'
-                    ? <>Assign <span className="font-medium text-gray-900">{assignUser?.email}</span> to an organization.</>
-                    : <>Update assignment for <span className="font-medium text-gray-900">{assignUser?.email}</span>.</>
-                  }
+                    ? <>Assign <span className="font-semibold text-slate-900">{assignUser?.email}</span> to an organization.</>
+                    : <>Update assignment for <span className="font-semibold text-slate-900">{assignUser?.email}</span>.</>}
                 </DialogDescription>
               </DialogHeader>
 
@@ -469,7 +488,7 @@ export default function AdminUsersPage() {
                   Cancel
                 </Button>
                 <Button onClick={handleAssign} disabled={!selectedOrgId || assignLoading}>
-                  {assignLoading && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+                  {assignLoading && <Loader2 className="w-4 h-4 animate-spin mr-1" strokeWidth={2} />}
                   {assignLoading ? 'Saving...' : assignUser?.status === 'PENDING_ASSIGNMENT' ? 'Assign' : 'Save Changes'}
                 </Button>
               </DialogFooter>

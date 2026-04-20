@@ -3,6 +3,12 @@ import * as React from 'react'
 import * as TabsPrimitive from '@radix-ui/react-tabs'
 import { cn } from '@/lib/utils'
 
+/**
+ * SPC Tabs — DESIGN.md §4 underline-style (not pill).
+ * TabsList is a bottom-bordered container.
+ * TabsTrigger draws a 2px bottom accent on hover and a spc-green accent when active.
+ */
+
 const Tabs = TabsPrimitive.Root
 
 const TabsList = React.forwardRef<
@@ -12,8 +18,8 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      'inline-flex h-10 items-center justify-center rounded-md bg-gray-100 p-1 text-gray-500',
-      className
+      'inline-flex h-auto items-center justify-start border-b border-slate-200 gap-2',
+      className,
     )}
     {...props}
   />
@@ -27,8 +33,12 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      'inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-sm',
-      className
+      'inline-flex items-center justify-center whitespace-nowrap px-4 py-3 text-sm font-semibold text-slate-600 border-b-2 border-transparent -mb-px transition-colors',
+      'hover:text-slate-900 hover:border-slate-300',
+      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spc-green focus-visible:ring-offset-2',
+      'disabled:pointer-events-none disabled:opacity-50',
+      'data-[state=active]:text-spc-green data-[state=active]:border-spc-green data-[state=active]:font-bold',
+      className,
     )}
     {...props}
   />
@@ -42,8 +52,8 @@ const TabsContent = React.forwardRef<
   <TabsPrimitive.Content
     ref={ref}
     className={cn(
-      'mt-2 ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2',
-      className
+      'mt-4 ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spc-green focus-visible:ring-offset-2',
+      className,
     )}
     {...props}
   />
