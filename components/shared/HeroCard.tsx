@@ -8,7 +8,8 @@ interface HeroCardProps {
   livePowerKw: number
   capacityKw: number
   sparkline: number[]
-  deltaPercent: number
+  deltaPercent: number | null
+  deltaContext?: string | null
   totalPlants: number
   healthyPlants: number
   producingPlants: number
@@ -25,14 +26,16 @@ export function HeroCard({
   capacityKw,
   sparkline,
   deltaPercent,
+  deltaContext,
   totalPlants,
   healthyPlants: _healthyPlants,
   producingPlants,
   isLive,
 }: HeroCardProps) {
   const utilization = capacityKw > 0 ? Math.round((livePowerKw / capacityKw) * 100) : 0
-  const hasDelta = !isNaN(deltaPercent) && deltaPercent !== 0
-  const isPositive = deltaPercent >= 0
+  const hasDelta =
+    deltaPercent !== null && deltaPercent !== undefined && !isNaN(deltaPercent) && deltaPercent !== 0
+  const isPositive = (deltaPercent ?? 0) >= 0
 
   return (
     <div className="relative bg-white rounded-lg border border-slate-200 overflow-hidden shadow-featured">
@@ -80,9 +83,11 @@ export function HeroCard({
                   )}
                 >
                   {isPositive ? '+' : ''}
-                  {deltaPercent.toFixed(1)}%
+                  {(deltaPercent ?? 0).toFixed(1)}%
                 </span>
-                <span className="text-xs text-slate-500">vs yesterday, same hour</span>
+                <span className="text-xs text-slate-500">
+                  {deltaContext || 'vs same hour yesterday'}
+                </span>
               </div>
             ) : (
               <span className="text-xs text-slate-400">Gathering comparison data…</span>

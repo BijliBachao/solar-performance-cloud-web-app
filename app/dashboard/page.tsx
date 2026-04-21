@@ -19,17 +19,18 @@ interface PlantItem {
   isLive?: boolean
   currentPowerKw?: number
   todayEnergyKwh?: number
-  healthPercent?: number
+  healthPercent?: number | null
   productionBars?: number[]
 }
 
 interface DashboardData {
   plants: PlantItem[]
-  stats: { totalPlants: number; activeAlerts: number; avgStringHealth: number; lastUpdate: string | null }
+  stats: { totalPlants: number; activeAlerts: number; avgStringHealth: number | null; lastUpdate: string | null }
   recentAlerts: any[]
   hero: {
     livePowerKw: number
-    livePowerDeltaPercent: number
+    livePowerDeltaPercent: number | null
+    livePowerDeltaContext: string | null
     fleetCapacityKw: number
     totalPlantCount: number
     healthyPlantCount: number
@@ -37,9 +38,9 @@ interface DashboardData {
     sparkline: number[]
   }
   kpis: {
-    energyToday: { value: number; unit: string; sparkline: number[]; deltaPercent: number }
+    energyToday: { value: number; unit: string; sparkline: number[]; deltaPercent: number | null; deltaContext: string | null }
     alerts: { total: number; critical: number; warning: number; info: number }
-    fleetHealth: { percent: number; sparkline: number[]; deltaPercent: number }
+    fleetHealth: { percent: number | null; sparkline: (number | null)[]; deltaPercent: number | null; deltaContext: string | null }
     invertersOnline: { online: number; total: number }
   }
   alertsInsight: {
@@ -99,7 +100,8 @@ export default function DashboardOverviewPage() {
             livePowerKw={data.hero?.livePowerKw ?? 0}
             capacityKw={data.hero?.fleetCapacityKw ?? 0}
             sparkline={data.hero?.sparkline ?? []}
-            deltaPercent={data.hero?.livePowerDeltaPercent ?? 0}
+            deltaPercent={data.hero?.livePowerDeltaPercent ?? null}
+            deltaContext={data.hero?.livePowerDeltaContext ?? null}
             totalPlants={data.hero?.totalPlantCount ?? 0}
             healthyPlants={data.hero?.healthyPlantCount ?? 0}
             producingPlants={data.hero?.producingPlantCount ?? 0}
@@ -115,7 +117,8 @@ export default function DashboardOverviewPage() {
               accent="gold"
               subtitle="Fleet energy produced today"
               sparkline={data.kpis?.energyToday?.sparkline}
-              deltaPercent={data.kpis?.energyToday?.deltaPercent}
+              deltaPercent={data.kpis?.energyToday?.deltaPercent ?? null}
+              deltaContext={data.kpis?.energyToday?.deltaContext ?? null}
             />
             <KpiCard
               title="Active Alerts"
@@ -130,15 +133,27 @@ export default function DashboardOverviewPage() {
             />
             <KpiCard
               title="Fleet Health"
-              value={`${(data.kpis?.fleetHealth?.percent ?? 100).toFixed(1)}%`}
+              value={
+                data.kpis?.fleetHealth?.percent !== null &&
+                data.kpis?.fleetHealth?.percent !== undefined
+                  ? `${data.kpis.fleetHealth.percent.toFixed(1)}%`
+                  : '—'
+              }
               icon={Activity}
               accent={(() => {
-                const p = data.kpis?.fleetHealth?.percent ?? 100
+                const p = data.kpis?.fleetHealth?.percent
+                if (p === null || p === undefined) return 'gray'
                 return p >= HEALTH_HEALTHY ? 'green' : p >= HEALTH_WARNING ? 'amber' : 'red'
               })()}
-              subtitle="Average health across all strings"
+              subtitle={
+                data.kpis?.fleetHealth?.percent !== null &&
+                data.kpis?.fleetHealth?.percent !== undefined
+                  ? 'Average health across all strings'
+                  : 'No daily scores yet today'
+              }
               sparkline={data.kpis?.fleetHealth?.sparkline}
-              deltaPercent={data.kpis?.fleetHealth?.deltaPercent}
+              deltaPercent={data.kpis?.fleetHealth?.deltaPercent ?? null}
+              deltaContext={data.kpis?.fleetHealth?.deltaContext ?? null}
             />
             <KpiCard
               title="Inverters Online"

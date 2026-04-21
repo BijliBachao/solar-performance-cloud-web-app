@@ -34,7 +34,7 @@ interface PlantCardProps {
     isLive?: boolean
     currentPowerKw?: number
     todayEnergyKwh?: number
-    healthPercent?: number
+    healthPercent?: number | null
     productionBars?: number[]
   }
   basePath?: string
@@ -61,7 +61,8 @@ export function PlantCard({ plant, basePath = '/dashboard/plants' }: PlantCardPr
   const router = useRouter()
   const statusKey = statusKeyFromPlantHealth(plant.health_state)
   const providerMeta = providerBadge(plant.provider)
-  const healthPercent = plant.healthPercent ?? 0
+  const healthPercent = plant.healthPercent
+  const hasHealth = healthPercent !== null && healthPercent !== undefined && healthPercent > 0
   const hasProductionBars = plant.productionBars && plant.productionBars.length > 0 && plant.productionBars.some((v) => v > 0)
 
   return (
@@ -154,18 +155,18 @@ export function PlantCard({ plant, basePath = '/dashboard/plants' }: PlantCardPr
         )}
 
         {/* Health progress bar */}
-        {healthPercent > 0 && (
+        {hasHealth && (
           <div>
             <div className="flex items-center justify-between text-[10px] mb-1">
               <span className="font-bold uppercase tracking-wider text-slate-400">Health</span>
               <span className="font-mono font-bold text-slate-700">
-                {healthPercent.toFixed(0)}%
+                {(healthPercent as number).toFixed(0)}%
               </span>
             </div>
             <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
               <div
-                className={cn('h-full transition-all', healthBarColor(healthPercent))}
-                style={{ width: `${Math.min(healthPercent, 100)}%` }}
+                className={cn('h-full transition-all', healthBarColor(healthPercent as number))}
+                style={{ width: `${Math.min(healthPercent as number, 100)}%` }}
               />
             </div>
           </div>

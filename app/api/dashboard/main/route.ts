@@ -43,11 +43,12 @@ export async function GET() {
     if (plantIds.length === 0) {
       return NextResponse.json({
         plants: [],
-        stats: { totalPlants: 0, activeAlerts: 0, avgStringHealth: 100, lastUpdate: null },
+        stats: { totalPlants: 0, activeAlerts: 0, avgStringHealth: null, lastUpdate: null },
         recentAlerts: [],
         hero: {
           livePowerKw: 0,
-          livePowerDeltaPercent: 0,
+          livePowerDeltaPercent: null,
+          livePowerDeltaContext: null,
           fleetCapacityKw: 0,
           totalPlantCount: 0,
           healthyPlantCount: 0,
@@ -55,9 +56,9 @@ export async function GET() {
           sparkline: [],
         },
         kpis: {
-          energyToday: { value: 0, unit: 'kWh', sparkline: [], deltaPercent: 0 },
+          energyToday: { value: 0, unit: 'kWh', sparkline: [], deltaPercent: null, deltaContext: null },
           alerts: { total: 0, critical: 0, warning: 0, info: 0 },
-          fleetHealth: { percent: 100, sparkline: [], deltaPercent: 0 },
+          fleetHealth: { percent: null, sparkline: [], deltaPercent: null, deltaContext: null },
           invertersOnline: { online: 0, total: 0 },
         },
         alertsInsight: { topIssues: [], recentActivity: [] },
@@ -219,13 +220,16 @@ export async function GET() {
     }
     const heroSparkline = sparkline48.slice(-24) // last 24h
 
-    // Hero delta: latest hour vs same hour 24h ago
-    const nowHourPower = sparkline48[47] || 0
-    const yesterdayHourPower = sparkline48[23] || 0
-    const livePowerDeltaPercent =
-      yesterdayHourPower > 0
-        ? ((nowHourPower - yesterdayHourPower) / yesterdayHourPower) * 100
-        : 0
+    // Hero delta: LAST COMPLETED hour vs same completed hour yesterday.
+    // Index 47 = current in-progress hour (partial data — misleading for a delta).
+    // Index 46 = last completed hour.  Index 22 = same hour yesterday (also completed).
+    const lastCompletedHourPower = sparkline48[46] || 0
+    const sameHourYesterdayPower = sparkline48[22] || 0
+    const livePowerDeltaPercent: number | null =
+      sameHourYesterdayPower > 0
+        ? ((lastCompletedHourPower - sameHourYesterdayPower) / sameHourYesterdayPower) * 100
+        : null
+    const livePowerDeltaContext = livePowerDeltaPercent !== null ? 'vs same hour yesterday' : null
 
     // KPI: Energy Today + 7-day sparkline
     const dailyEnergyByDate = new Map<string, number>()
@@ -266,28 +270,60 @@ export async function GET() {
       energySparkline.push(dailyEnergyByDate.get(isoDateKey(d)) || 0)
     }
     const energyTodayKwh = energySparkline[6] || 0
-    const yesterdayEnergy = energySparkline[5] || 0
-    const energyDeltaPercent =
-      yesterdayEnergy > 0
-        ? ((energyTodayKwh - yesterdayEnergy) / yesterdayEnergy) * 100
-        : 0
 
-    // KPI: Fleet Health + 7-day sparkline
-    const healthSparkline: number[] = []
+    // Energy delta — FAIR apples-to-apples comparison.
+    // DON'T compare today-partial to yesterday-full (always misleading before EOD).
+    // DO compare today-so-far to yesterday at the SAME PKT time, both summed from hourly data.
+    const nowPKT = new Date(Date.now() + PKT_OFFSET_MS)
+    const pktHourNow = nowPKT.getUTCHours()
+    const pktMinuteNow = nowPKT.getUTCMinutes()
+    const hoursElapsedToday = pktHourNow + 1 // includes current in-progress hour
+
+    const todaySoFarKwh = sparkline48
+      .slice(Math.max(0, 48 - hoursElapsedToday))
+      .reduce((a, b) => a + b, 0)
+    const yesterdaySameWindowKwh = sparkline48
+      .slice(Math.max(0, 48 - hoursElapsedToday - 24), Math.max(0, 48 - 24))
+      .reduce((a, b) => a + b, 0)
+    const energyDeltaPercent: number | null =
+      yesterdaySameWindowKwh > 0
+        ? ((todaySoFarKwh - yesterdaySameWindowKwh) / yesterdaySameWindowKwh) * 100
+        : null
+    const pktTimeStr = `${String(pktHourNow).padStart(2, '0')}:${String(pktMinuteNow).padStart(2, '0')}`
+    const energyDeltaContext = energyDeltaPercent !== null ? `vs yesterday at ${pktTimeStr} PKT` : null
+
+    // KPI: Fleet Health + 7-day sparkline (null when no data — never assume 100%)
+    const healthSparkline: (number | null)[] = []
     for (let i = 6; i >= 0; i--) {
       const d = new Date(todayPKT)
       d.setUTCDate(d.getUTCDate() - i)
       const scores = dailyHealthByDate.get(isoDateKey(d)) || []
       healthSparkline.push(
-        scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0,
+        scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null,
       )
     }
-    const fleetHealthToday = healthSparkline[6] || 100
-    const yesterdayHealth = healthSparkline[5] || 0
-    const healthDeltaPercent =
-      yesterdayHealth > 0
-        ? ((fleetHealthToday - yesterdayHealth) / yesterdayHealth) * 100
-        : 0
+    const todayScores = dailyHealthByDate.get(isoDateKey(todayPKT)) || []
+    const fleetHealthToday: number | null =
+      todayScores.length > 0
+        ? todayScores.reduce((a, b) => a + b, 0) / todayScores.length
+        : null
+
+    // Health delta: vs 7-day rolling avg (stable baseline — not jumpy like day-over-day)
+    const priorSevenDaysScores: number[] = []
+    for (let i = 1; i <= 7; i++) {
+      const d = new Date(todayPKT)
+      d.setUTCDate(d.getUTCDate() - i)
+      priorSevenDaysScores.push(...(dailyHealthByDate.get(isoDateKey(d)) || []))
+    }
+    const rolling7DayAvgHealth =
+      priorSevenDaysScores.length > 0
+        ? priorSevenDaysScores.reduce((a, b) => a + b, 0) / priorSevenDaysScores.length
+        : null
+    const healthDeltaPercent: number | null =
+      fleetHealthToday !== null && rolling7DayAvgHealth !== null && rolling7DayAvgHealth > 0
+        ? ((fleetHealthToday - rolling7DayAvgHealth) / rolling7DayAvgHealth) * 100
+        : null
+    const healthDeltaContext = healthDeltaPercent !== null ? 'vs 7-day avg' : null
 
     // KPI: Alerts (by severity)
     const alertsByKind = { critical: 0, warning: 0, info: 0, total: 0 }
@@ -341,15 +377,15 @@ export async function GET() {
       plantAssignments.map((pa) => [pa.plant_id, pa.plants.plant_name]),
     )
 
-    // Build plants array
+    // Build plants array. healthPercent is null when no data — never default to 0 or 100.
     const plants = plantAssignments.map((pa) => {
       const plantId = pa.plant_id
       const healths = dailyHealthByPlant.get(plantId) || []
-      const healthPercent =
+      const healthPercent: number | null =
         healths.length > 0
           ? Math.round((healths.reduce((a, b) => a + b, 0) / healths.length) * 10) /
             10
-          : 0
+          : null
 
       return {
         id: pa.plants.id,
@@ -402,7 +438,8 @@ export async function GET() {
       stats: {
         totalPlants: plants.length,
         activeAlerts: alertsByKind.total,
-        avgStringHealth: Math.round(fleetHealthToday * 10) / 10,
+        avgStringHealth:
+          fleetHealthToday !== null ? Math.round(fleetHealthToday * 10) / 10 : null,
         lastUpdate: lastPlantSync?.toISOString() || null,
       },
       recentAlerts: recentAlertsForDisplay,
@@ -410,7 +447,11 @@ export async function GET() {
       // v4 data
       hero: {
         livePowerKw: Math.round(livePowerKw * 10) / 10,
-        livePowerDeltaPercent: Math.round(livePowerDeltaPercent * 10) / 10,
+        livePowerDeltaPercent:
+          livePowerDeltaPercent !== null
+            ? Math.round(livePowerDeltaPercent * 10) / 10
+            : null,
+        livePowerDeltaContext,
         fleetCapacityKw: Math.round(fleetCapacityKw * 10) / 10,
         totalPlantCount,
         healthyPlantCount,
@@ -422,7 +463,9 @@ export async function GET() {
           value: Math.round(energyTodayKwh * 10) / 10,
           unit: 'kWh',
           sparkline: energySparkline,
-          deltaPercent: Math.round(energyDeltaPercent * 10) / 10,
+          deltaPercent:
+            energyDeltaPercent !== null ? Math.round(energyDeltaPercent * 10) / 10 : null,
+          deltaContext: energyDeltaContext,
         },
         alerts: {
           total: alertsByKind.total,
@@ -431,9 +474,14 @@ export async function GET() {
           info: alertsByKind.info,
         },
         fleetHealth: {
-          percent: Math.round(fleetHealthToday * 10) / 10,
+          percent:
+            fleetHealthToday !== null ? Math.round(fleetHealthToday * 10) / 10 : null,
           sparkline: healthSparkline,
-          deltaPercent: Math.round(healthDeltaPercent * 10) / 10,
+          deltaPercent:
+            healthDeltaPercent !== null
+              ? Math.round(healthDeltaPercent * 10) / 10
+              : null,
+          deltaContext: healthDeltaContext,
         },
         invertersOnline: {
           online: onlineCount,

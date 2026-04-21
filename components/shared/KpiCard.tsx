@@ -12,8 +12,9 @@ interface KpiCardProps {
   subtitle?: string
   icon?: LucideIcon
   accent?: 'green' | 'amber' | 'red' | 'gray' | 'gold' | 'blue'
-  sparkline?: number[]
-  deltaPercent?: number
+  sparkline?: (number | null)[]
+  deltaPercent?: number | null
+  deltaContext?: string | null
   className?: string
   onClick?: () => void
 }
@@ -62,12 +63,18 @@ export function KpiCard({
   accent = 'gold',
   sparkline,
   deltaPercent,
+  deltaContext,
   className,
   onClick,
 }: KpiCardProps) {
-  const hasDelta = deltaPercent !== undefined && !isNaN(deltaPercent) && deltaPercent !== 0
+  const hasDelta =
+    deltaPercent !== undefined &&
+    deltaPercent !== null &&
+    !isNaN(deltaPercent) &&
+    deltaPercent !== 0
   const isPositive = hasDelta && (deltaPercent ?? 0) >= 0
-  const hasSparkline = sparkline && sparkline.length > 0 && sparkline.some((v) => v > 0)
+  const sparkValues = sparkline?.map((v) => (v ?? 0)) ?? []
+  const hasSparkline = sparkValues.length > 0 && sparkValues.some((v) => v > 0)
 
   return (
     <div
@@ -108,6 +115,7 @@ export function KpiCard({
                 'flex items-center gap-0.5 text-[11px] font-bold font-mono',
                 isPositive ? 'text-emerald-700' : 'text-red-700',
               )}
+              title={deltaContext || undefined}
             >
               {isPositive ? (
                 <TrendingUp className="h-3 w-3" strokeWidth={2.5} />
@@ -124,10 +132,14 @@ export function KpiCard({
           <p className="text-[11px] font-medium text-slate-500 mb-2 truncate">{subtitle}</p>
         )}
 
+        {hasDelta && deltaContext && (
+          <p className="text-[10px] font-medium text-slate-400 mb-1 truncate">{deltaContext}</p>
+        )}
+
         {hasSparkline && (
           <div className="mt-2 -mx-1">
             <Sparkline
-              data={sparkline!}
+              data={sparkValues}
               variant="area"
               color={SPARKLINE_COLOR[accent]}
               height={28}
