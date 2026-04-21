@@ -4,9 +4,9 @@ import * as TooltipPrimitive from '@radix-ui/react-tooltip'
 import { cn } from '@/lib/utils'
 
 /**
- * SPC Tooltip — DESIGN.md §4 spec: deep-slate background, light text,
- * 2px radius, compact padding. Intentionally dark for contrast against
- * any light surface it hovers above.
+ * SPC Tooltip — white-canvas discipline (explicit user override of DESIGN.md §16).
+ * White background with slate-200 border and slate-900 text. Matches the v3
+ * Solar Corporate white-everywhere rhythm so no popup reads as "black".
  */
 
 const TooltipProvider = TooltipPrimitive.Provider
@@ -21,7 +21,7 @@ const TooltipContent = React.forwardRef<
     ref={ref}
     sideOffset={sideOffset}
     className={cn(
-      'z-50 overflow-hidden rounded-sm bg-slate-900 px-2.5 py-1.5 text-xs text-slate-50 shadow-modal animate-in fade-in-0 zoom-in-95',
+      'z-50 overflow-hidden rounded-sm bg-white border border-slate-200 px-3 py-2 text-xs text-slate-900 shadow-card animate-in fade-in-0 zoom-in-95',
       className,
     )}
     {...props}

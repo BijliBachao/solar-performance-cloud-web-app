@@ -28,10 +28,20 @@ interface StringHealthMatrixProps {
   avgCurrent: number
 }
 
+/**
+ * Dense per-string grid. Each cell shows three rows of data:
+ *   1. String number (mono) + status dot
+ *   2. Current (big mono) — the primary health signal
+ *   3. Voltage (secondary, smaller) · deviation vs inverter avg
+ *
+ * Tooltip supplements with power + kWh + full status label.
+ * Cell tint + dot come from STATUS_STYLES so colors always match
+ * the rest of the app.
+ */
 export function StringHealthMatrix({ strings, avgCurrent }: StringHealthMatrixProps) {
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-1.5">
         {strings.map((s) => {
           const style = STATUS_STYLES[statusKeyFromStringStatus(s.status)]
           const deviation = avgCurrent > 0
@@ -46,38 +56,78 @@ export function StringHealthMatrix({ strings, avgCurrent }: StringHealthMatrixPr
               <TooltipTrigger asChild>
                 <div
                   className={cn(
-                    'relative border rounded-sm p-2.5 cursor-default transition-all hover:shadow-card',
+                    'relative border rounded-sm px-2 py-2 cursor-default transition-all hover:shadow-card hover:border-slate-300',
                     style.bg,
                     style.border,
                   )}
                 >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[11px] font-semibold text-slate-600">
+                  {/* Row 1 — String number + status dot */}
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
                       PV{s.string_number}
                     </span>
-                    <span className={cn('w-2 h-2 rounded-full', style.dot)} />
+                    <span className={cn('w-1.5 h-1.5 rounded-full', style.dot)} />
                   </div>
-                  <div className={cn('text-base font-mono font-bold leading-tight', style.fg)}>
-                    {s.current > 0 ? `${s.current.toFixed(1)}A` : '0A'}
+
+                  {/* Row 2 — Primary reading (current) */}
+                  <div className={cn('text-[15px] font-mono font-bold leading-none', style.fg)}>
+                    {s.current > 0 ? s.current.toFixed(2) : '0.00'}
+                    <span className="text-[10px] font-semibold text-slate-500 ml-0.5">A</span>
                   </div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">
-                    {s.status === 'OPEN_CIRCUIT'
-                      ? 'Open Circuit'
-                      : s.status === 'DISCONNECTED'
-                        ? 'No Signal'
-                        : deviationStr}
+
+                  {/* Row 3 — Voltage + deviation */}
+                  <div className="flex items-center justify-between mt-1 text-[10px] font-mono">
+                    <span className="text-slate-500">
+                      {s.voltage > 0 ? s.voltage.toFixed(0) : '0'}
+                      <span className="text-slate-400 ml-0.5">V</span>
+                    </span>
+                    <span
+                      className={cn(
+                        'font-semibold',
+                        s.status === 'OPEN_CIRCUIT' || s.status === 'DISCONNECTED'
+                          ? 'text-slate-400'
+                          : 'text-slate-500',
+                      )}
+                    >
+                      {s.status === 'OPEN_CIRCUIT'
+                        ? 'Open'
+                        : s.status === 'DISCONNECTED'
+                          ? 'No sig'
+                          : deviationStr}
+                    </span>
                   </div>
                 </div>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="text-xs">
-                <div className="space-y-1 font-mono">
-                  <p className="font-bold text-sm">PV{s.string_number}</p>
-                  <p>Voltage: {s.voltage.toFixed(1)} V</p>
-                  <p>Current: {s.current.toFixed(2)} A</p>
-                  <p>Power: {(s.power / 1000).toFixed(2)} kW</p>
-                  {s.energy_kwh != null && <p>Energy: {s.energy_kwh.toFixed(2)} kWh</p>}
-                  <p>Gap: {s.gap_percent.toFixed(1)}%</p>
-                  <p>Status: {s.status}</p>
+                <div className="space-y-1 font-mono min-w-[160px]">
+                  <p className="font-bold text-sm flex items-center justify-between border-b border-slate-100 pb-1 mb-1">
+                    <span>PV{s.string_number}</span>
+                    <span className={cn('text-[10px] font-bold uppercase tracking-wider', style.fg)}>
+                      {statusLabel(s.status)}
+                    </span>
+                  </p>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Voltage</span>
+                    <span>{s.voltage.toFixed(1)} V</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Current</span>
+                    <span>{s.current.toFixed(2)} A</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Power</span>
+                    <span>{(s.power / 1000).toFixed(2)} kW</span>
+                  </div>
+                  {s.energy_kwh != null && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Today</span>
+                      <span>{s.energy_kwh.toFixed(2)} kWh</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Gap</span>
+                    <span>{s.gap_percent.toFixed(1)}%</span>
+                  </div>
                 </div>
               </TooltipContent>
             </Tooltip>
@@ -86,4 +136,14 @@ export function StringHealthMatrix({ strings, avgCurrent }: StringHealthMatrixPr
       </div>
     </TooltipProvider>
   )
+}
+
+function statusLabel(status: StringStatus): string {
+  switch (status) {
+    case 'NORMAL': return 'Normal'
+    case 'WARNING': return 'Warning'
+    case 'CRITICAL': return 'Critical'
+    case 'OPEN_CIRCUIT': return 'Open Circuit'
+    case 'DISCONNECTED': return 'Disconnected'
+  }
 }
