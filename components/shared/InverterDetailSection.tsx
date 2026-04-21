@@ -278,57 +278,73 @@ export function InverterDetailSection({
 
   return (
     <div
-      className="bg-white rounded-sm border border-slate-200 overflow-hidden"
+      className="bg-white rounded-md border border-slate-200 overflow-hidden shadow-card"
       style={{ borderTopWidth: 3, borderTopColor: color.accent }}
     >
       {/* ── Inverter KPI Header ────────────────────────────────── */}
       <div className="px-4 sm:px-5 pt-4 pb-3">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div className="flex items-center gap-2.5">
-            <div className={cn('w-8 h-8 rounded-sm flex items-center justify-center', color.iconBg)}>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          {/* Left: identity */}
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className={cn('w-9 h-9 rounded-md flex items-center justify-center shrink-0', color.iconBg)}>
               <Cpu className={cn('w-4 h-4', color.iconText)} strokeWidth={2} />
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-900">
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-slate-900 truncate">
                 {device.device_name || device.id}
               </h3>
-              {device.model && (
-                <p className="text-[11px] text-slate-400">{device.model}</p>
-              )}
+              <p className="text-[10px] text-slate-400 truncate">
+                {device.model || 'Inverter'}
+                {totalStrings > 0 && (
+                  <>
+                    <span className="mx-1.5 text-slate-300">·</span>
+                    <span className="font-mono font-semibold text-slate-600">{producingStrings.length}</span>
+                    <span> of </span>
+                    <span className="font-mono font-semibold text-slate-600">{totalStrings}</span>
+                    <span> strings producing</span>
+                  </>
+                )}
+              </p>
             </div>
           </div>
 
-          {/* KPI pills */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-sm bg-slate-50 text-slate-600">
-              <Zap className="w-3 h-3 text-amber-500" strokeWidth={2} />
-              <span className="font-mono">{formatPower(totalPower)}</span>
-            </span>
-            {strings.some(s => s.energy_kwh != null) && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-sm bg-slate-50 text-slate-600">
-                <span className="font-mono">
-                  {strings.reduce((sum, s) => sum + (s.energy_kwh || 0), 0).toFixed(1)}
-                </span>
-                <span>kWh today</span>
-              </span>
-            )}
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-sm bg-slate-50 text-slate-600">
-              <Activity className="w-3 h-3 text-blue-500" strokeWidth={2} />
-              <span className="font-mono">{avgCurrent > 0 ? `${avgCurrent.toFixed(2)}A avg` : '—'}</span>
-            </span>
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-sm bg-slate-50 text-slate-600">
-              <span className="font-mono">{producingStrings.length}</span>
-              <span>producing{deadStrings.length > 0 ? ` / ${totalStrings} total` : ''} strings</span>
-            </span>
+          {/* Right: 3 compact numbers (inverter-specific only — plant totals are up top) */}
+          <div className="flex items-center gap-4 shrink-0">
+            <div className="text-right">
+              <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Power</div>
+              <div className="text-sm font-mono font-bold text-slate-900 leading-tight">
+                {formatPower(totalPower)}
+              </div>
+            </div>
+            <div className="text-right border-l border-slate-200 pl-4">
+              <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Today</div>
+              <div className="text-sm font-mono font-bold text-slate-900 leading-tight">
+                {strings.some(s => s.energy_kwh != null)
+                  ? `${strings.reduce((sum, s) => sum + (s.energy_kwh || 0), 0).toFixed(1)}`
+                  : '—'}
+                {strings.some(s => s.energy_kwh != null) && (
+                  <span className="text-[10px] text-slate-500 ml-1">kWh</span>
+                )}
+              </div>
+            </div>
+            <div className="text-right border-l border-slate-200 pl-4">
+              <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Avg I</div>
+              <div className="text-sm font-mono font-bold text-slate-900 leading-tight">
+                {avgCurrent > 0 ? avgCurrent.toFixed(2) : '—'}
+                {avgCurrent > 0 && (
+                  <span className="text-[10px] text-slate-500 ml-1">A</span>
+                )}
+              </div>
+            </div>
             {alerts.length > 0 && (
-              <Badge variant="destructive" className="text-[10px] px-1.5 py-0.5">
+              <Badge variant="destructive" className="text-[10px] px-1.5 py-0.5 shrink-0">
                 {alerts.length} alert{alerts.length !== 1 ? 's' : ''}
               </Badge>
             )}
           </div>
         </div>
 
-        {/* Status bar — based on live (non-offline) strings */}
+        {/* Status bar — thin, proportional per-state split */}
         <div className="flex items-center gap-3 mt-3">
           <div className="flex-1 flex gap-0.5 h-1.5 rounded-full overflow-hidden bg-slate-100">
             {summary.normal > 0 && (
@@ -362,7 +378,7 @@ export function InverterDetailSection({
               />
             )}
           </div>
-          <span className="text-[11px] font-mono font-semibold text-slate-600">
+          <span className="text-[11px] font-mono font-semibold text-slate-600 shrink-0">
             {healthPct}% healthy
           </span>
         </div>

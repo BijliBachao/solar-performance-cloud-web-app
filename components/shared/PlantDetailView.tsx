@@ -3,7 +3,13 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { type StringStatus } from '@/lib/string-health'
+import {
+  type StringStatus,
+  STANDBY_POWER_FLOOR_KW,
+  classifyPlantLive,
+  HEALTH_HEALTHY,
+  HEALTH_WARNING,
+} from '@/lib/string-health'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { PlantHeader } from '@/components/shared/PlantHeader'
 import { InverterDetailSection } from '@/components/shared/InverterDetailSection'
@@ -168,6 +174,37 @@ export function PlantDetailView({
     critical: allStrings.filter(s => s.status === 'CRITICAL').length,
   }
 
+  // ─── Plant-level KPIs (computed from live string data) ─────
+  // Live power: sum of string power (in W) → kW, then apply standby floor
+  // to avoid treating inverter standby noise as production.
+  const rawLivePowerKw =
+    allStrings.reduce((sum, s) => sum + (Number(s.power) || 0), 0) / 1000
+  const isReporting = allStrings.length > 0 && rawLivePowerKw >= 0
+  const liveStatus = classifyPlantLive(isReporting, rawLivePowerKw)
+  const displayPowerKw =
+    liveStatus === 'PRODUCING' ? Math.round(rawLivePowerKw * 10) / 10 : 0
+
+  // Today's energy: sum of per-string energy_kwh where present
+  const todayEnergyKwh = allStrings.reduce(
+    (sum, s) => sum + (Number(s.energy_kwh) || 0),
+    0,
+  )
+
+  // Utilization: live power vs nameplate capacity
+  const capacityKw = Number(plant?.capacity_kw) || 0
+  const utilizationPct =
+    capacityKw > 0 && liveStatus === 'PRODUCING'
+      ? Math.round((rawLivePowerKw / capacityKw) * 100)
+      : null
+
+  // Healthy % across ALL strings reported (normal / total)
+  const healthPct =
+    allStrings.length > 0
+      ? Math.round((stringSummary.ok / allStrings.length) * 100)
+      : null
+
+  const alertCount = alerts.length
+
   // ─── Loading State ─────────────────────────────────────────
 
   if (loading) {
@@ -222,6 +259,13 @@ export function PlantDetailView({
         isRefreshing={isRefreshing}
         onToggleAutoRefresh={() => setAutoRefresh(!autoRefresh)}
         onRefresh={handleRefresh}
+        liveStatus={liveStatus}
+        currentPowerKw={displayPowerKw}
+        todayEnergyKwh={todayEnergyKwh}
+        utilizationPct={utilizationPct}
+        healthPct={healthPct}
+        alertCount={alertCount}
+        totalStringCount={allStrings.length}
       />
 
       <div className="px-4 sm:px-6 py-5 max-w-[1440px] mx-auto">
