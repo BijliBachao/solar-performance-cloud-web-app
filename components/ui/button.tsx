@@ -4,40 +4,39 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 /**
- * SPC Button — DESIGN.md §4
+ * SPC Button — v3 Solar Corporate (DESIGN.md §9)
  *
- * `default` = NVIDIA-style outlined-green CTA (transparent bg, 2px green border,
- * fills green on hover). This is the primary industrial voice.
- * `destructive` = same pattern in red.
- * `outline` = neutral slate-bordered secondary button.
- * `secondary` = soft slate-filled, for tertiary emphasis.
- * `ghost` = text-only, for inline / header actions.
- * `link` = green underlined link.
+ * `default` = filled solar-gold primary CTA
+ * `outline` = neutral slate-bordered secondary
+ * `ghost` = text-only inline/table action
+ * `destructive` = filled red for delete/remove
+ * `link` = inline text-link style
  *
- * All buttons: 2px radius, weight 700, spc-green focus ring.
+ * Rules: 4px radius (rounded), 14px weight 600, solar-gold focus ring @ 25%
+ * ONE primary CTA per fold — if two filled buttons are visible, one is wrong.
  */
 const buttonVariants = cva(
-  'inline-flex items-center justify-center rounded-sm text-sm font-bold leading-tight transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spc-green focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex items-center justify-center rounded text-sm font-semibold leading-tight transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-solar-gold/25 disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       variant: {
         default:
-          'bg-transparent border-2 border-spc-green text-slate-900 hover:bg-spc-green hover:text-white active:bg-spc-green-dark active:border-spc-green-dark',
+          'bg-solar-gold text-white hover:bg-solar-gold-600 active:bg-solar-gold-700 shadow-sm',
         destructive:
-          'bg-transparent border-2 border-red-600 text-red-700 hover:bg-red-600 hover:text-white',
+          'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 shadow-sm',
         outline:
-          'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-400',
+          'bg-white border border-slate-200 text-slate-900 hover:bg-slate-50 hover:border-slate-300',
         secondary:
           'bg-slate-100 text-slate-900 hover:bg-slate-200',
         ghost:
           'bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900',
         link:
-          'text-spc-green underline-offset-4 hover:underline hover:text-spc-green-dark',
+          'text-solar-gold-600 underline-offset-4 hover:underline hover:text-solar-gold-700',
       },
       size: {
         default: 'h-10 px-4 py-2',
-        sm: 'h-9 rounded-sm px-3',
-        lg: 'h-11 rounded-sm px-8',
+        sm: 'h-8 px-3 text-xs',
+        lg: 'h-11 px-5 text-base',
         icon: 'h-10 w-10',
       },
     },

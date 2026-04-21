@@ -28,17 +28,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (!authorized) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="flex items-center gap-3">
-          <div className="w-5 h-5 border-2 border-spc-green border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm font-semibold text-slate-400">Loading...</span>
+          <div className="w-5 h-5 border-2 border-solar-gold border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm font-semibold text-slate-500">Loading...</span>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-white">
       <Sidebar role="admin" />
       <div className="ml-60">
         <TopBar />

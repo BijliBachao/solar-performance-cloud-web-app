@@ -24,17 +24,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!authorized) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f5f5f5]">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="flex items-center gap-3">
-          <div className="w-5 h-5 border-2 border-[#76b900] border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm font-semibold text-[#898989]">Loading...</span>
+          <div className="w-5 h-5 border-2 border-solar-gold border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm font-semibold text-slate-500">Loading...</span>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5]">
+    <div className="min-h-screen bg-white">
       <Sidebar role="user" />
       <div className="ml-60">
         <TopBar />

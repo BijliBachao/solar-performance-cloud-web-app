@@ -4,9 +4,8 @@ import * as TabsPrimitive from '@radix-ui/react-tabs'
 import { cn } from '@/lib/utils'
 
 /**
- * SPC Tabs — DESIGN.md §4 underline-style (not pill).
- * TabsList is a bottom-bordered container.
- * TabsTrigger draws a 2px bottom accent on hover and a spc-green accent when active.
+ * SPC Tabs — v3 underline style (DESIGN.md §14).
+ * Solar-gold active indicator.
  */
 
 const Tabs = TabsPrimitive.Root
@@ -35,9 +34,9 @@ const TabsTrigger = React.forwardRef<
     className={cn(
       'inline-flex items-center justify-center whitespace-nowrap px-4 py-3 text-sm font-semibold text-slate-600 border-b-2 border-transparent -mb-px transition-colors',
       'hover:text-slate-900 hover:border-slate-300',
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spc-green focus-visible:ring-offset-2',
+      'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-solar-gold/25',
       'disabled:pointer-events-none disabled:opacity-50',
-      'data-[state=active]:text-spc-green data-[state=active]:border-spc-green data-[state=active]:font-bold',
+      'data-[state=active]:text-solar-gold-700 data-[state=active]:border-solar-gold data-[state=active]:font-bold',
       className,
     )}
     {...props}
@@ -52,7 +51,7 @@ const TabsContent = React.forwardRef<
   <TabsPrimitive.Content
     ref={ref}
     className={cn(
-      'mt-4 ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-spc-green focus-visible:ring-offset-2',
+      'mt-4 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-solar-gold/25',
       className,
     )}
     {...props}

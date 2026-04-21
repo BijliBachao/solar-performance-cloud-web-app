@@ -3,42 +3,57 @@
 @tailwind utilities;
 
 /* ─────────────────────────────────────────────────────────────
-   SPC Design Tokens (CSS variables)
+   SPC Design System v3 — Solar Corporate
    Single source: /DESIGN.md + /tailwind.config.ts + /lib/design-tokens.ts
-   Rule: no pure black anywhere. Slate 900 replaces black.
+   Rules: no pure black · pure white canvas · solar-gold brand
    ───────────────────────────────────────────────────────────── */
 
 @layer base {
   :root {
-    /* ━━ Brand ━━ */
-    --spc-green: #76b900;
-    --spc-green-light: #bff230;
-    --spc-green-dark: #5a8f00;
-    --spc-green-tint: #e8f5d0;
+    /* ━━ Brand: Solar Gold ━━ */
+    --solar-gold: #f59e0b;
+    --solar-gold-50: #fffbeb;
+    --solar-gold-100: #fef3c7;
+    --solar-gold-400: #fbbf24;
+    --solar-gold-500: #f59e0b;
+    --solar-gold-600: #d97706;
+    --solar-gold-700: #b45309;
+    --solar-gold-900: #78350f;
+
+    /* Legacy alias (code using --spc-green keeps working) */
+    --spc-green: #f59e0b;
+    --spc-green-light: #fbbf24;
+    --spc-green-dark: #d97706;
+    --spc-green-tint: #fef3c7;
 
     /* ━━ Surfaces ━━ */
-    --bg-page: #f8fafc;           /* slate-50 — page background */
-    --bg-card: #ffffff;           /* white — card surface */
-    --bg-subtle: #f8fafc;         /* subtle alt surface */
-    --bg-hover: #f1f5f9;          /* slate-100 — row/item hover */
-    --bg-sidebar: #0f172a;        /* slate-900 — REPLACES black sidebar */
-    --bg-sidebar-hover: #1e293b;  /* slate-800 — sidebar nav hover */
-    --bg-dark-card: #1e293b;      /* slate-800 — REPLACES #1a1a1a cards */
+    --bg-page: #ffffff;              /* PURE WHITE canvas — Vodafone discipline */
+    --bg-card: #ffffff;
+    --bg-subtle: #f8fafc;            /* slate-50 — alt rows only */
+    --bg-hover: #f1f5f9;              /* slate-100 — row/item hover */
+    --bg-sidebar: #ffffff;            /* white sidebar */
+    --bg-sidebar-hover: #f8fafc;
+    --bg-institutional: #0f172a;     /* slate-900 — footer/auth only */
+    --bg-institutional-alt: #1e293b; /* slate-800 */
 
     /* ━━ Text ━━ */
-    --text-primary: #0f172a;      /* slate-900 — REPLACES black text */
-    --text-secondary: #475569;    /* slate-600 — body */
-    --text-muted: #94a3b8;        /* slate-400 — metadata */
-    --text-disabled: #cbd5e1;     /* slate-300 */
-    --text-on-dark: #f8fafc;      /* slate-50 — on dark surfaces */
+    --text-primary: #0f172a;   /* slate-900 — headings */
+    --text-heading: #0f172a;
+    --text-body: #475569;      /* slate-600 */
+    --text-label: #334155;     /* slate-700 */
+    --text-muted: #94a3b8;     /* slate-400 */
+    --text-disabled: #cbd5e1;  /* slate-300 */
+    --text-on-dark: #f8fafc;
     --text-on-dark-muted: #94a3b8;
+    --text-link: #d97706;      /* solar-gold-600 */
+    --text-link-hover: #b45309;
 
     /* ━━ Borders ━━ */
-    --border-default: #e2e8f0;    /* slate-200 — cards, dividers */
-    --border-subtle: #f1f5f9;     /* slate-100 — soft dividers */
-    --border-strong: #cbd5e1;     /* slate-300 — emphasis */
-    --border-focus: #76b900;      /* brand green */
-    --border-dark: #334155;       /* slate-700 — on dark surfaces */
+    --border-default: #e2e8f0;  /* slate-200 */
+    --border-subtle: #f1f5f9;   /* slate-100 */
+    --border-strong: #cbd5e1;   /* slate-300 */
+    --border-focus: #f59e0b;    /* solar-gold */
+    --border-dark: #334155;     /* slate-700 — on dark surfaces */
 
     /* ━━ Status (semantic) ━━ */
     --status-healthy: #059669;
@@ -67,18 +82,33 @@
     --status-offline-bg: #f1f5f9;
     --status-offline-border: #cbd5e1;
 
-    --status-info: #0046a4;
+    --status-info: #2563eb;
     --status-info-bg: #eff6ff;
     --status-info-border: #bfdbfe;
 
-    /* ━━ Shadows (slate-tinted, never pure black) ━━ */
-    --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
-    --shadow-hover: 0 4px 12px rgba(15, 23, 42, 0.10);
+    /* ━━ Shadows ━━ */
+    --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.02);
+    --shadow-hover: 0 4px 12px rgba(15, 23, 42, 0.08);
     --shadow-modal: 0 20px 40px rgba(15, 23, 42, 0.15);
+    --shadow-featured: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 30px rgba(15, 23, 42, 0.08);
+    --shadow-focus-ring: 0 0 0 3px rgba(245, 158, 11, 0.25);
 
-    /* ━━ shadcn/ui compatibility (unchanged for Phase 1) ━━ */
+    /* ━━ shadcn/ui compatibility ━━ */
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
+  }
+
+  /* Default body: white canvas + Inter font + slate-900 text */
+  html, body {
+    background-color: var(--bg-page);
+    color: var(--text-primary);
+    font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* Tabular numerals by default when font-mono is applied */
+  .font-mono {
+    font-feature-settings: 'tnum' 1, 'zero' 1;
   }
 }
 
@@ -98,6 +128,6 @@
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
   background: var(--border-strong);
-  border-radius: 2px;
+  border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }

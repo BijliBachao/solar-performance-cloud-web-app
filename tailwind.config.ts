@@ -1,13 +1,16 @@
 import type { Config } from 'tailwindcss'
 
 /**
- * SPC Design System — Tailwind Tokens
+ * SPC Design System v3 — "Solar Corporate"
  *
  * Single source: DESIGN.md at the project root.
- * See `lib/design-tokens.ts` for status/provider/health lookups.
+ * Paired files: app/globals.css · lib/design-tokens.ts
  *
- * Rule: no pure black (#000) or near-black (#1a1a1a) anywhere.
- * Slate 900 (#0F172A) replaces black. Slate 800 (#1E293B) replaces #1a1a1a.
+ * Rules (non-negotiable):
+ *  - No pure black (#000) or near-black (#1a1a1a) anywhere
+ *  - Pure white canvas
+ *  - Solar Gold (#F59E0B) is the brand color — primary CTAs, active states, focus rings
+ *  - Status colors come from STATUS_STYLES lookup in lib/design-tokens.ts
  */
 const config: Config = {
   content: [
@@ -18,33 +21,53 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // ━━━ SPC BRAND (canonical) ━━━━━━━━━━━━━━━━━━━━━━━━
-        // Used via `bg-spc-green`, `text-spc-green`, `border-spc-green`.
-        // Brand green is a SIGNAL color — borders, accents, active state, underlines.
-        // NEVER used as a large surface fill.
+        // ━━━ SOLAR GOLD — the brand (v3 canonical) ━━━━━━━━━━━
+        // Used as primary CTAs, active states, focus rings, brand accent.
+        // Class names: bg-solar-gold, text-solar-gold-600, border-solar-gold-200
+        'solar-gold': {
+          DEFAULT: '#F59E0B',
+          50: '#FFFBEB',
+          100: '#FEF3C7',
+          200: '#FDE68A',
+          400: '#FBBF24',
+          500: '#F59E0B',
+          600: '#D97706',
+          700: '#B45309',
+          800: '#92400E',
+          900: '#78350F',
+        },
+
+        // ━━━ SPC namespace alias — backward-compat ━━━━━━━━━━
+        // Legacy class names (bg-spc-green, text-spc-green-dark) still work —
+        // they now render as Solar Gold. Gradual migration; new code should
+        // use `solar-gold` directly for clarity.
         spc: {
-          green: '#76b900',
-          'green-light': '#bff230',
-          'green-dark': '#5a8f00',
-          'green-tint': '#E8F5D0',
+          green: '#F59E0B',
+          'green-light': '#FBBF24',
+          'green-dark': '#D97706',
+          'green-tint': '#FEF3C7',
+          // Forward-compatible aliases
+          gold: '#F59E0B',
+          'gold-light': '#FBBF24',
+          'gold-dark': '#D97706',
+          'gold-tint': '#FEF3C7',
         },
 
-        // ━━━ SURFACE / BACKGROUND ━━━━━━━━━━━━━━━━━━━━━━━━
-        // `bg-page` = page background (slate-50).
-        // `bg-sidebar` = deep slate (REPLACES black).
-        // `bg-sidebar-hover` / `bg-dark-card` = slate-800 (REPLACES #1a1a1a).
+        // ━━━ SURFACES — white canvas discipline ━━━━━━━━━━━━━
+        // Canvas is pure white (Vodafone discipline).
+        // Institutional dark is reserved for footer / auth / optional data panels.
         surface: {
-          page: '#F8FAFC',
+          page: '#FFFFFF',
           card: '#FFFFFF',
-          subtle: '#F8FAFC',
-          hover: '#F1F5F9',
-          sidebar: '#0F172A',
-          'sidebar-hover': '#1E293B',
-          'dark-card': '#1E293B',
+          subtle: '#F8FAFC', // slate-50 — alt rows, disabled surfaces
+          hover: '#F1F5F9', // slate-100 — row/item hover
+          sidebar: '#FFFFFF', // white sidebar (Vodafone discipline)
+          'sidebar-hover': '#F8FAFC',
+          institutional: '#0F172A', // slate-900 — footer/auth only
+          'institutional-alt': '#1E293B', // slate-800
         },
 
-        // ━━━ PROVIDER BADGE ACCENTS ━━━━━━━━━━━━━━━━━━━━━━
-        // Per-brand badge color pairs. Used via `lib/design-tokens.ts` lookup.
+        // ━━━ PROVIDER BADGE ACCENTS (unchanged — per-brand identity) ━━━
         provider: {
           huawei: '#DC2626',
           solis: '#2563EB',
@@ -52,33 +75,25 @@ const config: Config = {
           sungrow: '#7C3AED',
         },
 
-        // ━━━ LEGACY PRIMARY (orange — DEPRECATED) ━━━━━━━━━━
-        // `primary-*` currently used by shadcn UI primitives (button, badge, input,
-        // select, tabs, dialog) for focus rings + filled buttons.
-        // TODO Phase 2: migrate those primitives to use `spc-green` and remove this.
+        // ━━━ LEGACY primary — now maps to solar-gold ━━━━━━━━━━
+        // shadcn and other primitives still reference `primary-*`; redefining
+        // the ramp keeps them working while delivering the new brand visually.
         primary: {
-          50: '#fff7ed',
-          100: '#ffedd5',
-          500: '#f97316',
-          600: '#ea580c',
-          700: '#c2410c',
-          900: '#7c2d12',
+          50: '#FFFBEB',
+          100: '#FEF3C7',
+          500: '#F59E0B',
+          600: '#D97706',
+          700: '#B45309',
+          900: '#78350F',
         },
 
-        // ━━━ LEGACY ACCENT (green — unused, DEPRECATED) ━━━━
-        // No files reference `accent-*`. Keeping ramp for any future migration.
+        // ━━━ LEGACY accent / gray (DEPRECATED — use slate-*) ━━━━
+        // Kept to avoid breaking un-migrated files; do NOT use in new code.
         accent: {
           50: '#f0fdf4',
-          100: '#dcfce7',
           500: '#22c55e',
           600: '#16a34a',
-          700: '#15803d',
         },
-
-        // ━━━ LEGACY GRAY (DEPRECATED — use slate-* instead) ━━━
-        // Tailwind's default `slate-*` ramp (#F8FAFC..#0F172A) is the SPC neutral scale.
-        // This block is kept ONLY to avoid breaking existing `gray-50..gray-900` usage
-        // in components/pages that haven't been migrated yet. Do NOT use in new code.
         gray: {
           50: '#f9fafb',
           100: '#f3f4f6',
@@ -102,6 +117,7 @@ const config: Config = {
           'sans-serif',
         ],
         mono: [
+          '"JetBrains Mono"',
           'ui-monospace',
           '"SF Mono"',
           '"Roboto Mono"',
@@ -113,10 +129,12 @@ const config: Config = {
 
       boxShadow: {
         // Slate-tinted shadows — never pure black.
-        card: '0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04)',
-        hover: '0 4px 12px rgba(15, 23, 42, 0.10)',
+        card: '0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.02)',
+        hover: '0 4px 12px rgba(15, 23, 42, 0.08)',
         modal: '0 20px 40px rgba(15, 23, 42, 0.15)',
-        'focus-ring': '0 0 0 2px #76b900',
+        featured:
+          '0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 30px rgba(15, 23, 42, 0.08)',
+        'focus-ring': '0 0 0 3px rgba(245, 158, 11, 0.25)',
       },
 
       animation: {

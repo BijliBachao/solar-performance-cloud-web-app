@@ -11,10 +11,10 @@ function LoadingSkeleton() {
     <div className="space-y-3 animate-pulse">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="h-24 rounded-sm bg-slate-100" />
+          <div key={i} className="h-24 rounded-md bg-slate-100" />
         ))}
       </div>
-      <div className="h-48 rounded-sm bg-slate-100" />
+      <div className="h-48 rounded-md bg-slate-100" />
     </div>
   )
 }
@@ -37,7 +37,7 @@ export function PageWrapper({
       {loading ? (
         <LoadingSkeleton />
       ) : error ? (
-        <div className="rounded-sm border border-red-200 border-l-[3px] border-l-red-600 bg-red-50 p-4 text-sm font-semibold text-red-700">
+        <div className="rounded-md border border-red-200 border-l-[3px] border-l-red-600 bg-red-50 p-4 text-sm font-medium text-red-700">
           {error}
         </div>
       ) : (

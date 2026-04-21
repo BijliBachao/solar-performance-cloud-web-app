@@ -32,22 +32,26 @@ const userNav = [
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ]
 
+/**
+ * SPC Sidebar — v3 white with solar-gold active accent (DESIGN.md §22).
+ * Vodafone discipline: white on white app surface, separated by slate-200 border.
+ */
 export function Sidebar({ role }: SidebarProps) {
   const pathname = usePathname()
   const navItems = role === 'admin' ? adminNav : userNav
 
   return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-60 border-r border-slate-700 bg-slate-900">
+    <aside className="fixed left-0 top-0 z-40 h-screen w-60 bg-white border-r border-slate-200">
       {/* Logo */}
-      <div className="flex h-14 items-center gap-2.5 border-b border-slate-700 px-5">
-        <div className="flex items-center justify-center w-8 h-8 rounded-sm bg-spc-green/10">
-          <Sun className="h-5 w-5 text-spc-green" strokeWidth={2} />
+      <div className="flex h-14 items-center gap-2.5 border-b border-slate-200 px-5">
+        <div className="flex items-center justify-center w-8 h-8 rounded-md bg-solar-gold-50">
+          <Sun className="h-5 w-5 text-solar-gold-600" strokeWidth={2} />
         </div>
         <div>
-          <h1 className="text-sm font-bold leading-tight text-white">
+          <h1 className="text-sm font-bold leading-tight text-slate-900">
             Solar Performance
           </h1>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-spc-green">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-solar-gold-600">
             Cloud
           </p>
         </div>
@@ -66,13 +70,23 @@ export function Sidebar({ role }: SidebarProps) {
                 <Link
                   href={item.href}
                   className={cn(
-                    'flex items-center gap-3 rounded-sm px-3 py-2.5 text-[13px] font-bold uppercase tracking-wide transition-colors',
+                    'flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-semibold transition-colors relative',
                     isActive
-                      ? 'bg-spc-green/10 text-spc-green border-l-2 border-spc-green -ml-px'
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-slate-50',
+                      ? 'bg-solar-gold-50 text-solar-gold-700 font-bold'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
                   )}
                 >
-                  <item.icon className="h-[18px] w-[18px]" strokeWidth={2} />
+                  {/* Active left accent bar */}
+                  {isActive && (
+                    <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r bg-solar-gold" />
+                  )}
+                  <item.icon
+                    className={cn(
+                      'h-[18px] w-[18px] shrink-0',
+                      isActive ? 'text-solar-gold-600' : 'text-slate-500',
+                    )}
+                    strokeWidth={2}
+                  />
                   {item.label}
                 </Link>
               </li>
@@ -82,11 +96,11 @@ export function Sidebar({ role }: SidebarProps) {
       </nav>
 
       {/* Bottom section */}
-      <div className="absolute bottom-0 left-0 right-0 border-t border-slate-700 px-5 py-4">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+      <div className="absolute bottom-0 left-0 right-0 border-t border-slate-200 px-5 py-4">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
           Powered by
         </p>
-        <p className="text-xs font-bold text-slate-300">Bijli Bachao</p>
+        <p className="text-xs font-bold text-slate-700">Bijli Bachao</p>
       </div>
     </aside>
   )
