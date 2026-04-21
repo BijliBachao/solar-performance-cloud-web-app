@@ -6,7 +6,7 @@ import {
   ApiAuthError,
 } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
-import { PLANT_HEALTH_HEALTHY, STALE_MS } from '@/lib/string-health'
+import { PLANT_HEALTH_HEALTHY, STALE_MS, MAX_STRING_CURRENT_A } from '@/lib/string-health'
 
 const PKT_OFFSET_MS = 5 * 60 * 60 * 1000
 
@@ -83,27 +83,39 @@ export async function GET() {
       hourlyTodayPerPlant,
     ] = await Promise.all([
       // Latest measurements per string in last 15 min (for live power + per-plant live)
+      // Filter out CT sensor faults (current above physically reasonable bound).
       prisma.$queryRaw<Array<{ plant_id: string; device_id: string; power: number | null }>>`
         SELECT DISTINCT ON (device_id, string_number) plant_id, device_id, power
         FROM string_measurements
         WHERE plant_id = ANY(${plantIds})
           AND timestamp > ${fifteenMinAgo}
+          AND (current IS NULL OR current < ${MAX_STRING_CURRENT_A})
         ORDER BY device_id, string_number, timestamp DESC
       `,
 
       // Last 48h hourly fleet power (for hero sparkline + delta vs yesterday)
+      // Exclude strings with sensor-fault current readings at aggregate level.
       prisma.$queryRaw<Array<{ hour: Date; power: number }>>`
         SELECT hour, SUM(avg_power)::float as power
         FROM string_hourly
         WHERE plant_id = ANY(${plantIds})
           AND hour > ${fortyEightHoursAgo}
+          AND (avg_current IS NULL OR avg_current < ${MAX_STRING_CURRENT_A})
         GROUP BY hour
         ORDER BY hour
       `,
 
       // Last 7 days of daily data (per-string, we aggregate in code)
+      // Exclude sensor-fault rows from fleet totals so energy/health are real.
       prisma.string_daily.findMany({
-        where: { plant_id: { in: plantIds }, date: { gte: sevenDaysAgoPKT } },
+        where: {
+          plant_id: { in: plantIds },
+          date: { gte: sevenDaysAgoPKT },
+          OR: [
+            { avg_current: null },
+            { avg_current: { lt: MAX_STRING_CURRENT_A } },
+          ],
+        },
         select: {
           date: true,
           plant_id: true,
@@ -161,11 +173,13 @@ export async function GET() {
       prisma.devices.count({ where: { plant_id: { in: plantIds } } }),
 
       // Per-plant hourly today (for production bars — 24 buckets per plant)
+      // PKT day starts 5 hours before UTC midnight — subtract to include the full PKT day.
       prisma.$queryRaw<Array<{ plant_id: string; hour: Date; power: number }>>`
         SELECT plant_id, hour, SUM(avg_power)::float as power
         FROM string_hourly
         WHERE plant_id = ANY(${plantIds})
-          AND hour >= ${todayPKT}
+          AND hour >= ${new Date(todayPKT.getTime() - PKT_OFFSET_MS)}
+          AND (avg_current IS NULL OR avg_current < ${MAX_STRING_CURRENT_A})
         GROUP BY plant_id, hour
       `,
     ])

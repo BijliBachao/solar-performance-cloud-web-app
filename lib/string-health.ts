@@ -23,6 +23,22 @@
 /** Minimum current (amps) for a string to be considered "active/producing" */
 export const ACTIVE_CURRENT_THRESHOLD = 0.1
 
+/**
+ * Upper bound for a single-string current reading (amps).
+ * Above this indicates a CT (current transformer) sensor malfunction —
+ * a miscalibrated or broken sensor reporting impossibly high values.
+ *
+ * Physical reality check:
+ *   - Typical residential/commercial PV string: 6–12 A
+ *   - Utility-grade parallel string bundles: up to 20–30 A
+ *   - 50 A is a conservative upper bound — any value above is a fault
+ *
+ * Usage: exclude such rows from fleet-level aggregates (energy today,
+ * live power, sparklines) so dashboards show real values. Rows remain
+ * in the DB for per-string diagnostic views where the fault must be visible.
+ */
+export const MAX_STRING_CURRENT_A = 50
+
 /** Minimum number of active strings required for peer comparison */
 export const MIN_PEERS_FOR_COMPARISON = 2
 
@@ -79,6 +95,12 @@ export type HealthBucket = 'healthy' | 'warning' | 'critical' | 'no_data'
 /** Is this string actively producing current? */
 export function isActive(currentAmps: number): boolean {
   return currentAmps > ACTIVE_CURRENT_THRESHOLD
+}
+
+/** Is this current reading within physically reasonable bounds (no CT sensor fault)? */
+export function isSensorReadingValid(currentAmps: number | null | undefined): boolean {
+  if (currentAmps == null) return true
+  return currentAmps < MAX_STRING_CURRENT_A
 }
 
 /** Is this measurement stale relative to the freshest on the device? */
