@@ -6,7 +6,15 @@ import {
   ApiAuthError,
 } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
-import { PLANT_HEALTH_HEALTHY, STALE_MS, MAX_STRING_CURRENT_A } from '@/lib/string-health'
+import {
+  PLANT_HEALTH_HEALTHY,
+  STALE_MS,
+  MAX_STRING_CURRENT_A,
+  MS_PER_HOUR,
+  HERO_SPARKLINE_HOURS,
+  HERO_SPARKLINE_LOOKBACK_HOURS,
+  DASHBOARD_HISTORY_DAYS,
+} from '@/lib/string-health'
 
 const PKT_OFFSET_MS = 5 * 60 * 60 * 1000
 
@@ -66,10 +74,12 @@ export async function GET() {
     }
 
     const todayPKT = getPKTToday()
-    const sevenDaysAgoPKT = getPKTDaysAgo(7)
+    const historyStartPKT = getPKTDaysAgo(DASHBOARD_HISTORY_DAYS)
     const fifteenMinAgo = new Date(Date.now() - STALE_MS)
     const thirtyMinAgo = new Date(Date.now() - 2 * STALE_MS)
-    const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000)
+    const sparklineLookbackStart = new Date(
+      Date.now() - HERO_SPARKLINE_LOOKBACK_HOURS * MS_PER_HOUR,
+    )
 
     const [
       latestMeasurements,
@@ -94,24 +104,27 @@ export async function GET() {
         ORDER BY device_id, string_number, timestamp DESC
       `,
 
-      // Last 48h hourly fleet power (for hero sparkline + delta vs yesterday)
-      // Exclude strings with sensor-fault current readings at aggregate level.
+      // Hourly fleet power over HERO_SPARKLINE_LOOKBACK_HOURS window.
+      // Window is 2× the displayed sparkline so we can compare any "completed
+      // hour today" against the same completed hour yesterday.
+      // Excludes strings with sensor-fault current readings at aggregate level.
       prisma.$queryRaw<Array<{ hour: Date; power: number }>>`
         SELECT hour, SUM(avg_power)::float as power
         FROM string_hourly
         WHERE plant_id = ANY(${plantIds})
-          AND hour > ${fortyEightHoursAgo}
+          AND hour > ${sparklineLookbackStart}
           AND (avg_current IS NULL OR avg_current < ${MAX_STRING_CURRENT_A})
         GROUP BY hour
         ORDER BY hour
       `,
 
-      // Last 7 days of daily data (per-string, we aggregate in code)
-      // Exclude sensor-fault rows from fleet totals so energy/health are real.
+      // Daily per-string data over the dashboard history window.
+      // Drives energy/health sparklines and the rolling-avg baseline.
+      // Excludes sensor-fault rows so fleet totals reflect reality.
       prisma.string_daily.findMany({
         where: {
           plant_id: { in: plantIds },
-          date: { gte: sevenDaysAgoPKT },
+          date: { gte: historyStartPKT },
           OR: [
             { avg_current: null },
             { avg_current: { lt: MAX_STRING_CURRENT_A } },
@@ -203,7 +216,8 @@ export async function GET() {
       (pa) => pa.plants.health_state === PLANT_HEALTH_HEALTHY,
     ).length
 
-    // Hero sparkline: 24h of fleet power (last 24 hours), indexed by hour-of-day from now back
+    // Hero sparkline — 48-entry buffer where index (LOOKBACK-1) is the
+    // current (in-progress) hour and index 0 is the oldest hour fetched.
     const hourlyMap = new Map<string, number>()
     hourlyLast48h.forEach((h) => {
       const d = new Date(h.hour)
@@ -211,20 +225,23 @@ export async function GET() {
       hourlyMap.set(d.toISOString(), Number(h.power || 0))
     })
 
-    const sparkline48: number[] = []
-    for (let i = 47; i >= 0; i--) {
-      const d = new Date(Date.now() - i * 60 * 60 * 1000)
+    const sparklineBuf: number[] = []
+    for (let i = HERO_SPARKLINE_LOOKBACK_HOURS - 1; i >= 0; i--) {
+      const d = new Date(Date.now() - i * MS_PER_HOUR)
       d.setMinutes(0, 0, 0)
       const power = (hourlyMap.get(d.toISOString()) || 0) / 1000 // kW
-      sparkline48.push(power)
+      sparklineBuf.push(power)
     }
-    const heroSparkline = sparkline48.slice(-24) // last 24h
+    const heroSparkline = sparklineBuf.slice(-HERO_SPARKLINE_HOURS)
 
-    // Hero delta: LAST COMPLETED hour vs same completed hour yesterday.
-    // Index 47 = current in-progress hour (partial data — misleading for a delta).
-    // Index 46 = last completed hour.  Index 22 = same hour yesterday (also completed).
-    const lastCompletedHourPower = sparkline48[46] || 0
-    const sameHourYesterdayPower = sparkline48[22] || 0
+    // Hero delta — LAST COMPLETED hour vs same completed hour yesterday.
+    // The final index is the current in-progress hour (partial → misleading).
+    // Step back 1 for "last completed", and HERO_SPARKLINE_HOURS further back
+    // for "same completed hour yesterday".
+    const LAST_COMPLETED_IDX = HERO_SPARKLINE_LOOKBACK_HOURS - 2
+    const SAME_HOUR_YESTERDAY_IDX = LAST_COMPLETED_IDX - HERO_SPARKLINE_HOURS
+    const lastCompletedHourPower = sparklineBuf[LAST_COMPLETED_IDX] || 0
+    const sameHourYesterdayPower = sparklineBuf[SAME_HOUR_YESTERDAY_IDX] || 0
     const livePowerDeltaPercent: number | null =
       sameHourYesterdayPower > 0
         ? ((lastCompletedHourPower - sameHourYesterdayPower) / sameHourYesterdayPower) * 100
@@ -264,26 +281,28 @@ export async function GET() {
     })
 
     const energySparkline: number[] = []
-    for (let i = 6; i >= 0; i--) {
+    for (let i = DASHBOARD_HISTORY_DAYS - 1; i >= 0; i--) {
       const d = new Date(todayPKT)
       d.setUTCDate(d.getUTCDate() - i)
       energySparkline.push(dailyEnergyByDate.get(isoDateKey(d)) || 0)
     }
-    const energyTodayKwh = energySparkline[6] || 0
+    const energyTodayKwh = energySparkline[DASHBOARD_HISTORY_DAYS - 1] || 0
 
     // Energy delta — FAIR apples-to-apples comparison.
     // DON'T compare today-partial to yesterday-full (always misleading before EOD).
-    // DO compare today-so-far to yesterday at the SAME PKT time, both summed from hourly data.
+    // DO sum today-so-far vs yesterday-at-same-PKT-time, both from the hourly buffer.
     const nowPKT = new Date(Date.now() + PKT_OFFSET_MS)
     const pktHourNow = nowPKT.getUTCHours()
     const pktMinuteNow = nowPKT.getUTCMinutes()
     const hoursElapsedToday = pktHourNow + 1 // includes current in-progress hour
 
-    const todaySoFarKwh = sparkline48
-      .slice(Math.max(0, 48 - hoursElapsedToday))
-      .reduce((a, b) => a + b, 0)
-    const yesterdaySameWindowKwh = sparkline48
-      .slice(Math.max(0, 48 - hoursElapsedToday - 24), Math.max(0, 48 - 24))
+    const todayStartIdx = Math.max(0, HERO_SPARKLINE_LOOKBACK_HOURS - hoursElapsedToday)
+    const yesterdayStartIdx = Math.max(0, todayStartIdx - HERO_SPARKLINE_HOURS)
+    const yesterdayEndIdx = Math.max(0, HERO_SPARKLINE_LOOKBACK_HOURS - HERO_SPARKLINE_HOURS)
+
+    const todaySoFarKwh = sparklineBuf.slice(todayStartIdx).reduce((a, b) => a + b, 0)
+    const yesterdaySameWindowKwh = sparklineBuf
+      .slice(yesterdayStartIdx, yesterdayEndIdx)
       .reduce((a, b) => a + b, 0)
     const energyDeltaPercent: number | null =
       yesterdaySameWindowKwh > 0
@@ -292,9 +311,9 @@ export async function GET() {
     const pktTimeStr = `${String(pktHourNow).padStart(2, '0')}:${String(pktMinuteNow).padStart(2, '0')}`
     const energyDeltaContext = energyDeltaPercent !== null ? `vs yesterday at ${pktTimeStr} PKT` : null
 
-    // KPI: Fleet Health + 7-day sparkline (null when no data — never assume 100%)
+    // KPI: Fleet Health + sparkline (null when no data — never assume 100%)
     const healthSparkline: (number | null)[] = []
-    for (let i = 6; i >= 0; i--) {
+    for (let i = DASHBOARD_HISTORY_DAYS - 1; i >= 0; i--) {
       const d = new Date(todayPKT)
       d.setUTCDate(d.getUTCDate() - i)
       const scores = dailyHealthByDate.get(isoDateKey(d)) || []
@@ -308,22 +327,24 @@ export async function GET() {
         ? todayScores.reduce((a, b) => a + b, 0) / todayScores.length
         : null
 
-    // Health delta: vs 7-day rolling avg (stable baseline — not jumpy like day-over-day)
-    const priorSevenDaysScores: number[] = []
-    for (let i = 1; i <= 7; i++) {
+    // Health delta — vs rolling average over DASHBOARD_HISTORY_DAYS prior days.
+    // Stable baseline; not jumpy like day-over-day partial comparisons.
+    const priorDaysScores: number[] = []
+    for (let i = 1; i <= DASHBOARD_HISTORY_DAYS; i++) {
       const d = new Date(todayPKT)
       d.setUTCDate(d.getUTCDate() - i)
-      priorSevenDaysScores.push(...(dailyHealthByDate.get(isoDateKey(d)) || []))
+      priorDaysScores.push(...(dailyHealthByDate.get(isoDateKey(d)) || []))
     }
-    const rolling7DayAvgHealth =
-      priorSevenDaysScores.length > 0
-        ? priorSevenDaysScores.reduce((a, b) => a + b, 0) / priorSevenDaysScores.length
+    const rollingAvgHealth =
+      priorDaysScores.length > 0
+        ? priorDaysScores.reduce((a, b) => a + b, 0) / priorDaysScores.length
         : null
     const healthDeltaPercent: number | null =
-      fleetHealthToday !== null && rolling7DayAvgHealth !== null && rolling7DayAvgHealth > 0
-        ? ((fleetHealthToday - rolling7DayAvgHealth) / rolling7DayAvgHealth) * 100
+      fleetHealthToday !== null && rollingAvgHealth !== null && rollingAvgHealth > 0
+        ? ((fleetHealthToday - rollingAvgHealth) / rollingAvgHealth) * 100
         : null
-    const healthDeltaContext = healthDeltaPercent !== null ? 'vs 7-day avg' : null
+    const healthDeltaContext =
+      healthDeltaPercent !== null ? `vs ${DASHBOARD_HISTORY_DAYS}-day avg` : null
 
     // KPI: Alerts (by severity)
     const alertsByKind = { critical: 0, warning: 0, info: 0, total: 0 }

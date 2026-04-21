@@ -319,7 +319,7 @@ else
 fi
 
 # ── 4.2: All required exports present ──────────────────────────────
-REQUIRED_EXPORTS="ACTIVE_CURRENT_THRESHOLD GAP_CRITICAL GAP_WARNING GAP_INFO HEALTH_HEALTHY HEALTH_WARNING HEALTH_CAUTION HEALTH_SEVERE STALE_MS MAX_DATE_RANGE_DAYS ACTIVE_LOOKBACK_DAYS PLANT_HEALTH_HEALTHY PLANT_HEALTH_FAULTY PLANT_HEALTH_DISCONNECTED isActive isStale classifyRealtime classifyAlertSeverity bucketHealthScore computePerformance computeAvailability computeHealthScore filterActive leaveOneOutAvg activeAvg computeGap canCompare StringStatus AlertSeverity HealthBucket"
+REQUIRED_EXPORTS="ACTIVE_CURRENT_THRESHOLD GAP_CRITICAL GAP_WARNING GAP_INFO HEALTH_HEALTHY HEALTH_WARNING HEALTH_CAUTION HEALTH_SEVERE STALE_MS MS_PER_HOUR HERO_SPARKLINE_HOURS HERO_SPARKLINE_LOOKBACK_HOURS DASHBOARD_HISTORY_DAYS MAX_DATE_RANGE_DAYS ACTIVE_LOOKBACK_DAYS PLANT_HEALTH_HEALTHY PLANT_HEALTH_FAULTY PLANT_HEALTH_DISCONNECTED isActive isStale classifyRealtime classifyAlertSeverity bucketHealthScore computePerformance computeAvailability computeHealthScore filterActive leaveOneOutAvg activeAvg computeGap canCompare StringStatus AlertSeverity HealthBucket"
 
 MISSING=""
 for export in $REQUIRED_EXPORTS; do
@@ -374,10 +374,73 @@ fi
 echo ""
 
 # ═══════════════════════════════════════════════════════════════════════
+# SECTION 5: DASHBOARD WINDOW CONSTANTS
+# ═══════════════════════════════════════════════════════════════════════
+
+echo "── Section 5: Dashboard Window Constants ────────────"
+echo ""
+
+# ── 5.1: No inline 48-hour millisecond windows ─────────────────────
+VIOLATIONS=$(grep -rn --include="*.ts" --include="*.tsx" $EXCLUDE \
+  '48 \* 60 \* 60 \* 1000\|48 \* MS_PER_HOUR' $SRC_DIRS 2>/dev/null \
+  | grep -v "$ALLOWED" \
+  | grep -v 'HERO_SPARKLINE_LOOKBACK_HOURS' \
+  | grep -v '^\s*//' \
+  || true)
+
+if [ -n "$VIOLATIONS" ]; then
+  echo -e "${RED}FAIL [5.1]: Inline 48-hour window found${NC}"
+  echo "$VIOLATIONS"
+  echo "  Fix: Use HERO_SPARKLINE_LOOKBACK_HOURS * MS_PER_HOUR from string-health.ts"
+  echo ""
+  ERRORS=$((ERRORS + 1))
+else
+  echo -e "${GREEN}PASS [5.1]: No inline 48-hour window constants${NC}"
+fi
+
+# ── 5.2: No magic sparkline slicing (.slice(-24)) ──────────────────
+VIOLATIONS=$(grep -rn --include="*.ts" --include="*.tsx" $EXCLUDE \
+  '\.slice(-24)' $SRC_DIRS 2>/dev/null \
+  | grep -v "$ALLOWED" \
+  | grep -v 'HERO_SPARKLINE_HOURS' \
+  | grep -v '^\s*//' \
+  || true)
+
+if [ -n "$VIOLATIONS" ]; then
+  echo -e "${RED}FAIL [5.2]: Magic .slice(-24) found${NC}"
+  echo "$VIOLATIONS"
+  echo "  Fix: Use .slice(-HERO_SPARKLINE_HOURS) from string-health.ts"
+  echo ""
+  ERRORS=$((ERRORS + 1))
+else
+  echo -e "${GREEN}PASS [5.2]: No magic sparkline slicing${NC}"
+fi
+
+# ── 5.3: No hardcoded 7-day loops for rolling averages ─────────────
+VIOLATIONS=$(grep -rn --include="*.ts" --include="*.tsx" $EXCLUDE \
+  'i <= 7\b\|i < 7\b\|getPKTDaysAgo(7)' $SRC_DIRS 2>/dev/null \
+  | grep -v "$ALLOWED" \
+  | grep -v 'DASHBOARD_HISTORY_DAYS' \
+  | grep -v '^\s*//' \
+  || true)
+
+if [ -n "$VIOLATIONS" ]; then
+  echo -e "${RED}FAIL [5.3]: Inline 7-day loop found${NC}"
+  echo "$VIOLATIONS"
+  echo "  Fix: Use DASHBOARD_HISTORY_DAYS from string-health.ts"
+  echo ""
+  ERRORS=$((ERRORS + 1))
+else
+  echo -e "${GREEN}PASS [5.3]: No inline 7-day rolling loops${NC}"
+fi
+
+echo ""
+
+# ═══════════════════════════════════════════════════════════════════════
 # SUMMARY
 # ═══════════════════════════════════════════════════════════════════════
 
-TOTAL_CHECKS=14
+TOTAL_CHECKS=17
 PASSED=$((TOTAL_CHECKS - ERRORS - WARNINGS))
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

@@ -80,6 +80,22 @@ export const ACTIVE_LOOKBACK_DAYS = 14
 /** Milliseconds after which a measurement is stale vs freshest on device */
 export const STALE_MS = 15 * 60 * 1000
 
+// ── Time primitives ─────────────────────────────────────────────────
+/** One hour in milliseconds — use when composing window durations */
+export const MS_PER_HOUR = 60 * 60 * 1000
+
+// ── Dashboard windows ───────────────────────────────────────────────
+/** Hero card sparkline length (hours displayed — last N hours of fleet power) */
+export const HERO_SPARKLINE_HOURS = 24
+/**
+ * Hero card query lookback (hours fetched from DB).
+ * Must be ≥ 2 × HERO_SPARKLINE_HOURS so we can compare "last completed hour"
+ * against the same hour yesterday without gaps at the boundary.
+ */
+export const HERO_SPARKLINE_LOOKBACK_HOURS = 48
+/** Days of history for dashboard sparklines (energy, health) AND rolling-avg baseline */
+export const DASHBOARD_HISTORY_DAYS = 7
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Types
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
