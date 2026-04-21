@@ -39,6 +39,32 @@ export const ACTIVE_CURRENT_THRESHOLD = 0.1
  */
 export const MAX_STRING_CURRENT_A = 50
 
+/**
+ * Upper bound for a single-string power reading (watts).
+ *
+ * Physics check:
+ *   - Max reasonable string voltage: ~500 V
+ *   - Max reasonable string current: ~50 A (see MAX_STRING_CURRENT_A)
+ *   - P = V × I → 500 V × 50 A = 25 kW per string hard ceiling
+ *
+ * Some CT faults report current below the current threshold while
+ * reporting absurd power (e.g., 5 A of "current" but 50 kW of "power" —
+ * which violates Ohm's law). This second filter catches those rows.
+ *
+ * Usage: combine with MAX_STRING_CURRENT_A in all aggregate queries so
+ * the fleet sums / energy totals / hero sparkline reflect physics, not
+ * broken sensors.
+ */
+export const MAX_STRING_POWER_W = 25_000
+
+/**
+ * Fleet Health coverage floor — fraction of yesterday's reporting
+ * strings that must also report today for the fleet-health KPI to be
+ * meaningful. Below this, we return null and show "N of M strings
+ * reporting" instead of a misleading average over the tiny set.
+ */
+export const HEALTH_COVERAGE_MIN_RATIO = 0.5
+
 /** Minimum number of active strings required for peer comparison */
 export const MIN_PEERS_FOR_COMPARISON = 2
 

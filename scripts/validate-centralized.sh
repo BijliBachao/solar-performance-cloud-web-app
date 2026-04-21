@@ -319,7 +319,7 @@ else
 fi
 
 # ── 4.2: All required exports present ──────────────────────────────
-REQUIRED_EXPORTS="ACTIVE_CURRENT_THRESHOLD GAP_CRITICAL GAP_WARNING GAP_INFO HEALTH_HEALTHY HEALTH_WARNING HEALTH_CAUTION HEALTH_SEVERE STALE_MS MS_PER_HOUR HERO_SPARKLINE_HOURS HERO_SPARKLINE_LOOKBACK_HOURS DASHBOARD_HISTORY_DAYS STANDBY_POWER_FLOOR_KW classifyPlantLive MAX_DATE_RANGE_DAYS ACTIVE_LOOKBACK_DAYS PLANT_HEALTH_HEALTHY PLANT_HEALTH_FAULTY PLANT_HEALTH_DISCONNECTED isActive isStale classifyRealtime classifyAlertSeverity bucketHealthScore computePerformance computeAvailability computeHealthScore filterActive leaveOneOutAvg activeAvg computeGap canCompare StringStatus AlertSeverity HealthBucket PlantLiveStatus"
+REQUIRED_EXPORTS="ACTIVE_CURRENT_THRESHOLD GAP_CRITICAL GAP_WARNING GAP_INFO HEALTH_HEALTHY HEALTH_WARNING HEALTH_CAUTION HEALTH_SEVERE STALE_MS MS_PER_HOUR HERO_SPARKLINE_HOURS HERO_SPARKLINE_LOOKBACK_HOURS DASHBOARD_HISTORY_DAYS STANDBY_POWER_FLOOR_KW MAX_STRING_CURRENT_A MAX_STRING_POWER_W HEALTH_COVERAGE_MIN_RATIO classifyPlantLive MAX_DATE_RANGE_DAYS ACTIVE_LOOKBACK_DAYS PLANT_HEALTH_HEALTHY PLANT_HEALTH_FAULTY PLANT_HEALTH_DISCONNECTED isActive isStale classifyRealtime classifyAlertSeverity bucketHealthScore computePerformance computeAvailability computeHealthScore filterActive leaveOneOutAvg activeAvg computeGap canCompare StringStatus AlertSeverity HealthBucket PlantLiveStatus"
 
 MISSING=""
 for export in $REQUIRED_EXPORTS; do
@@ -453,13 +453,31 @@ else
   echo -e "${GREEN}PASS [5.4]: No inline standby power floors${NC}"
 fi
 
+# ── 5.5: No inline max-string-power / max-current sensor ceilings ──
+VIOLATIONS=$(grep -rnE --include="*.ts" --include="*.tsx" $EXCLUDE \
+  '25[_]?000\b|\b25000\b' $SRC_DIRS 2>/dev/null \
+  | grep -v "$ALLOWED" \
+  | grep -v 'MAX_STRING_POWER_W' \
+  | grep -v '^\s*//' \
+  || true)
+
+if [ -n "$VIOLATIONS" ]; then
+  echo -e "${RED}FAIL [5.5]: Inline max-string-power ceiling found${NC}"
+  echo "$VIOLATIONS"
+  echo "  Fix: Use MAX_STRING_POWER_W from string-health.ts"
+  echo ""
+  ERRORS=$((ERRORS + 1))
+else
+  echo -e "${GREEN}PASS [5.5]: No inline max-string-power ceilings${NC}"
+fi
+
 echo ""
 
 # ═══════════════════════════════════════════════════════════════════════
 # SUMMARY
 # ═══════════════════════════════════════════════════════════════════════
 
-TOTAL_CHECKS=18
+TOTAL_CHECKS=19
 PASSED=$((TOTAL_CHECKS - ERRORS - WARNINGS))
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

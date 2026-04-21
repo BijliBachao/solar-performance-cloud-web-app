@@ -41,7 +41,7 @@ interface DashboardData {
   kpis: {
     energyToday: { value: number; unit: string; sparkline: number[]; deltaPercent: number | null; deltaContext: string | null }
     alerts: { total: number; critical: number; warning: number; info: number }
-    fleetHealth: { percent: number | null; sparkline: (number | null)[]; deltaPercent: number | null; deltaContext: string | null }
+    fleetHealth: { percent: number | null; sparkline: (number | null)[]; deltaPercent: number | null; deltaContext: string | null; coverageNote: string | null }
     invertersOnline: { online: number; total: number }
   }
   alertsInsight: {
@@ -147,8 +147,10 @@ export default function DashboardOverviewPage() {
                 return p >= HEALTH_HEALTHY ? 'green' : p >= HEALTH_WARNING ? 'amber' : 'red'
               })()}
               subtitle={
-                data.kpis?.fleetHealth?.percent !== null &&
-                data.kpis?.fleetHealth?.percent !== undefined
+                data.kpis?.fleetHealth?.coverageNote
+                  ? data.kpis.fleetHealth.coverageNote
+                  : data.kpis?.fleetHealth?.percent !== null &&
+                    data.kpis?.fleetHealth?.percent !== undefined
                   ? 'Average health across all strings'
                   : 'No daily scores yet today'
               }

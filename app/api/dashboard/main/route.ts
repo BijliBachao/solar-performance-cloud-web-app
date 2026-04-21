@@ -10,6 +10,8 @@ import {
   PLANT_HEALTH_HEALTHY,
   STALE_MS,
   MAX_STRING_CURRENT_A,
+  MAX_STRING_POWER_W,
+  HEALTH_COVERAGE_MIN_RATIO,
   MS_PER_HOUR,
   HERO_SPARKLINE_HOURS,
   HERO_SPARKLINE_LOOKBACK_HOURS,
@@ -68,7 +70,7 @@ export async function GET() {
         kpis: {
           energyToday: { value: 0, unit: 'kWh', sparkline: [], deltaPercent: null, deltaContext: null },
           alerts: { total: 0, critical: 0, warning: 0, info: 0 },
-          fleetHealth: { percent: null, sparkline: [], deltaPercent: null, deltaContext: null },
+          fleetHealth: { percent: null, sparkline: [], deltaPercent: null, deltaContext: null, coverageNote: null },
           invertersOnline: { online: 0, total: 0 },
         },
         alertsInsight: { topIssues: [], recentActivity: [] },
@@ -95,41 +97,43 @@ export async function GET() {
       totalDevicesCount,
       hourlyTodayPerPlant,
     ] = await Promise.all([
-      // Latest measurements per string in last 15 min (for live power + per-plant live)
-      // Filter out CT sensor faults (current above physically reasonable bound).
+      // Latest measurements per string in last 15 min (for live power + per-plant live).
+      // Reject CT sensor faults on BOTH axes — impossibly-high current OR
+      // impossibly-high power (a broken sensor can fake one while the other
+      // looks normal, violating Ohm's law).
       prisma.$queryRaw<Array<{ plant_id: string; device_id: string; power: number | null }>>`
         SELECT DISTINCT ON (device_id, string_number) plant_id, device_id, power
         FROM string_measurements
         WHERE plant_id = ANY(${plantIds})
           AND timestamp > ${fifteenMinAgo}
           AND (current IS NULL OR current < ${MAX_STRING_CURRENT_A})
+          AND (power IS NULL OR power < ${MAX_STRING_POWER_W})
         ORDER BY device_id, string_number, timestamp DESC
       `,
 
       // Hourly fleet power over HERO_SPARKLINE_LOOKBACK_HOURS window.
-      // Window is 2× the displayed sparkline so we can compare any "completed
-      // hour today" against the same completed hour yesterday.
-      // Excludes strings with sensor-fault current readings at aggregate level.
+      // Same two-axis sensor-fault filter as above.
       prisma.$queryRaw<Array<{ hour: Date; power: number }>>`
         SELECT hour, SUM(avg_power)::float as power
         FROM string_hourly
         WHERE plant_id = ANY(${plantIds})
           AND hour > ${sparklineLookbackStart}
           AND (avg_current IS NULL OR avg_current < ${MAX_STRING_CURRENT_A})
+          AND (avg_power IS NULL OR avg_power < ${MAX_STRING_POWER_W})
         GROUP BY hour
         ORDER BY hour
       `,
 
       // Daily per-string data over the dashboard history window.
       // Drives energy/health sparklines and the rolling-avg baseline.
-      // Excludes sensor-fault rows so fleet totals reflect reality.
+      // Two-axis sensor-fault filter so fleet totals reflect physics.
       prisma.string_daily.findMany({
         where: {
           plant_id: { in: plantIds },
           date: { gte: historyStartPKT },
-          OR: [
-            { avg_current: null },
-            { avg_current: { lt: MAX_STRING_CURRENT_A } },
+          AND: [
+            { OR: [{ avg_current: null }, { avg_current: { lt: MAX_STRING_CURRENT_A } }] },
+            { OR: [{ avg_power: null }, { avg_power: { lt: MAX_STRING_POWER_W } }] },
           ],
         },
         select: {
@@ -188,14 +192,15 @@ export async function GET() {
       // Total devices in assigned plants
       prisma.devices.count({ where: { plant_id: { in: plantIds } } }),
 
-      // Per-plant hourly today (for production bars — 24 buckets per plant)
-      // PKT day starts 5 hours before UTC midnight — subtract to include the full PKT day.
+      // Per-plant hourly today (for production bars — 24 buckets per plant).
+      // Same two-axis fault filter.
       prisma.$queryRaw<Array<{ plant_id: string; hour: Date; power: number }>>`
         SELECT plant_id, hour, SUM(avg_power)::float as power
         FROM string_hourly
         WHERE plant_id = ANY(${plantIds})
           AND hour >= ${new Date(todayPKT.getTime() - PKT_OFFSET_MS)}
           AND (avg_current IS NULL OR avg_current < ${MAX_STRING_CURRENT_A})
+          AND (avg_power IS NULL OR avg_power < ${MAX_STRING_POWER_W})
         GROUP BY plant_id, hour
       `,
     ])
@@ -344,9 +349,24 @@ export async function GET() {
       )
     }
     const todayScores = dailyHealthByDate.get(isoDateKey(todayPKT)) || []
+    // Coverage gate — averaging over N of M strings (where M >> N) gives a
+    // false-healthy score when most of the fleet is silent. Require today's
+    // count to be at least HEALTH_COVERAGE_MIN_RATIO of yesterday's count.
+    const yesterdayPKT = new Date(todayPKT)
+    yesterdayPKT.setUTCDate(yesterdayPKT.getUTCDate() - 1)
+    const yesterdayScores = dailyHealthByDate.get(isoDateKey(yesterdayPKT)) || []
+    const expectedStrings = yesterdayScores.length
+    const actualStrings = todayScores.length
+    const coverageOK =
+      expectedStrings === 0 ||
+      actualStrings >= Math.ceil(expectedStrings * HEALTH_COVERAGE_MIN_RATIO)
     const fleetHealthToday: number | null =
-      todayScores.length > 0
+      todayScores.length > 0 && coverageOK
         ? todayScores.reduce((a, b) => a + b, 0) / todayScores.length
+        : null
+    const fleetHealthCoverageNote =
+      todayScores.length > 0 && !coverageOK
+        ? `${actualStrings} of ${expectedStrings} strings reporting — insufficient coverage`
         : null
 
     // Health delta — vs rolling average over DASHBOARD_HISTORY_DAYS prior days.
@@ -522,6 +542,7 @@ export async function GET() {
               ? Math.round(healthDeltaPercent * 10) / 10
               : null,
           deltaContext: healthDeltaContext,
+          coverageNote: fleetHealthCoverageNote,
         },
         invertersOnline: {
           online: onlineCount,
