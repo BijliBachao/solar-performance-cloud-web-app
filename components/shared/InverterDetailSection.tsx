@@ -431,40 +431,27 @@ export function InverterDetailSection({
           )}
         </div>
 
-        {/* ZONE 2 — 3-cell KPI strip (Power · Today · Avg I) */}
-        <div className="grid grid-cols-3 gap-px bg-slate-200 border border-slate-200 rounded-md overflow-hidden">
-          <div className="bg-white px-3 py-2">
-            <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Power</div>
-            <div className="text-sm font-mono font-bold text-slate-900 leading-tight mt-0.5">
-              {formatPower(totalPower)}
-            </div>
-          </div>
-          <div className="bg-white px-3 py-2">
-            <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Today</div>
-            <div className="text-sm font-mono font-bold text-slate-900 leading-tight mt-0.5">
-              {strings.some(s => s.energy_kwh != null) ? (
-                <>
-                  {strings.reduce((sum, s) => sum + (s.energy_kwh || 0), 0).toFixed(1)}
-                  <span className="text-[10px] text-slate-500 ml-1">kWh</span>
-                </>
-              ) : (
-                '—'
-              )}
-            </div>
-          </div>
-          <div className="bg-white px-3 py-2">
-            <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Avg I</div>
-            <div className="text-sm font-mono font-bold text-slate-900 leading-tight mt-0.5">
-              {avgCurrent > 0 ? (
-                <>
-                  {avgCurrent.toFixed(2)}
-                  <span className="text-[10px] text-slate-500 ml-1">A</span>
-                </>
-              ) : (
-                '—'
-              )}
-            </div>
-          </div>
+        {/* ZONE 2 — Inline KPI one-liner (compact, no cell borders) */}
+        <div className="flex items-center gap-2 flex-wrap text-[13px] font-mono font-semibold text-slate-900">
+          <span>{formatPower(totalPower)}</span>
+          <span className="text-slate-300">·</span>
+          {strings.some(s => s.energy_kwh != null) ? (
+            <span>
+              {strings.reduce((sum, s) => sum + (s.energy_kwh || 0), 0).toFixed(1)}
+              <span className="text-[11px] font-semibold text-slate-500 ml-0.5">kWh today</span>
+            </span>
+          ) : (
+            <span className="text-slate-400">— kWh today</span>
+          )}
+          <span className="text-slate-300">·</span>
+          {avgCurrent > 0 ? (
+            <span>
+              {avgCurrent.toFixed(2)}
+              <span className="text-[11px] font-semibold text-slate-500 ml-0.5">A avg</span>
+            </span>
+          ) : (
+            <span className="text-slate-400">— A avg</span>
+          )}
         </div>
 
         {/* ZONE 3 — String health proportion bar + inline legend */}
@@ -538,27 +525,59 @@ export function InverterDetailSection({
           </div>
         )}
 
-        {/* ZONE 4 — 24h power sparkline + peak annotation */}
-        {power24h.length > 0 && peakW !== null && (
-          <div>
-            <div className="flex items-center justify-between text-[10px] mb-1.5">
-              <span className="font-bold uppercase tracking-widest text-slate-400">24h Power</span>
-              <span className="font-mono text-slate-500">
-                Peak{' '}
-                <span className="font-semibold text-slate-900">{formatPower(peakW)}</span>
-                {peakHourLabel && (
-                  <>
-                    {' at '}
-                    <span className="font-semibold text-slate-900">{peakHourLabel}</span>
-                  </>
-                )}
+        {/* ZONE 4 — 24h power sparkline with peak annotation AT the peak */}
+        {power24h.length > 0 && peakW !== null && (() => {
+          // Find peak X position as % across the chart (0 = oldest, 100 = newest)
+          const peakIdx = power24h.findIndex(p => p.powerW === peakW)
+          const peakXPct =
+            power24h.length > 1 && peakIdx >= 0
+              ? (peakIdx / (power24h.length - 1)) * 100
+              : 50
+          return (
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
+                24h Power
+              </div>
+
+              {/* Chart with overlay dashed line + arrow at peak */}
+              <div className="relative -mx-1">
+                <Sparkline data={sparklineKwValues} variant="area" color="#F59E0B" height={56} />
+                {/* Dashed vertical line at peak X */}
+                <div
+                  className="absolute top-0 bottom-0 border-l border-dashed border-solar-gold-400/70 pointer-events-none"
+                  style={{ left: `calc(${peakXPct}% + 4px)` }}
+                />
+              </div>
+
+              {/* Peak caption row — positioned directly under the peak X */}
+              <div className="relative h-5 mt-0.5">
+                <div
+                  className="absolute text-[10px] font-mono whitespace-nowrap -translate-x-1/2 flex items-center gap-1"
+                  style={{ left: `calc(${peakXPct}% + 4px)` }}
+                >
+                  <span className="text-solar-gold-600">▲</span>
+                  <span className="text-slate-500">
+                    Peak{' '}
+                    <span className="font-semibold text-slate-900">{formatPower(peakW)}</span>
+                    {peakHourLabel && (
+                      <>
+                        {' at '}
+                        <span className="font-semibold text-slate-900">{peakHourLabel}</span>
+                      </>
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              {/* Bottom axis: 24h ago · now delta · NOW */}
+              <div className="flex justify-between items-center text-[9px] font-mono text-slate-400 mt-2 px-1">
+                <span>24h ago</span>
                 {nowVsPeakPct !== null && (
-                  <>
-                    <span className="text-slate-300 mx-1.5">·</span>
+                  <span className="flex items-center gap-1 text-slate-500">
                     Now
                     <span
                       className={cn(
-                        'font-bold ml-1 inline-flex items-center gap-0.5',
+                        'font-bold inline-flex items-center gap-0.5',
                         nowVsPeakPct >= 0 ? 'text-emerald-700' : 'text-red-700',
                       )}
                     >
@@ -570,20 +589,14 @@ export function InverterDetailSection({
                       {nowVsPeakPct >= 0 ? '+' : ''}
                       {nowVsPeakPct.toFixed(0)}%
                     </span>
-                    <span className="ml-1">from peak</span>
-                  </>
+                    from peak
+                  </span>
                 )}
-              </span>
+                <span>NOW</span>
+              </div>
             </div>
-            <div className="-mx-1">
-              <Sparkline data={sparklineKwValues} variant="area" color="#F59E0B" height={48} />
-            </div>
-            <div className="flex justify-between text-[9px] font-mono text-slate-400 mt-1 px-1">
-              <span>24h ago</span>
-              <span>NOW</span>
-            </div>
-          </div>
-        )}
+          )
+        })()}
       </div>
 
       <div className="px-4 sm:px-5 pb-4 space-y-0">
