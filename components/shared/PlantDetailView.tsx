@@ -9,6 +9,8 @@ import {
   classifyPlantLive,
   HEALTH_HEALTHY,
   HEALTH_WARNING,
+  MAX_STRING_CURRENT_A,
+  MAX_STRING_POWER_W,
 } from '@/lib/string-health'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { PlantHeader } from '@/components/shared/PlantHeader'
@@ -88,6 +90,8 @@ export function PlantDetailView({
   const [plant, setPlant] = useState<PlantData | null>(null)
   const [stringData, setStringData] = useState<DeviceStrings[]>([])
   const [alerts, setAlerts] = useState<AlertData[]>([])
+  // Plant-level 24h power sparkline (kW per hour, oldest → newest)
+  const [plantPower24h, setPlantPower24h] = useState<number[]>([])
 
   // UI state
   const [loading, setLoading] = useState(true)
@@ -130,9 +134,41 @@ export function PlantDetailView({
     }
   }, [plantCode])
 
+  // Plant-level 24h power sparkline — aggregate from existing hourly history
+  // endpoint (no device_id → all strings). Sensor-fault rows filtered client-side.
+  const fetch24hPlantPower = useCallback(async () => {
+    try {
+      const now = new Date()
+      const from = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+      const res = await fetch(
+        `/api/plants/${plantCode}/history?period=hourly&from=${from.toISOString()}&to=${now.toISOString()}`,
+        { credentials: 'include' },
+      )
+      if (!res.ok) return
+      const json = await res.json()
+      const byHour = new Map<string, number>()
+      ;(json.data || []).forEach((d: any) => {
+        const curr = Number(d.avg_current)
+        const pw = Number(d.avg_power)
+        if (!isNaN(curr) && curr >= MAX_STRING_CURRENT_A) return
+        if (!isNaN(pw) && pw >= MAX_STRING_POWER_W) return
+        const key = String(d.hour)
+        byHour.set(key, (byHour.get(key) || 0) + (isFinite(pw) ? pw : 0))
+      })
+      const series = Array.from(byHour.entries())
+        .map(([k, v]) => ({ hour: new Date(k), powerKw: v / 1000 }))
+        .sort((a, b) => a.hour.getTime() - b.hour.getTime())
+        .map(p => p.powerKw)
+      setPlantPower24h(series)
+    } catch {
+      /* silent */
+    }
+  }, [plantCode])
+
   // ─── Effects ────────────────────────────────────────────────
 
   useEffect(() => { fetchPlantData() }, [fetchPlantData])
+  useEffect(() => { fetch24hPlantPower() }, [fetch24hPlantPower])
 
   // Auto-refresh every 60 seconds
   useEffect(() => {
@@ -266,6 +302,7 @@ export function PlantDetailView({
         healthPct={healthPct}
         alertCount={alertCount}
         totalStringCount={allStrings.length}
+        sparkline24h={plantPower24h}
       />
 
       <div className="px-4 sm:px-6 py-5 max-w-[1440px] mx-auto">
