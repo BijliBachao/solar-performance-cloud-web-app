@@ -303,6 +303,7 @@ export function PlantDetailView({
                   onResolveAlert={handleResolveAlert}
                   colorIndex={index}
                   apiAvgCurrent={deviceAvgCurrent}
+                  provider={plant.provider}
                 />
               )
             })}

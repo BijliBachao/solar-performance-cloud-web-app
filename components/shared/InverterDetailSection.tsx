@@ -2,9 +2,16 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { cn } from '@/lib/utils'
-import { ACTIVE_CURRENT_THRESHOLD, type StringStatus } from '@/lib/string-health'
+import {
+  ACTIVE_CURRENT_THRESHOLD,
+  type StringStatus,
+  classifyPlantLive,
+  MAX_STRING_CURRENT_A,
+  MAX_STRING_POWER_W,
+} from '@/lib/string-health'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Sparkline } from '@/components/shared/Sparkline'
 import { StringHealthMatrix } from '@/components/shared/StringHealthMatrix'
 import { CurrentDeviationChart } from '@/components/shared/CurrentDeviationChart'
 import { StringComparisonTable } from '@/components/shared/StringComparisonTable'
@@ -13,10 +20,10 @@ import { AlertPanel } from '@/components/shared/AlertPanel'
 import { MonthlyHealthReport, MonthlyHealthData } from '@/components/shared/MonthlyHealthReport'
 import { FaultDiagnosisPanel } from '@/components/shared/FaultDiagnosisPanel'
 import {
-  Activity, TrendingUp, CalendarDays,
-  ChevronDown, ChevronRight, Cpu, Zap, Table2, Stethoscope,
+  TrendingUp, TrendingDown, CalendarDays,
+  ChevronDown, ChevronRight, Cpu, AlertTriangle, Table2, Stethoscope,
 } from 'lucide-react'
-import { STATUS_STYLES } from '@/lib/design-tokens'
+import { STATUS_STYLES, providerBadge } from '@/lib/design-tokens'
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -73,6 +80,15 @@ interface InverterDetailSectionProps {
   colorIndex?: number
   /** Average current from the API (single source of truth). Falls back to local calc if not provided. */
   apiAvgCurrent?: number
+  /** Plant provider code (for the header pill). Optional. */
+  provider?: string
+}
+
+// Format a Date into "HH:00 PKT" (assumes PKT offset = +5)
+function formatPktHour(d: Date): string {
+  const utcH = d.getUTCHours()
+  const pktH = (utcH + 5) % 24
+  return `${String(pktH).padStart(2, '0')}:00 PKT`
 }
 
 type TrendPeriod = '24h' | '7d' | '30d'
@@ -166,12 +182,18 @@ export function InverterDetailSection({
   dummyTrendData,
   colorIndex = 0,
   apiAvgCurrent,
+  provider,
 }: InverterDetailSectionProps) {
   const color = INVERTER_COLORS[colorIndex % INVERTER_COLORS.length]
+  const providerMeta = providerBadge(provider)
 
   const [trendPeriod, setTrendPeriod] = useState<TrendPeriod>('24h')
   const [trendData, setTrendData] = useState<any[]>(dummyTrendData || [])
   const [monthlyHealth, setMonthlyHealth] = useState<MonthlyHealthResponse | null>(null)
+
+  // 24h hourly power for this inverter (sum of avg_power per hour across strings,
+  // with sensor-fault rows filtered out). Drives the header sparkline + peak caption.
+  const [power24h, setPower24h] = useState<Array<{ hour: Date; powerW: number }>>([])
 
   // ─── Derived Data ──────────────────────────────────────────
 
@@ -256,6 +278,63 @@ export function InverterDetailSection({
 
   useEffect(() => { fetchTrend(trendPeriod) }, [fetchTrend, trendPeriod])
 
+  // ─── Fetch 24h power (for header sparkline) ───────────────
+  // Uses the same hourly history endpoint but aggregates avg_power per hour
+  // so the header is independent of whatever period the user picks below.
+  // Sensor-fault rows (current >= MAX_STRING_CURRENT_A or power >= MAX_STRING_POWER_W)
+  // are dropped client-side so the peak isn't polluted by broken CTs.
+  const fetch24hPower = useCallback(async () => {
+    if (dummyTrendData) return
+    try {
+      const now = new Date()
+      const from = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+      const res = await fetch(
+        `/api/plants/${plantCode}/history?period=hourly&from=${from.toISOString()}&to=${now.toISOString()}&device_id=${device.id}`,
+        { credentials: 'include' },
+      )
+      if (!res.ok) return
+      const history = await res.json()
+
+      // Group by hour, sum avg_power across strings, filter sensor faults
+      const byHour = new Map<string, number>()
+      ;(history.data || []).forEach((d: any) => {
+        const curr = Number(d.avg_current)
+        const pw = Number(d.avg_power)
+        if (!isNaN(curr) && curr >= MAX_STRING_CURRENT_A) return
+        if (!isNaN(pw) && pw >= MAX_STRING_POWER_W) return
+        const key = String(d.hour)
+        byHour.set(key, (byHour.get(key) || 0) + (isFinite(pw) ? pw : 0))
+      })
+
+      const series = Array.from(byHour.entries())
+        .map(([k, v]) => ({ hour: new Date(k), powerW: v }))
+        .sort((a, b) => a.hour.getTime() - b.hour.getTime())
+      setPower24h(series)
+    } catch {
+      /* silent */
+    }
+  }, [plantCode, device.id, dummyTrendData])
+
+  useEffect(() => { fetch24hPower() }, [fetch24hPower])
+
+  // Peak detection + current-vs-peak delta, all from already-fetched data
+  const peak = power24h.reduce<{ powerW: number; hour: Date | null }>(
+    (best, p) => (p.powerW > best.powerW ? { powerW: p.powerW, hour: p.hour } : best),
+    { powerW: 0, hour: null },
+  )
+  const peakW = peak.hour ? peak.powerW : null
+  const peakHourLabel = peak.hour ? formatPktHour(peak.hour) : null
+  const nowVsPeakPct =
+    peakW !== null && peakW > 0 ? ((totalPower - peakW) / peakW) * 100 : null
+
+  // Live status (tri-state — same classifier as plant/dashboard)
+  const isReporting = strings.length > 0
+  const totalPowerKw = totalPower / 1000
+  const liveStatus = classifyPlantLive(isReporting, totalPowerKw)
+
+  // Convenience: sparkline data array (48-slot kW values)
+  const sparklineKwValues = power24h.map(p => p.powerW / 1000)
+
   // ─── Fetch monthly health ─────────────────────────────────
 
   const fetchMonthly = useCallback(async () => {
@@ -281,107 +360,230 @@ export function InverterDetailSection({
       className="bg-white rounded-md border border-slate-200 overflow-hidden shadow-card"
       style={{ borderTopWidth: 3, borderTopColor: color.accent }}
     >
-      {/* ── Inverter KPI Header ────────────────────────────────── */}
-      <div className="px-4 sm:px-5 pt-4 pb-3">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          {/* Left: identity */}
-          <div className="flex items-center gap-2.5 min-w-0">
+      {/* ── Inverter Mini-Hero Header (4 zones) ────────────────── */}
+      <div className="px-4 sm:px-5 pt-4 pb-4 space-y-3">
+
+        {/* ZONE 1 — Identity row */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div className={cn('w-9 h-9 rounded-md flex items-center justify-center shrink-0', color.iconBg)}>
               <Cpu className={cn('w-4 h-4', color.iconText)} strokeWidth={2} />
             </div>
-            <div className="min-w-0">
-              <h3 className="text-sm font-bold text-slate-900 truncate">
-                {device.device_name || device.id}
-              </h3>
-              <p className="text-[10px] text-slate-400 truncate">
-                {device.model || 'Inverter'}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm font-bold text-slate-900 font-mono truncate">
+                  {device.device_name || device.id}
+                </h3>
+                {liveStatus === 'PRODUCING' ? (
+                  <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 shrink-0">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                    </span>
+                    LIVE
+                  </span>
+                ) : liveStatus === 'IDLE' ? (
+                  <span className="flex items-center gap-1 text-[10px] font-bold text-slate-500 shrink-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                    STANDBY
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 shrink-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                    OFFLINE
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-slate-500 flex items-center gap-1.5 flex-wrap mt-0.5">
+                <span>{device.model || 'Inverter'}</span>
+                {providerMeta && (
+                  <span
+                    className={cn(
+                      'inline-flex items-center text-[9px] font-bold uppercase tracking-widest px-1 py-0 rounded-sm border',
+                      providerMeta.bg,
+                      providerMeta.fg,
+                      providerMeta.border,
+                    )}
+                  >
+                    {providerMeta.label}
+                  </span>
+                )}
                 {totalStrings > 0 && (
                   <>
-                    <span className="mx-1.5 text-slate-300">·</span>
-                    <span className="font-mono font-semibold text-slate-600">{producingStrings.length}</span>
-                    <span> of </span>
-                    <span className="font-mono font-semibold text-slate-600">{totalStrings}</span>
-                    <span> strings producing</span>
+                    <span className="text-slate-300">·</span>
+                    <span>
+                      <span className="font-mono font-semibold text-slate-700">{producingStrings.length}</span>
+                      <span> of </span>
+                      <span className="font-mono font-semibold text-slate-700">{totalStrings}</span>
+                      <span> strings producing</span>
+                    </span>
                   </>
                 )}
               </p>
             </div>
           </div>
-
-          {/* Right: 3 compact numbers (inverter-specific only — plant totals are up top) */}
-          <div className="flex items-center gap-4 shrink-0">
-            <div className="text-right">
-              <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Power</div>
-              <div className="text-sm font-mono font-bold text-slate-900 leading-tight">
-                {formatPower(totalPower)}
-              </div>
+          {alerts.length > 0 && (
+            <div className="flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 rounded-sm px-2 py-1 shrink-0 uppercase tracking-wider">
+              <AlertTriangle className="w-3 h-3" strokeWidth={2.5} />
+              <span className="font-mono">{alerts.length}</span>
+              <span>alert{alerts.length !== 1 ? 's' : ''}</span>
             </div>
-            <div className="text-right border-l border-slate-200 pl-4">
-              <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Today</div>
-              <div className="text-sm font-mono font-bold text-slate-900 leading-tight">
-                {strings.some(s => s.energy_kwh != null)
-                  ? `${strings.reduce((sum, s) => sum + (s.energy_kwh || 0), 0).toFixed(1)}`
-                  : '—'}
-                {strings.some(s => s.energy_kwh != null) && (
+          )}
+        </div>
+
+        {/* ZONE 2 — 3-cell KPI strip (Power · Today · Avg I) */}
+        <div className="grid grid-cols-3 gap-px bg-slate-200 border border-slate-200 rounded-md overflow-hidden">
+          <div className="bg-white px-3 py-2">
+            <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Power</div>
+            <div className="text-sm font-mono font-bold text-slate-900 leading-tight mt-0.5">
+              {formatPower(totalPower)}
+            </div>
+          </div>
+          <div className="bg-white px-3 py-2">
+            <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Today</div>
+            <div className="text-sm font-mono font-bold text-slate-900 leading-tight mt-0.5">
+              {strings.some(s => s.energy_kwh != null) ? (
+                <>
+                  {strings.reduce((sum, s) => sum + (s.energy_kwh || 0), 0).toFixed(1)}
                   <span className="text-[10px] text-slate-500 ml-1">kWh</span>
-                )}
-              </div>
+                </>
+              ) : (
+                '—'
+              )}
             </div>
-            <div className="text-right border-l border-slate-200 pl-4">
-              <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Avg I</div>
-              <div className="text-sm font-mono font-bold text-slate-900 leading-tight">
-                {avgCurrent > 0 ? avgCurrent.toFixed(2) : '—'}
-                {avgCurrent > 0 && (
+          </div>
+          <div className="bg-white px-3 py-2">
+            <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Avg I</div>
+            <div className="text-sm font-mono font-bold text-slate-900 leading-tight mt-0.5">
+              {avgCurrent > 0 ? (
+                <>
+                  {avgCurrent.toFixed(2)}
                   <span className="text-[10px] text-slate-500 ml-1">A</span>
-                )}
-              </div>
+                </>
+              ) : (
+                '—'
+              )}
             </div>
-            {alerts.length > 0 && (
-              <Badge variant="destructive" className="text-[10px] px-1.5 py-0.5 shrink-0">
-                {alerts.length} alert{alerts.length !== 1 ? 's' : ''}
-              </Badge>
-            )}
           </div>
         </div>
 
-        {/* Status bar — thin, proportional per-state split */}
-        <div className="flex items-center gap-3 mt-3">
-          <div className="flex-1 flex gap-0.5 h-1.5 rounded-full overflow-hidden bg-slate-100">
-            {summary.normal > 0 && (
-              <div
-                className={cn(STATUS_STYLES.healthy.dot, 'transition-all')}
-                style={{ width: `${(summary.normal / totalStrings) * 100}%` }}
-              />
-            )}
-            {summary.warning > 0 && (
-              <div
-                className={cn(STATUS_STYLES.warning.dot, 'transition-all')}
-                style={{ width: `${(summary.warning / totalStrings) * 100}%` }}
-              />
-            )}
-            {summary.critical > 0 && (
-              <div
-                className={cn(STATUS_STYLES.critical.dot, 'transition-all')}
-                style={{ width: `${(summary.critical / totalStrings) * 100}%` }}
-              />
-            )}
-            {summary.openCircuit > 0 && (
-              <div
-                className={cn(STATUS_STYLES['open-circuit'].dot, 'transition-all')}
-                style={{ width: `${(summary.openCircuit / totalStrings) * 100}%` }}
-              />
-            )}
-            {summary.disconnected > 0 && (
-              <div
-                className={cn(STATUS_STYLES.offline.dot, 'transition-all')}
-                style={{ width: `${(summary.disconnected / totalStrings) * 100}%` }}
-              />
-            )}
+        {/* ZONE 3 — String health proportion bar + inline legend */}
+        {totalStrings > 0 && (
+          <div>
+            <div className="flex items-center justify-between text-[10px] mb-1.5">
+              <span className="font-bold uppercase tracking-widest text-slate-400">String Health</span>
+              <span className="font-mono font-semibold text-slate-700">
+                {healthPct}% healthy
+              </span>
+            </div>
+            <div className="flex gap-0.5 h-1.5 rounded-full overflow-hidden bg-slate-100">
+              {summary.normal > 0 && (
+                <div
+                  className={cn(STATUS_STYLES.healthy.dot, 'transition-all')}
+                  style={{ width: `${(summary.normal / totalStrings) * 100}%` }}
+                />
+              )}
+              {summary.warning > 0 && (
+                <div
+                  className={cn(STATUS_STYLES.warning.dot, 'transition-all')}
+                  style={{ width: `${(summary.warning / totalStrings) * 100}%` }}
+                />
+              )}
+              {summary.critical > 0 && (
+                <div
+                  className={cn(STATUS_STYLES.critical.dot, 'transition-all')}
+                  style={{ width: `${(summary.critical / totalStrings) * 100}%` }}
+                />
+              )}
+              {summary.openCircuit > 0 && (
+                <div
+                  className={cn(STATUS_STYLES['open-circuit'].dot, 'transition-all')}
+                  style={{ width: `${(summary.openCircuit / totalStrings) * 100}%` }}
+                />
+              )}
+              {summary.disconnected > 0 && (
+                <div
+                  className={cn(STATUS_STYLES.offline.dot, 'transition-all')}
+                  style={{ width: `${(summary.disconnected / totalStrings) * 100}%` }}
+                />
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-[10px] text-slate-600">
+              <span className="flex items-center gap-1">
+                <span className={cn('w-1.5 h-1.5 rounded-full', STATUS_STYLES.healthy.dot)} />
+                <span className="font-mono font-semibold">{summary.normal}</span>
+                <span>Normal</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <span className={cn('w-1.5 h-1.5 rounded-full', STATUS_STYLES.warning.dot)} />
+                <span className="font-mono font-semibold">{summary.warning}</span>
+                <span>Warning</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <span className={cn('w-1.5 h-1.5 rounded-full', STATUS_STYLES.critical.dot)} />
+                <span className="font-mono font-semibold">{summary.critical}</span>
+                <span>Critical</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <span className={cn('w-1.5 h-1.5 rounded-full', STATUS_STYLES['open-circuit'].dot)} />
+                <span className="font-mono font-semibold">{summary.openCircuit}</span>
+                <span>Open</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <span className={cn('w-1.5 h-1.5 rounded-full', STATUS_STYLES.offline.dot)} />
+                <span className="font-mono font-semibold">{summary.disconnected}</span>
+                <span>Disconnected</span>
+              </span>
+            </div>
           </div>
-          <span className="text-[11px] font-mono font-semibold text-slate-600 shrink-0">
-            {healthPct}% healthy
-          </span>
-        </div>
+        )}
+
+        {/* ZONE 4 — 24h power sparkline + peak annotation */}
+        {power24h.length > 0 && peakW !== null && (
+          <div>
+            <div className="flex items-center justify-between text-[10px] mb-1.5">
+              <span className="font-bold uppercase tracking-widest text-slate-400">24h Power</span>
+              <span className="font-mono text-slate-500">
+                Peak{' '}
+                <span className="font-semibold text-slate-900">{formatPower(peakW)}</span>
+                {peakHourLabel && (
+                  <>
+                    {' at '}
+                    <span className="font-semibold text-slate-900">{peakHourLabel}</span>
+                  </>
+                )}
+                {nowVsPeakPct !== null && (
+                  <>
+                    <span className="text-slate-300 mx-1.5">·</span>
+                    Now
+                    <span
+                      className={cn(
+                        'font-bold ml-1 inline-flex items-center gap-0.5',
+                        nowVsPeakPct >= 0 ? 'text-emerald-700' : 'text-red-700',
+                      )}
+                    >
+                      {nowVsPeakPct >= 0 ? (
+                        <TrendingUp className="h-3 w-3" strokeWidth={2.5} />
+                      ) : (
+                        <TrendingDown className="h-3 w-3" strokeWidth={2.5} />
+                      )}
+                      {nowVsPeakPct >= 0 ? '+' : ''}
+                      {nowVsPeakPct.toFixed(0)}%
+                    </span>
+                    <span className="ml-1">from peak</span>
+                  </>
+                )}
+              </span>
+            </div>
+            <div className="-mx-1">
+              <Sparkline data={sparklineKwValues} variant="area" color="#F59E0B" height={48} />
+            </div>
+            <div className="flex justify-between text-[9px] font-mono text-slate-400 mt-1 px-1">
+              <span>24h ago</span>
+              <span>NOW</span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="px-4 sm:px-5 pb-4 space-y-0">
