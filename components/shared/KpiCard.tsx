@@ -1,9 +1,10 @@
 import { cn } from '@/lib/utils'
-import { LucideIcon } from 'lucide-react'
+import { LucideIcon, TrendingUp, TrendingDown } from 'lucide-react'
+import { Sparkline } from './Sparkline'
 
 /**
- * SPC KpiCard — v3 Solar Corporate (DESIGN.md §12.2).
- * White card with top accent bar, labeled, mono value, icon chip.
+ * SPC KpiCard — v4 Solar Corporate (DESIGN.md §12.2).
+ * White card · 2px top accent bar · icon chip · mono value · optional sparkline + delta.
  */
 interface KpiCardProps {
   title: string
@@ -11,6 +12,8 @@ interface KpiCardProps {
   subtitle?: string
   icon?: LucideIcon
   accent?: 'green' | 'amber' | 'red' | 'gray' | 'gold' | 'blue'
+  sparkline?: number[]
+  deltaPercent?: number
   className?: string
   onClick?: () => void
 }
@@ -22,6 +25,15 @@ const ACCENT_BAR: Record<string, string> = {
   gray: 'bg-slate-300',
   gold: 'bg-solar-gold',
   blue: 'bg-blue-500',
+}
+
+const SPARKLINE_COLOR: Record<string, string> = {
+  green: '#10B981',
+  amber: '#F59E0B',
+  red: '#EF4444',
+  gray: '#94A3B8',
+  gold: '#F59E0B',
+  blue: '#0EA5E9',
 }
 
 const ICON_CHIP: Record<string, string> = {
@@ -48,15 +60,21 @@ export function KpiCard({
   subtitle,
   icon: Icon,
   accent = 'gold',
+  sparkline,
+  deltaPercent,
   className,
   onClick,
 }: KpiCardProps) {
+  const hasDelta = deltaPercent !== undefined && !isNaN(deltaPercent) && deltaPercent !== 0
+  const isPositive = hasDelta && (deltaPercent ?? 0) >= 0
+  const hasSparkline = sparkline && sparkline.length > 0 && sparkline.some((v) => v > 0)
+
   return (
     <div
       onClick={onClick}
       className={cn(
-        'relative bg-white rounded-md border border-slate-200 overflow-hidden transition-colors',
-        onClick && cn('cursor-pointer', HOVER_BORDER[accent]),
+        'relative bg-white rounded-md border border-slate-200 overflow-hidden transition-all',
+        onClick && cn('cursor-pointer hover:shadow-card', HOVER_BORDER[accent]),
         className,
       )}
     >
@@ -80,12 +98,41 @@ export function KpiCard({
           )}
         </div>
 
-        <p className="text-[28px] font-mono font-bold leading-none text-slate-900">
-          {value}
-        </p>
+        <div className="flex items-baseline gap-2 mb-1">
+          <p className="text-[28px] font-mono font-bold leading-none text-slate-900">
+            {value}
+          </p>
+          {hasDelta && (
+            <span
+              className={cn(
+                'flex items-center gap-0.5 text-[11px] font-bold font-mono',
+                isPositive ? 'text-emerald-700' : 'text-red-700',
+              )}
+            >
+              {isPositive ? (
+                <TrendingUp className="h-3 w-3" strokeWidth={2.5} />
+              ) : (
+                <TrendingDown className="h-3 w-3" strokeWidth={2.5} />
+              )}
+              {isPositive ? '+' : ''}
+              {Math.round(deltaPercent ?? 0)}%
+            </span>
+          )}
+        </div>
 
         {subtitle && (
-          <p className="mt-2 text-[11px] font-medium text-slate-500">{subtitle}</p>
+          <p className="text-[11px] font-medium text-slate-500 mb-2 truncate">{subtitle}</p>
+        )}
+
+        {hasSparkline && (
+          <div className="mt-2 -mx-1">
+            <Sparkline
+              data={sparkline!}
+              variant="area"
+              color={SPARKLINE_COLOR[accent]}
+              height={28}
+            />
+          </div>
         )}
       </div>
     </div>
