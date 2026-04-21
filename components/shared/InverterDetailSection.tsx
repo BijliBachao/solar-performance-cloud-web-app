@@ -512,7 +512,7 @@ export function InverterDetailSection({
               <p className="text-xs font-semibold">Not enough historical data yet</p>
               <button
                 onClick={fetchMonthly}
-                className="text-[11px] font-bold text-spc-green hover:text-spc-green-dark mt-2 uppercase tracking-wider transition-colors"
+                className="text-[11px] font-bold text-solar-gold-600 hover:text-solar-gold-700 mt-2 uppercase tracking-wider transition-colors"
               >
                 Load report
               </button>

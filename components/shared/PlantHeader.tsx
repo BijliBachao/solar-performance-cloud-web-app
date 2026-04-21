@@ -91,13 +91,13 @@ export function PlantHeader({
               onClick={onToggleAutoRefresh}
               className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-sm border transition-colors ${
                 autoRefresh
-                  ? 'bg-spc-green/10 text-spc-green border-spc-green/30'
+                  ? 'bg-solar-gold/10 text-solar-gold-600 border-solar-gold/30'
                   : 'bg-transparent text-slate-500 border-slate-200 hover:bg-slate-50'
               }`}
             >
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
-                  autoRefresh ? 'bg-spc-green animate-pulse' : 'bg-slate-400'
+                  autoRefresh ? 'bg-solar-gold animate-pulse' : 'bg-slate-400'
                 }`}
               />
               {autoRefresh ? 'Live' : 'Paused'}

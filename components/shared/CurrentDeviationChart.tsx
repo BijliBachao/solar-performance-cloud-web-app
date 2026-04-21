@@ -95,13 +95,13 @@ export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationC
           {avgCurrent > 0 && (
             <ReferenceLine
               y={avgCurrent}
-              stroke="#76b900"
+              stroke="#F59E0B"
               strokeWidth={2}
               strokeDasharray="6 3"
               label={{
                 value: `Avg: ${avgCurrent.toFixed(2)}A`,
                 position: 'right',
-                style: { fontSize: 10, fill: '#76b900', fontWeight: 700 },
+                style: { fontSize: 10, fill: '#F59E0B', fontWeight: 700 },
               }}
             />
           )}

@@ -140,7 +140,7 @@ export function AlertPanel({ alerts, onResolve }: AlertPanelProps) {
                     e.stopPropagation()
                     onResolve(alert.id)
                   }}
-                  className="shrink-0 text-[10px] font-bold text-spc-green border-2 border-spc-green rounded-sm px-2 py-1 hover:bg-spc-green hover:text-white transition-colors uppercase tracking-wider"
+                  className="shrink-0 text-[10px] font-bold text-solar-gold-700 border-2 border-solar-gold rounded-sm px-2 py-1 hover:bg-solar-gold hover:text-white transition-colors uppercase tracking-wider"
                 >
                   Resolve
                 </button>

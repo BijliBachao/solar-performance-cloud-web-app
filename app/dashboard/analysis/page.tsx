@@ -172,8 +172,8 @@ export default function DashboardAnalysisPage() {
     <div className="p-6 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-[#0a0a0a] leading-tight">Performance Analysis</h1>
-        <div className="text-[11px] font-semibold text-[#898989]">
+        <h1 className="text-xl font-bold text-slate-900 leading-tight">Performance Analysis</h1>
+        <div className="text-[11px] font-semibold text-slate-500">
           Health Score = Performance × Availability
         </div>
       </div>
@@ -185,8 +185,8 @@ export default function DashboardAnalysisPage() {
           className={cn(
             'px-4 py-1.5 text-xs font-semibold rounded-sm transition-colors',
             tab === 'string'
-              ? 'bg-[#76b900]/10 text-[#76b900] border border-[#76b900]/30'
-              : 'bg-[#f5f5f5] text-[#525252] hover:bg-[#f0f0f0]'
+              ? 'bg-solar-gold/10 text-solar-gold-700 border border-solar-gold/30'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-transparent'
           )}
         >
           String Level
@@ -196,8 +196,8 @@ export default function DashboardAnalysisPage() {
           className={cn(
             'px-4 py-1.5 text-xs font-semibold rounded-sm transition-colors',
             tab === 'inverter'
-              ? 'bg-[#76b900]/10 text-[#76b900] border border-[#76b900]/30'
-              : 'bg-[#f5f5f5] text-[#525252] hover:bg-[#f0f0f0]'
+              ? 'bg-solar-gold/10 text-solar-gold-700 border border-solar-gold/30'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-transparent'
           )}
         >
           Inverter Level
@@ -212,7 +212,7 @@ export default function DashboardAnalysisPage() {
           <select
             value={plantId}
             onChange={(e) => { setPlantId(e.target.value); setDeviceId('') }}
-            className="text-xs font-semibold border border-[#e5e5e5] rounded px-2.5 py-1.5 bg-white text-[#525252] min-w-[180px] focus:border-[#76b900] focus:ring-1 focus:ring-[#76b900]/20 outline-none"
+            className="text-xs font-semibold border border-slate-200 rounded px-2.5 py-1.5 bg-white text-slate-700 min-w-[180px] focus:border-solar-gold focus:ring-1 focus:ring-solar-gold/20 outline-none"
           >
             <option value="">All Plants</option>
             {plants.map(p => (
@@ -228,7 +228,7 @@ export default function DashboardAnalysisPage() {
             <select
               value={deviceId}
               onChange={(e) => setDeviceId(e.target.value)}
-              className="text-xs font-semibold border border-[#e5e5e5] rounded px-2.5 py-1.5 bg-white text-[#525252] min-w-[160px] focus:border-[#76b900] focus:ring-1 focus:ring-[#76b900]/20 outline-none"
+              className="text-xs font-semibold border border-slate-200 rounded px-2.5 py-1.5 bg-white text-slate-700 min-w-[160px] focus:border-solar-gold focus:ring-1 focus:ring-solar-gold/20 outline-none"
             >
               <option value="">All Inverters</option>
               {devices.map(d => (
@@ -245,7 +245,7 @@ export default function DashboardAnalysisPage() {
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
-            className="text-xs font-semibold border border-[#e5e5e5] rounded px-2.5 py-1.5 bg-white text-[#525252] focus:border-[#76b900] focus:ring-1 focus:ring-[#76b900]/20 outline-none"
+            className="text-xs font-semibold border border-slate-200 rounded px-2.5 py-1.5 bg-white text-slate-700 focus:border-solar-gold focus:ring-1 focus:ring-solar-gold/20 outline-none"
           />
         </div>
         <div>
@@ -254,7 +254,7 @@ export default function DashboardAnalysisPage() {
             type="date"
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            className="text-xs font-semibold border border-[#e5e5e5] rounded px-2.5 py-1.5 bg-white text-[#525252] focus:border-[#76b900] focus:ring-1 focus:ring-[#76b900]/20 outline-none"
+            className="text-xs font-semibold border border-slate-200 rounded px-2.5 py-1.5 bg-white text-slate-700 focus:border-solar-gold focus:ring-1 focus:ring-solar-gold/20 outline-none"
           />
         </div>
 
@@ -268,7 +268,7 @@ export default function DashboardAnalysisPage() {
             <button
               key={p.label}
               onClick={() => setPreset(p.days)}
-              className="px-2.5 py-1.5 text-xs font-semibold text-[#525252] bg-[#f5f5f5] rounded-sm hover:bg-[#f0f0f0] transition-colors"
+              className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 rounded-sm hover:bg-slate-200 transition-colors"
             >
               {p.label}
             </button>
@@ -285,7 +285,7 @@ export default function DashboardAnalysisPage() {
         <button
           onClick={fetchData}
           disabled={loading || !!validationError}
-          className="px-4 py-1.5 text-xs font-bold text-[#76b900] border-2 border-[#76b900] rounded-sm hover:bg-[#76b900] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="px-4 py-1.5 text-xs font-bold text-solar-gold-700 border-2 border-solar-gold rounded-sm hover:bg-solar-gold hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           {loading ? 'Loading...' : 'Generate'}
         </button>

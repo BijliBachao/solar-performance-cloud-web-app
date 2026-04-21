@@ -22,8 +22,10 @@ interface StringTrendChartProps {
 
 // Distinct palette for overlaid trend lines. Values chosen to be readable
 // on a white background and remain distinguishable when many strings overlap.
+// First color is the brand solar-gold; the rest are a vetted multi-series
+// palette compatible with the v3 Solar Corporate design system.
 const TREND_LINE_COLORS = [
-  '#76b900', // spc-green
+  '#F59E0B', // solar-gold (brand)
   '#2563eb', // blue-600
   '#ea580c', // orange-600
   '#dc2626', // red-600

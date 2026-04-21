@@ -94,8 +94,8 @@ export default function AlertsPage() {
                 className={cn(
                   'px-3 py-1.5 rounded-sm text-[10px] font-bold uppercase tracking-wider transition-colors',
                   severity === s
-                    ? 'bg-[#76b900]/10 text-[#76b900] border border-[#76b900]/30'
-                    : 'bg-[#1a1a1a] text-[#898989] hover:text-white'
+                    ? 'bg-solar-gold/10 text-solar-gold-700 border border-solar-gold/30'
+                    : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50 hover:text-slate-900'
                 )}
               >
                 {s === 'all' ? 'All' : s}
@@ -112,8 +112,8 @@ export default function AlertsPage() {
                 className={cn(
                   'px-3 py-1.5 rounded-sm text-[10px] font-bold uppercase tracking-wider transition-colors',
                   resolved === f.value
-                    ? 'bg-[#76b900]/10 text-[#76b900] border border-[#76b900]/30'
-                    : 'bg-[#1a1a1a] text-[#898989] hover:text-white'
+                    ? 'bg-solar-gold/10 text-solar-gold-700 border border-solar-gold/30'
+                    : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50 hover:text-slate-900'
                 )}
               >
                 {f.label}
@@ -126,7 +126,7 @@ export default function AlertsPage() {
             <select
               value={plantId}
               onChange={(e) => { setPlantId(e.target.value); setPage(1) }}
-              className="text-[10px] font-bold border border-[#333] rounded-sm px-2.5 py-1.5 bg-[#1a1a1a] text-[#a7a7a7] focus:border-[#76b900] outline-none"
+              className="text-[10px] font-bold border border-slate-200 rounded-sm px-2.5 py-1.5 bg-white text-slate-700 focus:border-solar-gold focus:ring-1 focus:ring-solar-gold/20 outline-none"
             >
               <option value="">All Plants</option>
               {plants.map(p => (
@@ -136,17 +136,17 @@ export default function AlertsPage() {
           )}
 
           {/* Result count */}
-          <span className="text-[10px] font-bold text-[#5e5e5e] ml-auto uppercase tracking-wider">
+          <span className="text-[10px] font-bold text-slate-500 ml-auto uppercase tracking-wider">
             {total} alert{total !== 1 ? 's' : ''}
           </span>
         </div>
 
         {/* Alert list */}
-        <div className="bg-[#1a1a1a] rounded-sm p-4">
+        <div className="bg-white rounded-md border border-slate-200 p-4">
           {loading ? (
             <div className="space-y-2 animate-pulse">
               {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-14 bg-[#252525] rounded-sm" />
+                <div key={i} className="h-14 bg-slate-100 rounded-sm" />
               ))}
             </div>
           ) : (
@@ -163,17 +163,17 @@ export default function AlertsPage() {
             <button
               disabled={page <= 1}
               onClick={() => setPage(p => p - 1)}
-              className="flex items-center gap-1 px-3 py-1.5 text-[10px] font-bold border border-[#333] rounded-sm text-[#a7a7a7] hover:text-white hover:border-[#5e5e5e] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 text-[10px] font-bold border border-slate-200 rounded-sm text-slate-600 bg-white hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeft className="h-3.5 w-3.5" /> Previous
             </button>
-            <span className="text-[10px] font-bold text-[#5e5e5e]">
+            <span className="text-[10px] font-bold text-slate-500">
               Page {page} of {totalPages}
             </span>
             <button
               disabled={page >= totalPages}
               onClick={() => setPage(p => p + 1)}
-              className="flex items-center gap-1 px-3 py-1.5 text-[10px] font-bold border border-[#333] rounded-sm text-[#a7a7a7] hover:text-white hover:border-[#5e5e5e] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 text-[10px] font-bold border border-slate-200 rounded-sm text-slate-600 bg-white hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               Next <ChevronRight className="h-3.5 w-3.5" />
             </button>

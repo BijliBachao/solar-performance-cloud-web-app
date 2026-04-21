@@ -471,13 +471,32 @@ else
   echo -e "${GREEN}PASS [5.5]: No inline max-string-power ceilings${NC}"
 fi
 
+# ── 5.6: No dead NVIDIA-green hex in /dashboard scope ──────────────
+# DESIGN.md v3 (Solar Corporate) retired #76b900 — no file outside the
+# landing page and admin (tasks #87/#88, tracked separately) may use it.
+# Scoped narrowly to /dashboard and shared components to avoid churn.
+VIOLATIONS=$(grep -rn --include="*.ts" --include="*.tsx" $EXCLUDE \
+  -iE '#76b900|#5a8f00' app/dashboard/ components/shared/ 2>/dev/null \
+  | grep -v '^\s*//' \
+  || true)
+
+if [ -n "$VIOLATIONS" ]; then
+  echo -e "${RED}FAIL [5.6]: Dead NVIDIA-green hex in /dashboard or shared components${NC}"
+  echo "$VIOLATIONS"
+  echo "  Fix: Use solar-gold token from DESIGN.md v3 (#F59E0B family)."
+  echo ""
+  ERRORS=$((ERRORS + 1))
+else
+  echo -e "${GREEN}PASS [5.6]: No NVIDIA-green leaks in /dashboard scope${NC}"
+fi
+
 echo ""
 
 # ═══════════════════════════════════════════════════════════════════════
 # SUMMARY
 # ═══════════════════════════════════════════════════════════════════════
 
-TOTAL_CHECKS=19
+TOTAL_CHECKS=20
 PASSED=$((TOTAL_CHECKS - ERRORS - WARNINGS))
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
