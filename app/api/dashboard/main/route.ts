@@ -14,6 +14,8 @@ import {
   HERO_SPARKLINE_HOURS,
   HERO_SPARKLINE_LOOKBACK_HOURS,
   DASHBOARD_HISTORY_DAYS,
+  STANDBY_POWER_FLOOR_KW,
+  classifyPlantLive,
 } from '@/lib/string-health'
 
 const PKT_OFFSET_MS = 5 * 60 * 60 * 1000
@@ -200,12 +202,32 @@ export async function GET() {
 
     // ═══════════════ COMPUTE METRICS ═══════════════
 
-    // Hero: live power (sum of latest measurements)
-    const livePowerW = latestMeasurements.reduce(
-      (sum, m) => sum + Number(m.power || 0),
-      0,
-    )
-    const livePowerKw = livePowerW / 1000
+    // Per-plant: sum current power from the last-measurement set.
+    // We sum fleet power from these *after* applying the standby floor
+    // per plant, so inverter noise across N plants can't masquerade as
+    // meaningful fleet generation.
+    const plantLivePowerW = new Map<string, number>()
+    const plantReportingSet = new Set<string>()
+    latestMeasurements.forEach((m) => {
+      plantReportingSet.add(m.plant_id)
+      plantLivePowerW.set(
+        m.plant_id,
+        (plantLivePowerW.get(m.plant_id) || 0) + Number(m.power || 0),
+      )
+    })
+
+    // Fleet live power — only count plants that are actually PRODUCING.
+    // Standby/idle plants contribute 0 so we don't accumulate noise.
+    let livePowerKw = 0
+    let producingPlantCount = 0
+    plantAssignments.forEach((pa) => {
+      const plantKw = (plantLivePowerW.get(pa.plant_id) || 0) / 1000
+      const status = classifyPlantLive(plantReportingSet.has(pa.plant_id), plantKw)
+      if (status === 'PRODUCING') {
+        livePowerKw += plantKw
+        producingPlantCount += 1
+      }
+    })
 
     const fleetCapacityKw = plantAssignments.reduce(
       (sum, pa) => sum + Number(pa.plants.capacity_kw || 0),
@@ -360,17 +382,7 @@ export async function GET() {
     const onlineCount = Number(onlineDevicesResult[0]?.count || 0)
 
     // ═══════════════ PER-PLANT ENRICHMENT ═══════════════
-
-    // Live power per plant
-    const plantLivePowerW = new Map<string, number>()
-    const plantIsLiveSet = new Set<string>()
-    latestMeasurements.forEach((m) => {
-      plantIsLiveSet.add(m.plant_id)
-      plantLivePowerW.set(
-        m.plant_id,
-        (plantLivePowerW.get(m.plant_id) || 0) + Number(m.power || 0),
-      )
-    })
+    // (plantLivePowerW + plantReportingSet were built above for the fleet sum)
 
     // Per-plant hourly production bars (24 buckets)
     const plantHourlyBars = new Map<string, number[]>()
@@ -399,6 +411,7 @@ export async function GET() {
     )
 
     // Build plants array. healthPercent is null when no data — never default to 0 or 100.
+    // liveStatus is one of PRODUCING / IDLE / OFFLINE (see classifyPlantLive).
     const plants = plantAssignments.map((pa) => {
       const plantId = pa.plant_id
       const healths = dailyHealthByPlant.get(plantId) || []
@@ -408,6 +421,11 @@ export async function GET() {
             10
           : null
 
+      const rawPowerKw = (plantLivePowerW.get(plantId) || 0) / 1000
+      const liveStatus = classifyPlantLive(plantReportingSet.has(plantId), rawPowerKw)
+      // Only show the power number when actually producing — suppresses standby noise
+      const displayPowerKw = liveStatus === 'PRODUCING' ? Math.round(rawPowerKw * 10) / 10 : 0
+
       return {
         id: pa.plants.id,
         plant_name: pa.plants.plant_name,
@@ -416,9 +434,10 @@ export async function GET() {
         provider: pa.plants.provider,
         device_count: pa.plants._count.devices,
         alert_count: alertCountMap.get(plantId) || 0,
-        isLive: plantIsLiveSet.has(plantId),
-        currentPowerKw:
-          Math.round(((plantLivePowerW.get(plantId) || 0) / 1000) * 10) / 10,
+        liveStatus,
+        // Back-compat: isLive === PRODUCING (narrower than before — was "reporting")
+        isLive: liveStatus === 'PRODUCING',
+        currentPowerKw: displayPowerKw,
         todayEnergyKwh:
           Math.round((dailyEnergyByPlant.get(plantId) || 0) * 10) / 10,
         healthPercent,
@@ -476,7 +495,7 @@ export async function GET() {
         fleetCapacityKw: Math.round(fleetCapacityKw * 10) / 10,
         totalPlantCount,
         healthyPlantCount,
-        producingPlantCount: plantIsLiveSet.size,
+        producingPlantCount,
         sparkline: heroSparkline,
       },
       kpis: {

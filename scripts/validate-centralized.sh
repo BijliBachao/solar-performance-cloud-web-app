@@ -319,7 +319,7 @@ else
 fi
 
 # ── 4.2: All required exports present ──────────────────────────────
-REQUIRED_EXPORTS="ACTIVE_CURRENT_THRESHOLD GAP_CRITICAL GAP_WARNING GAP_INFO HEALTH_HEALTHY HEALTH_WARNING HEALTH_CAUTION HEALTH_SEVERE STALE_MS MS_PER_HOUR HERO_SPARKLINE_HOURS HERO_SPARKLINE_LOOKBACK_HOURS DASHBOARD_HISTORY_DAYS MAX_DATE_RANGE_DAYS ACTIVE_LOOKBACK_DAYS PLANT_HEALTH_HEALTHY PLANT_HEALTH_FAULTY PLANT_HEALTH_DISCONNECTED isActive isStale classifyRealtime classifyAlertSeverity bucketHealthScore computePerformance computeAvailability computeHealthScore filterActive leaveOneOutAvg activeAvg computeGap canCompare StringStatus AlertSeverity HealthBucket"
+REQUIRED_EXPORTS="ACTIVE_CURRENT_THRESHOLD GAP_CRITICAL GAP_WARNING GAP_INFO HEALTH_HEALTHY HEALTH_WARNING HEALTH_CAUTION HEALTH_SEVERE STALE_MS MS_PER_HOUR HERO_SPARKLINE_HOURS HERO_SPARKLINE_LOOKBACK_HOURS DASHBOARD_HISTORY_DAYS STANDBY_POWER_FLOOR_KW classifyPlantLive MAX_DATE_RANGE_DAYS ACTIVE_LOOKBACK_DAYS PLANT_HEALTH_HEALTHY PLANT_HEALTH_FAULTY PLANT_HEALTH_DISCONNECTED isActive isStale classifyRealtime classifyAlertSeverity bucketHealthScore computePerformance computeAvailability computeHealthScore filterActive leaveOneOutAvg activeAvg computeGap canCompare StringStatus AlertSeverity HealthBucket PlantLiveStatus"
 
 MISSING=""
 for export in $REQUIRED_EXPORTS; do
@@ -434,13 +434,32 @@ else
   echo -e "${GREEN}PASS [5.3]: No inline 7-day rolling loops${NC}"
 fi
 
+# ── 5.4: No inline standby-power floor numbers ─────────────────────
+# Catch naive "power > 0.5" or "kw > 0.5" outside string-health.ts.
+VIOLATIONS=$(grep -rnE --include="*.ts" --include="*.tsx" $EXCLUDE \
+  '(power|[Pp]owerKw|kw)[a-zA-Z_]*\s*[<>]=?\s*0\.5' $SRC_DIRS 2>/dev/null \
+  | grep -v "$ALLOWED" \
+  | grep -v 'STANDBY_POWER_FLOOR_KW' \
+  | grep -v '^\s*//' \
+  || true)
+
+if [ -n "$VIOLATIONS" ]; then
+  echo -e "${RED}FAIL [5.4]: Inline standby power floor found${NC}"
+  echo "$VIOLATIONS"
+  echo "  Fix: Use STANDBY_POWER_FLOOR_KW / classifyPlantLive() from string-health.ts"
+  echo ""
+  ERRORS=$((ERRORS + 1))
+else
+  echo -e "${GREEN}PASS [5.4]: No inline standby power floors${NC}"
+fi
+
 echo ""
 
 # ═══════════════════════════════════════════════════════════════════════
 # SUMMARY
 # ═══════════════════════════════════════════════════════════════════════
 
-TOTAL_CHECKS=17
+TOTAL_CHECKS=18
 PASSED=$((TOTAL_CHECKS - ERRORS - WARNINGS))
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

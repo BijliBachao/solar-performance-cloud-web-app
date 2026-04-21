@@ -96,6 +96,43 @@ export const HERO_SPARKLINE_LOOKBACK_HOURS = 48
 /** Days of history for dashboard sparklines (energy, health) AND rolling-avg baseline */
 export const DASHBOARD_HISTORY_DAYS = 7
 
+// ── Producing vs standby ────────────────────────────────────────────
+/**
+ * Power floor (kW) below which a plant is considered STANDBY / not producing.
+ *
+ * Why: at night / dawn / dusk, inverters still ping with standby current
+ * (few hundred mW per string). Reporting ≠ producing. An 85 kW plant
+ * showing 0.2 kW is not "live" in any meaningful sense — it's electrical
+ * noise that an enterprise viewer would read as "up and running".
+ *
+ * Used by: live plant-status classification on the dashboard, fleet power
+ * accumulation (skip standby plants), and KPI null-out when nobody is
+ * producing.
+ */
+export const STANDBY_POWER_FLOOR_KW = 0.5
+
+/** Tri-state live status for plant cards */
+export type PlantLiveStatus = 'PRODUCING' | 'IDLE' | 'OFFLINE'
+
+/**
+ * Classify a plant's live status.
+ *   - isReporting  = had a measurement in the last STALE_MS window
+ *   - currentPowerKw = sum of latest per-string power readings
+ *
+ * Returns:
+ *   PRODUCING — reporting AND above the standby floor (real generation)
+ *   IDLE      — reporting but below the floor (standby / night)
+ *   OFFLINE   — not reporting in the staleness window
+ */
+export function classifyPlantLive(
+  isReporting: boolean,
+  currentPowerKw: number,
+): PlantLiveStatus {
+  if (!isReporting) return 'OFFLINE'
+  if (currentPowerKw >= STANDBY_POWER_FLOOR_KW) return 'PRODUCING'
+  return 'IDLE'
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Types
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

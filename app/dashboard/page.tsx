@@ -17,6 +17,7 @@ interface PlantItem {
   device_count: number
   alert_count: number
   isLive?: boolean
+  liveStatus?: 'PRODUCING' | 'IDLE' | 'OFFLINE'
   currentPowerKw?: number
   todayEnergyKwh?: number
   healthPercent?: number | null

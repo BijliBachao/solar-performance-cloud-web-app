@@ -22,6 +22,8 @@ import { Sparkline } from './Sparkline'
  * health progress bar · inverter/alert summary footer.
  */
 
+type PlantLiveStatus = 'PRODUCING' | 'IDLE' | 'OFFLINE'
+
 interface PlantCardProps {
   plant: {
     id: string
@@ -32,6 +34,7 @@ interface PlantCardProps {
     alert_count: number
     provider?: string
     isLive?: boolean
+    liveStatus?: PlantLiveStatus
     currentPowerKw?: number
     todayEnergyKwh?: number
     healthPercent?: number | null
@@ -64,6 +67,10 @@ export function PlantCard({ plant, basePath = '/dashboard/plants' }: PlantCardPr
   const healthPercent = plant.healthPercent
   const hasHealth = healthPercent !== null && healthPercent !== undefined && healthPercent > 0
   const hasProductionBars = plant.productionBars && plant.productionBars.length > 0 && plant.productionBars.some((v) => v > 0)
+  // Prefer new tri-state; fall back to isLive bool for graceful rollout
+  const liveStatus: PlantLiveStatus =
+    plant.liveStatus ?? (plant.isLive ? 'PRODUCING' : 'OFFLINE')
+  const isProducing = liveStatus === 'PRODUCING'
 
   return (
     <div
@@ -77,13 +84,18 @@ export function PlantCard({ plant, basePath = '/dashboard/plants' }: PlantCardPr
         {/* Header: Live pill + Provider badge + Plant name */}
         <div>
           <div className="flex items-center gap-1.5 mb-1">
-            {plant.isLive ? (
+            {liveStatus === 'PRODUCING' ? (
               <span className="flex items-center gap-1 text-[9px] font-bold text-emerald-700 shrink-0">
                 <span className="relative flex h-1.5 w-1.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
                 </span>
                 LIVE
+              </span>
+            ) : liveStatus === 'IDLE' ? (
+              <span className="flex items-center gap-1 text-[9px] font-bold text-slate-500 shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                STANDBY
               </span>
             ) : (
               <span className="flex items-center gap-1 text-[9px] font-bold text-slate-400 shrink-0">
@@ -117,11 +129,15 @@ export function PlantCard({ plant, basePath = '/dashboard/plants' }: PlantCardPr
           <div>
             <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Now</span>
             <div className="text-lg font-mono font-bold text-slate-900 leading-tight">
-              {plant.isLive && (plant.currentPowerKw ?? 0) > 0
-                ? `${(plant.currentPowerKw ?? 0).toFixed(1)}`
-                : '—'}
-              {plant.isLive && (plant.currentPowerKw ?? 0) > 0 && (
-                <span className="text-xs font-mono font-semibold text-slate-500 ml-1">kW</span>
+              {isProducing && (plant.currentPowerKw ?? 0) > 0 ? (
+                <>
+                  {(plant.currentPowerKw ?? 0).toFixed(1)}
+                  <span className="text-xs font-mono font-semibold text-slate-500 ml-1">kW</span>
+                </>
+              ) : liveStatus === 'IDLE' ? (
+                <span className="text-sm font-semibold text-slate-400">Standby</span>
+              ) : (
+                '—'
               )}
             </div>
           </div>
