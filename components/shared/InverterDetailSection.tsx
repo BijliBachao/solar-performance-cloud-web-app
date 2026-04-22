@@ -724,29 +724,37 @@ export function InverterDetailSection({
           </CollapsibleSection>
         )}
 
-        {/* ── Collapsible: Monthly Health Report ───────────────── */}
-        <CollapsibleSection
-          title="Monthly Health Report"
-          icon={CalendarDays}
-        >
-          {monthlyHealth && monthlyHealth.data.length > 0 ? (
-            <MonthlyHealthReport
-              data={monthlyHealth.data}
-              inverterAvgCurrent={monthlyHealth.inverter_avg_current}
-            />
-          ) : (
-            <div className="text-center py-6 text-slate-400">
-              <CalendarDays className="w-5 h-5 mx-auto mb-1.5 text-slate-300" strokeWidth={2} />
-              <p className="text-xs font-semibold">Not enough historical data yet</p>
-              <button
-                onClick={fetchMonthly}
-                className="text-[11px] font-bold text-solar-gold-600 hover:text-solar-gold-700 mt-2 uppercase tracking-wider transition-colors"
-              >
-                Load report
-              </button>
-            </div>
-          )}
-        </CollapsibleSection>
+        {/*
+          ── Monthly Health Report — TEMPORARILY HIDDEN FOR GO-LIVE ───
+          Hidden on 2026-04-22 because the component hasn't been redesigned
+          to the v3 Solar Corporate rhythm yet. All the fetch logic,
+          MonthlyHealthReport.tsx, and the CollapsibleSection pattern are
+          intact — just unrender. Re-enable by uncommenting once the
+          section is redesigned.
+
+          <CollapsibleSection
+            title="Monthly Health Report"
+            icon={CalendarDays}
+          >
+            {monthlyHealth && monthlyHealth.data.length > 0 ? (
+              <MonthlyHealthReport
+                data={monthlyHealth.data}
+                inverterAvgCurrent={monthlyHealth.inverter_avg_current}
+              />
+            ) : (
+              <div className="text-center py-6 text-slate-400">
+                <CalendarDays className="w-5 h-5 mx-auto mb-1.5 text-slate-300" strokeWidth={2} />
+                <p className="text-xs font-semibold">Not enough historical data yet</p>
+                <button
+                  onClick={fetchMonthly}
+                  className="text-[11px] font-bold text-solar-gold-600 hover:text-solar-gold-700 mt-2 uppercase tracking-wider transition-colors"
+                >
+                  Load report
+                </button>
+              </div>
+            )}
+          </CollapsibleSection>
+        */}
       </div>
     </div>
   )
