@@ -660,9 +660,6 @@ export function InverterDetailSection({
           <div className="py-4 border-t border-slate-200">
             <div className="flex items-center justify-between mb-2">
               <SectionLabel>String Current Comparison</SectionLabel>
-              <span className="text-[10px] text-slate-400 font-mono">
-                Green line = Avg: {avgCurrent.toFixed(2)}A (all strings)
-              </span>
             </div>
             <CurrentDeviationChart strings={strings} avgCurrent={avgCurrent} />
           </div>

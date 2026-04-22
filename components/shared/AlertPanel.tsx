@@ -2,7 +2,7 @@
 
 import { cn } from '@/lib/utils'
 import { format, differenceInMinutes, differenceInHours, differenceInDays } from 'date-fns'
-import { AlertTriangle, Info, XCircle, CheckCircle } from 'lucide-react'
+import { AlertTriangle, Info, XCircle, CheckCircle, Check } from 'lucide-react'
 import {
   STATUS_STYLES,
   statusKeyFromSeverity,
@@ -26,12 +26,6 @@ interface AlertPanelProps {
   onResolve?: (id: number) => void
 }
 
-/**
- * Per-severity icon + left-border-accent color class.
- * The left-border color maps to the vivid dot variant of the status so the
- * accent reads as "this item is critical" at a glance without repeating the
- * background wash color.
- */
 const ICONS_BY_KEY: Record<StatusKey, any> = {
   critical: XCircle,
   warning: AlertTriangle,
@@ -71,12 +65,17 @@ function formatStartTime(createdAt: string): string {
   return format(start, 'MMM d, h:mm a')
 }
 
+/**
+ * Dense list of active alerts. Each row is ~52px: icon · severity pill ·
+ * device → string · gap · inline time + duration, plus compact icon-only
+ * resolve button. Alert message sits as a second line when present.
+ */
 export function AlertPanel({ alerts, onResolve }: AlertPanelProps) {
   if (alerts.length === 0) {
     return (
-      <div className="text-center py-10">
-        <CheckCircle className="h-6 w-6 mx-auto mb-2 text-slate-300" strokeWidth={2} />
-        <p className="text-xs font-bold text-slate-500">No active alerts</p>
+      <div className="text-center py-8 bg-emerald-50/40 rounded-sm border border-emerald-100">
+        <CheckCircle className="h-5 w-5 mx-auto mb-1.5 text-emerald-500" strokeWidth={2} />
+        <p className="text-xs font-bold text-emerald-700">No active alerts</p>
       </div>
     )
   }
@@ -89,7 +88,7 @@ export function AlertPanel({ alerts, onResolve }: AlertPanelProps) {
   })
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1">
       {sorted.map((alert) => {
         const key = statusKeyFromSeverity(alert.severity)
         const style = STATUS_STYLES[key]
@@ -100,52 +99,56 @@ export function AlertPanel({ alerts, onResolve }: AlertPanelProps) {
           <div
             key={alert.id}
             className={cn(
-              'bg-white rounded-sm border border-slate-200 border-l-[3px] px-4 py-3',
+              'bg-white rounded-sm border border-slate-200 border-l-[3px] px-3 py-2',
               leftBorder,
+              'hover:bg-slate-50 transition-colors',
             )}
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-2.5 min-w-0">
-                <Icon className={cn('w-4 h-4 mt-0.5 shrink-0', style.fg)} strokeWidth={2} />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span
-                      className={cn(
-                        'text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-sm',
-                        style.bg,
-                        style.fg,
-                      )}
-                    >
-                      {alert.severity}
-                    </span>
-                    <span className="text-xs font-bold text-slate-900">
-                      {alert.device_name ? `${alert.device_name} → ` : ''}PV{alert.string_number}
-                    </span>
-                    {alert.gap_percent != null && (
-                      <span className="text-[10px] font-mono text-slate-500">
-                        {Number(alert.gap_percent).toFixed(1)}% below avg
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-500">
-                    <span>{formatStartTime(alert.created_at)}</span>
-                    <span className="font-bold text-slate-600">{formatDuration(alert.created_at)}</span>
-                  </div>
-                </div>
-              </div>
-
+            {/* Row 1 — everything on one line */}
+            <div className="flex items-center gap-2 min-w-0">
+              <Icon className={cn('w-3.5 h-3.5 shrink-0', style.fg)} strokeWidth={2} />
+              <span
+                className={cn(
+                  'text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-sm shrink-0',
+                  style.bg,
+                  style.fg,
+                )}
+              >
+                {alert.severity}
+              </span>
+              <span className="text-[12px] font-bold text-slate-900 shrink-0">
+                {alert.device_name ? `${alert.device_name} → ` : ''}PV{alert.string_number}
+              </span>
+              {alert.gap_percent != null && (
+                <span className="text-[10px] font-mono text-slate-500 shrink-0">
+                  {Number(alert.gap_percent).toFixed(1)}% below avg
+                </span>
+              )}
+              <span className="text-[10px] text-slate-400 ml-auto shrink-0 font-mono">
+                {formatStartTime(alert.created_at)}
+              </span>
+              <span className="text-[10px] font-bold font-mono text-slate-600 shrink-0">
+                {formatDuration(alert.created_at)}
+              </span>
               {onResolve && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
                     onResolve(alert.id)
                   }}
-                  className="shrink-0 text-[10px] font-bold text-solar-gold-700 border-2 border-solar-gold rounded-sm px-2 py-1 hover:bg-solar-gold hover:text-white transition-colors uppercase tracking-wider"
+                  title="Resolve alert"
+                  className="shrink-0 flex items-center justify-center w-5 h-5 rounded-sm border border-solar-gold/40 text-solar-gold-700 hover:bg-solar-gold hover:text-white hover:border-solar-gold transition-colors"
                 >
-                  Resolve
+                  <Check className="w-3 h-3" strokeWidth={2.5} />
                 </button>
               )}
             </div>
+            {/* Row 2 — optional alert message */}
+            {alert.message && (
+              <p className="text-[11px] text-slate-500 mt-0.5 ml-[1.5rem] truncate">
+                {alert.message}
+              </p>
+            )}
           </div>
         )
       })}
