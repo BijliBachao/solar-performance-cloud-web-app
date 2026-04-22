@@ -4,6 +4,7 @@ import {
   isActive, filterActive, computeGap, classifyAlertSeverity,
   canCompare, computePerformance, computeAvailability, computeHealthScore,
   MIN_PEERS_FOR_COMPARISON, MIN_AVG_FOR_COMPARISON,
+  MAX_STRING_CURRENT_A, MAX_STRING_POWER_W,
 } from '@/lib/string-health'
 
 /** Safe parseFloat that returns 0 instead of NaN */
@@ -12,16 +13,52 @@ export function safeFloat(v: any): number {
   return isNaN(n) || !isFinite(n) ? 0 : n
 }
 
+/**
+ * Drop physically-impossible sensor readings (CT faults) so they don't
+ * pollute downstream aggregates, peer averages, or alerts. A measurement
+ * is rejected if:
+ *   • current ≥ MAX_STRING_CURRENT_A  (50 A  — e.g. 108 A / 998 A CT faults)
+ *   • power   ≥ MAX_STRING_POWER_W    (25 kW — physically impossible per string)
+ *
+ * Rationale: a broken CT reporting 998 A used to be included in
+ * inverter averages, pushing Performance to the 100% cap and making
+ * the string look perfectly healthy in string_daily. The raw
+ * measurement row stays in string_measurements (audit trail), but
+ * aggregates and alert comparisons must ignore it.
+ *
+ * This matches the two-axis filter applied in the read-side queries
+ * for /api/dashboard/main and /api/plants/[code]/history, so data
+ * flowing into the DB aggregates is now consistent with data flowing
+ * out.
+ */
+function dropSensorFaults<T extends { current: any; power?: any }>(rows: T[]): T[] {
+  return rows.filter((m) => {
+    const c = Number(m.current)
+    if (!isNaN(c) && c >= MAX_STRING_CURRENT_A) return false
+    if (m.power != null) {
+      const p = Number(m.power)
+      if (!isNaN(p) && p >= MAX_STRING_POWER_W) return false
+    }
+    return true
+  })
+}
+
 export async function generateAlerts(
   deviceId: string,
   plantId: string,
-  measurements: Array<{
+  rawMeasurements: Array<{
     string_number: number
     current: Decimal
     voltage: Decimal
     power: Decimal
   }>
 ): Promise<void> {
+  if (rawMeasurements.length === 0) return
+
+  // Exclude sensor-fault rows before peer comparison — a single broken
+  // CT at 998 A would otherwise dominate the inverter average and make
+  // every healthy peer look "below average" (false CRITICAL alerts).
+  const measurements = dropSensorFaults(rawMeasurements)
   if (measurements.length === 0) return
 
   const activeStrings = measurements.filter(m => isActive(Number(m.current)))
@@ -181,7 +218,7 @@ export async function updateHourlyAggregates(
   const hourStart = getPKTHourStart()
 
   // Fetch ALL measurements for this device in one query
-  const allMeasurements = await prisma.string_measurements.findMany({
+  const rawMeasurements = await prisma.string_measurements.findMany({
     where: {
       device_id: deviceId,
       timestamp: { gte: hourStart },
@@ -189,6 +226,11 @@ export async function updateHourlyAggregates(
     select: { string_number: true, voltage: true, current: true, power: true },
   })
 
+  if (rawMeasurements.length === 0) return
+
+  // Drop physically-impossible sensor readings before aggregation so
+  // string_hourly.avg_power / avg_current / max_current stay honest.
+  const allMeasurements = dropSensorFaults(rawMeasurements)
   if (allMeasurements.length === 0) return
 
   // Group by string_number
@@ -247,7 +289,7 @@ export async function updateDailyAggregates(
   const pktDate = getPKTDateForDB()
 
   // Fetch ALL measurements for this device today (including timestamp for trapezoidal energy)
-  const allMeasurements = await prisma.string_measurements.findMany({
+  const rawMeasurements = await prisma.string_measurements.findMany({
     where: {
       device_id: deviceId,
       timestamp: { gte: dayStart },
@@ -256,6 +298,14 @@ export async function updateDailyAggregates(
     orderBy: { timestamp: 'asc' },
   })
 
+  if (rawMeasurements.length === 0) return
+
+  // Drop physically-impossible sensor readings before any daily math.
+  // Without this, a single CT fault (108 A, 998 A, etc.) pushes the
+  // string's computed Performance to the 100% cap and stores a
+  // misleadingly-green row in string_daily. Also inflates avg_power
+  // and the trapezoidal energy integral.
+  const allMeasurements = dropSensorFaults(rawMeasurements)
   if (allMeasurements.length === 0) return
 
   // Compute inverter-wide average current (for performance score)
