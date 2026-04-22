@@ -164,12 +164,49 @@ else
 fi
 
 both ""
+both "── Check 6: Dependency resolution (if package.json changed) ──"
+# Added after the 2026-04-22 outage: @clerk/nextjs upgrade shifted peer-dep
+# resolution; EC2's Next build auto-ran `npm install @types/react` WITHOUT
+# --legacy-peer-deps and bailed on a react@19 vs @types/react@^18 conflict.
+# That 502 could have been caught here by running a real clean install.
+if echo "$CHANGED" | grep -qE '^package(-lock)?\.json$'; then
+  report ""
+  report "package.json or package-lock.json changed — running clean install in a tmpdir"
+  TMPDIR=$(mktemp -d -t spc-dep-check-XXXXXX)
+  cp package.json package-lock.json "$TMPDIR/" 2>/dev/null
+  (cd "$TMPDIR" && npm ci --legacy-peer-deps --no-audit --no-fund --dry-run > /tmp/pre-audit-npmci.log 2>&1)
+  NPMCI_EXIT=$?
+  # Also check @types/react vs react major alignment — the specific trap
+  REACT_MAJOR=$(node -p "require('./package.json').dependencies?.react?.match(/\d+/)?.[0] || 'n/a'" 2>/dev/null)
+  TYPES_MAJOR=$(node -p "require('./package.json').devDependencies?.['@types/react']?.match(/\d+/)?.[0] || 'n/a'" 2>/dev/null)
+  if [ "$REACT_MAJOR" != "n/a" ] && [ "$TYPES_MAJOR" != "n/a" ] && [ "$REACT_MAJOR" != "$TYPES_MAJOR" ]; then
+    both "${RED}FAIL${NC}: react@$REACT_MAJOR vs @types/react@$TYPES_MAJOR — major-version mismatch"
+    report "- FAIL: react major $REACT_MAJOR ≠ @types/react major $TYPES_MAJOR"
+    ERRORS=$((ERRORS + 1))
+  elif [ "$NPMCI_EXIT" -ne 0 ]; then
+    both "${RED}FAIL${NC}: npm ci --dry-run exited $NPMCI_EXIT (peer-dep or other resolution error)"
+    report "- FAIL: npm ci dry-run failed"
+    report '```'
+    report "$(tail -25 /tmp/pre-audit-npmci.log)"
+    report '```'
+    ERRORS=$((ERRORS + 1))
+  else
+    both "${GREEN}PASS${NC}: clean install resolves (react@$REACT_MAJOR aligned with @types/react@$TYPES_MAJOR)"
+    report "- PASS: clean install resolves; types aligned"
+  fi
+  rm -rf "$TMPDIR"
+else
+  both "${GREEN}PASS${NC}: no dependency changes in this diff"
+  report "- PASS: no dep changes"
+fi
+
+both ""
 both "── Summary ─────────────────────────────────────────"
-PASSED=$((5 - ERRORS - WARNINGS))
+PASSED=$((6 - ERRORS - WARNINGS))
 report ""
 report "## Summary"
 report ""
-report "- Checks run: 5"
+report "- Checks run: 6"
 report "- Passed: $PASSED"
 report "- Warnings: $WARNINGS"
 report "- Errors: $ERRORS"
