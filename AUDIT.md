@@ -9,7 +9,9 @@
 
 ## 0. TL;DR
 
-SPC is **functional and serving traffic** (https://spc.bijlibachao.pk — HTTP 200 consistently). The **UI / design / data-integrity on the read-side is enterprise-grade** after this session's work (20 validator checks, IEC-aligned metrics, 12 sensor-fault guardrails, tri-state plant liveness). The **infrastructure, deployment pipeline, and operational tooling are at small-startup level**, not enterprise-level — no CI, no tests, no staging, no alerting, no APM, shared-tenant EC2. Suitable to hand over to an operator who understands this; not yet suitable to leave unattended.
+SPC is **functional and serving traffic** (https://spc.bijlibachao.pk — HTTP 200 consistently). The **UI / design / data-integrity on the read-side is enterprise-grade** after this session's work (20 validator checks, IEC-aligned metrics, 12 sensor-fault guardrails, tri-state plant liveness). **Write-side data integrity** now fixed too (poller two-axis filter). **Observability baseline** now in place: Sentry for errors, Netdata for system metrics, hourly audit cron writing markdown reports, `/api/health` endpoint for external probes. The remaining gaps are **CI/CD** (still manual deploys), **testing** (no test suite), and **external uptime monitoring** (UptimeRobot setup documented — awaits operator sign-up).
+
+Suitable to hand over to an operator; suitable to run unattended for short windows with UptimeRobot + Sentry email alerts enabled.
 
 ---
 
@@ -151,24 +153,24 @@ Logs under `/home/ubuntu/.pm2/logs/` — daily rotation observed (files dated pe
 
 ## 3. Known Issues (prioritised)
 
-### 🔴 CRITICAL — ship before hand-off
+### 🔴 CRITICAL — status
 
-| # | Issue | Evidence | Fix |
-|---|---|---|---|
-| C1 | **Poller aggregates don't apply the two-axis sensor-fault filter** — CT faults (108 A / 998 A) pollute `string_daily.performance` (caps at 100%, hides failure) and `string_hourly.avg_power` | `lib/poller-utils.ts:206,262,280` — uses `filterActive()` only; no `MAX_STRING_CURRENT_A` / `MAX_STRING_POWER_W` check | Stage ready locally — adds `dropSensorFaults()` helper in `poller-utils.ts` applied at the top of `generateAlerts()`, `updateHourlyAggregates()`, `updateDailyAggregates()` |
-| C2 | **Provider API failures only surface in pm2 stderr** — observed Solis 503 error in logs with no alert, no retry-exhausted telemetry | `~/.pm2/logs/solar-poller-error.log` contains repeated `SolisClient HTTP 503` and `userStationList failed (3/3)` | Add structured logging + a healthcheck endpoint + either Sentry/Datadog/OTel OR a cron-based log-scraper that pages the on-call |
+| # | Issue | Status |
+|---|---|---|
+| C1 | Poller two-axis sensor-fault filter | ✅ **CLOSED** 2026-04-22 — see CHANGELOG `[DATA-1]`. Shipped in commit `610c4cf`. Forward-only (old rows overwrite on next aggregation). |
+| C2 | Provider API failures only in pm2 stderr | ✅ **CLOSED** 2026-04-22 — Sentry captures provider errors (`[OBS-3]`); continuous audit counts them hourly (`[OBS-1]`). UptimeRobot setup documented (`UPTIMEROBOT_SETUP.md`) awaits operator sign-up for external pings. |
 
 ### 🟠 HIGH — next sprint, required for enterprise
 
 | # | Issue | Evidence | Impact |
 |---|---|---|---|
-| H1 | **No CI/CD pipeline** | No `.github/`, `.gitlab-ci.yml`, `Dockerfile` | Every change is manual. No automated gate between code and prod. `npm run build` runs the validator locally but nothing enforces it server-side. A forgotten `rm -rf .next` or `prisma generate` silently corrupts deploys. |
-| H2 | **No test suite** | No `*.test.*` / `*.spec.*` files found. No jest/vitest/playwright config. | Entire correctness discipline relies on the validator + manual QA + TypeScript. Refactor risk is high. |
-| H3 | **No staging environment** | Single EC2, deploys straight to prod | Rollback = `git reset` + rebuild + restart. No canary. No blue/green. |
-| H4 | **No application observability (APM)** | No Sentry, Datadog, New Relic, OTel in deps | Cannot answer "who/when/why is this slow/broken?" without SSHing and reading pm2 logs. |
-| H5 | **No health / readiness endpoint** | No `/api/health` route | Can't be added to a load balancer or external uptime monitor cleanly. Ops relies on `curl $/` returning 200 as a proxy. |
-| H6 | **Shared EC2 blast radius** | Wattey runs on same t2.medium | OOM, CPU pressure, disk fill, or a Wattey deploy bug can take SPC down. PM2 `max-memory-restart` limits help but the tenancy risk remains. |
-| H7 | **Deploy is manual & sequence-sensitive** | 5 commands memorised by the deploying human: `git pull && npm ci --legacy-peer-deps && npx prisma generate && rm -rf .next && npm run build && pm2 restart solar-web solar-poller` | Forgetting any step ships broken code. |
+| H1 | No CI/CD pipeline | **STILL OPEN** — planned for post-handover. |
+| H2 | No test suite | **STILL OPEN** — planned for 30-90 day window. |
+| H3 | No staging environment | **STILL OPEN** — planned for 90-day window. |
+| H4 | ~~No application observability (APM)~~ | ✅ **CLOSED** 2026-04-22 — Sentry live. See CHANGELOG `[OBS-3]`. |
+| H5 | ~~No health / readiness endpoint~~ | ✅ **CLOSED** 2026-04-22 — `/api/health` live + in Clerk public routes. See CHANGELOG `[OBS-4]`. |
+| H6 | Shared EC2 blast radius | **STILL OPEN** — Netdata monitoring on-box catches resource contention early (`[OBS-2]`), but tenancy unchanged. Separate-EC2 migration queued for 90-day window. |
+| H7 | Deploy is manual & sequence-sensitive | **PARTIALLY MITIGATED** — `audit-pre-deploy.sh` + `audit-post-deploy.sh` act as gates. Still manual. Full automation in CI/CD work. |
 
 ### 🟡 MEDIUM — polish, important for scale
 
@@ -204,8 +206,8 @@ Logs under `/home/ubuntu/.pm2/logs/` — daily rotation observed (files dated pe
 | **Security — app** | ✅ good | Clerk auth (SOC2-compliant) · RBAC · multi-tenant scoping · 404-not-403 · webhook secret |
 | **Security — secrets** | ⚠️ fair | `.env` on disk with 0600 perms · no secret rotation schedule · no vault (AWS Secrets Manager, 1Password, etc.) |
 | **Data integrity — read** | ✅ excellent | 20 validator checks · two-axis sensor filter · null-safe metrics · IEC-aligned |
-| **Data integrity — write** | 🔴 gap | Poller doesn't filter sensor faults (C1) · no write-side validation tests |
-| **Observability** | 🔴 gap | pm2 logs only · no APM · no metrics · no tracing · no alerts (H4) |
+| **Data integrity — write** | ✅ good | Poller two-axis sensor filter ships (2026-04-22). Same discipline on write as on read. |
+| **Observability** | ✅ baseline | Sentry (errors + session replay + tracing) + Netdata (system metrics) + hourly audit cron + `/api/health`. UptimeRobot awaits operator sign-up. |
 | **Reliability — runtime** | 🟡 ok | PM2 auto-restart · memory-restart limits possible · retries with exponential backoff in clients |
 | **Reliability — deploy** | 🟠 weak | Manual steps (H7) · no staging (H3) · rollback is git-reset |
 | **Scalability** | 🟡 ok for now | 48 plants fits comfortably · t2.medium has CPU burst · RDS auto-scales to 1 TB · no horizontal scale path documented |

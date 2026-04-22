@@ -162,7 +162,17 @@ fails, the build fails and no deploy happens.
 
 ---
 
-## 8. Contacts
+## 8. Observability dashboards (ops access)
+
+| Tool | URL | Auth | Purpose |
+|---|---|---|---|
+| **Sentry** | https://bijli-bachao-pk.sentry.io/issues/ (project `javascript-nextjs`) | Sentry org login | Every JS / API / middleware exception, grouped by fingerprint, with release + Session Replay |
+| **Netdata** (EC2) | `http://localhost:19999` after `ssh -L 19999:localhost:19999 -i thingsboard.pem ubuntu@ec2-54-175-170-207.compute-1.amazonaws.com` | SSH key | CPU · RAM · disk · network · per-second resolution |
+| **Audit reports** (EC2) | `~/solar-web-app/audits/YYYY-MM-DD/` | SSH key | Hourly continuous + every deploy pre/post markdown reports |
+| **UptimeRobot** | https://uptimerobot.com (account holder only) | UptimeRobot login | External 5-min ping on `/api/health`; sends email/Slack alerts on down. See `UPTIMEROBOT_SETUP.md` for adding a new monitor. |
+| **`/api/health`** | https://spc.bijlibachao.pk/api/health | public | Machine-readable infra health (DB + poller freshness) |
+
+## 9. Contacts
 
 | Topic | Contact |
 |---|---|
