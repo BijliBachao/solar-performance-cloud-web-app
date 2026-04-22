@@ -103,13 +103,24 @@ out ""
 out "## PM2"
 out ""
 for app in solar-web solar-poller; do
-  PM2_JSON=$(pm2 jlist 2>/dev/null || echo '[]')
-  STATUS=$(echo "$PM2_JSON" | grep -oE "\"name\":\"$app\"[^}]*\"status\":\"[^\"]*\"" | grep -oE '"status":"[^"]*"' | cut -d'"' -f4 | head -1)
-  RESTARTS=$(echo "$PM2_JSON" | grep -oE "\"name\":\"$app\"[^}]*\"restart_time\":[0-9]*" | grep -oE '"restart_time":[0-9]*' | cut -d: -f2 | head -1)
+  READ=$(pm2 jlist 2>/dev/null | python3 -c "
+import json, sys
+want = '$app'
+data = json.load(sys.stdin)
+for item in data:
+  if item.get('name') == want:
+    env = item.get('pm2_env', {})
+    print(env.get('status','unknown'), env.get('restart_time',0))
+    break
+else:
+  print('notfound 0')
+" 2>/dev/null || echo "parse-error 0")
+  STATUS=$(echo "$READ" | awk '{print $1}')
+  RESTARTS=$(echo "$READ" | awk '{print $2}')
   if [ "$STATUS" = "online" ]; then
-    out "- ${GREEN}$app${NC}: online (lifetime restarts: ${RESTARTS:-n/a})"
+    out "- ${GREEN}$app${NC}: online (lifetime restarts: $RESTARTS)"
   else
-    out "- ${RED}$app${NC}: ${STATUS:-unknown}"
+    out "- ${RED}$app${NC}: $STATUS"
     ERRORS=$((ERRORS + 1))
   fi
 done

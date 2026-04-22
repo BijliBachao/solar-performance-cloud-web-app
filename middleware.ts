@@ -7,6 +7,12 @@ const isPublicRoute = createRouteMatcher([
   '/sign-up(.*)',
   '/pending-assignment',
   '/api/webhooks/clerk(.*)',
+  // Public infrastructure endpoints — must bypass auth so UptimeRobot,
+  // load balancers, and deploy-time smoke tests can probe them.
+  '/api/health',
+  '/api/sentry-test',
+  // Sentry's /monitoring tunnel for client-side event delivery.
+  '/monitoring(.*)',
 ])
 
 const isAdminRoute = createRouteMatcher(['/admin(.*)'])

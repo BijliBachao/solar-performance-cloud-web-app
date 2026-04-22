@@ -51,21 +51,30 @@ out "**Public URL:** $PUBLIC_URL · **Commit:** \`$(cd "$APP_ROOT" && git rev-pa
 out ""
 
 # ── Check 1 — PM2 processes are online ─────────────────────────────
+# pm2 jlist nests status under pm2_env.status — use Python to parse
+# properly rather than brittle regex.
 out "── Check 1: PM2 processes ─────────────────────────"
-PM2_JSON=$(pm2 jlist 2>/dev/null || echo '[]')
 for app in "${PM2_APPS[@]}"; do
-  STATUS=$(echo "$PM2_JSON" | grep -oE "\"name\":\"$app\"[^}]*\"status\":\"[^\"]*\"" | grep -oE '"status":"[^"]*"' | cut -d'"' -f4 | head -1)
-  UPTIME=$(echo "$PM2_JSON" | grep -oE "\"name\":\"$app\"[^}]*\"pm_uptime\":[0-9]*" | grep -oE '"pm_uptime":[0-9]*' | cut -d: -f2 | head -1)
+  READ=$(pm2 jlist 2>/dev/null | python3 -c "
+import json, sys
+want = '$app'
+data = json.load(sys.stdin)
+for item in data:
+  if item.get('name') == want:
+    env = item.get('pm2_env', {})
+    print(env.get('status','unknown'), env.get('pm_uptime',0))
+    break
+else:
+  print('notfound 0')
+" 2>/dev/null || echo "parse-error 0")
+  STATUS=$(echo "$READ" | awk '{print $1}')
+  UPTIME=$(echo "$READ" | awk '{print $2}')
   if [ "$STATUS" = "online" ]; then
-    if [ -n "$UPTIME" ]; then
-      NOW_MS=$(($(date +%s) * 1000))
-      UP_SEC=$(( (NOW_MS - UPTIME) / 1000 ))
-      out "${GREEN}PASS${NC}: $app online (uptime ${UP_SEC}s)"
-    else
-      out "${GREEN}PASS${NC}: $app online"
-    fi
+    NOW_MS=$(($(date +%s) * 1000))
+    UP_SEC=$(( (NOW_MS - UPTIME) / 1000 ))
+    out "${GREEN}PASS${NC}: $app online (uptime ${UP_SEC}s)"
   else
-    out "${RED}FAIL${NC}: $app status=${STATUS:-unknown}"
+    out "${RED}FAIL${NC}: $app status=${STATUS}"
     ERRORS=$((ERRORS + 1))
   fi
 done
