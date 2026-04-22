@@ -97,12 +97,19 @@ export function StringTrendChart({ data }: StringTrendChartProps) {
     const presenceCountByString: Record<number, number> = {}
     for (const p of data) {
       for (const s of p.strings) {
-        presenceCountByString[s.string_number] = (presenceCountByString[s.string_number] || 0) + 1
-        if (s.current > maxByString[s.string_number] || 0) {
+        presenceCountByString[s.string_number] =
+          (presenceCountByString[s.string_number] || 0) + 1
+        // Precedence: the '|| 0' must be inside the comparison — a prior
+        // version had `s.current > maxByString[n] || 0` which evaluates as
+        // `(s.current > undefined) || 0` → always 0 → maxByString stays
+        // undefined → every string classified silent → empty chart.
+        const prevMax = maxByString[s.string_number] || 0
+        if (s.current > prevMax) {
           maxByString[s.string_number] = s.current
         }
         if (s.current > ACTIVE_CURRENT_THRESHOLD) {
-          activeCountByString[s.string_number] = (activeCountByString[s.string_number] || 0) + 1
+          activeCountByString[s.string_number] =
+            (activeCountByString[s.string_number] || 0) + 1
         }
       }
     }
