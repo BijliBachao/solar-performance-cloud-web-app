@@ -300,10 +300,13 @@ export function PlantHeader({
               )}
             </div>
 
-            {/* Strings OK */}
-            <div className="bg-white px-3 py-2.5">
+            {/* Availability (IEC 61724-1) — strings online vs total */}
+            <div
+              className="bg-white px-3 py-2.5"
+              title="Availability (IEC 61724-1): strings reporting and producing vs total expected"
+            >
               <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">
-                Strings OK
+                Availability
               </div>
               {healthPct !== null && healthPct !== undefined ? (
                 <div className="flex items-baseline gap-1">

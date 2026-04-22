@@ -202,7 +202,7 @@ export function PlantDetailView({
   // ─── Derived Data (plant-level summary) ────────────────────
 
   const allStrings = stringData.flatMap(d => d.strings)
-  const liveStrings = allStrings.filter(s => s.status !== 'OPEN_CIRCUIT' && s.status !== 'DISCONNECTED')
+  const liveStrings = allStrings.filter(s => s.status !== 'OPEN_CIRCUIT' && s.status !== 'OFFLINE')
   const stringSummary = {
     total: liveStrings.length,
     ok: allStrings.filter(s => s.status === 'NORMAL').length,

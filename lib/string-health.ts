@@ -163,7 +163,15 @@ export function classifyPlantLive(
 // Types
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-export type StringStatus = 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'
+/**
+ * String runtime status. Vocabulary aligned with IEC 62446-1 (fault types)
+ * and IEC 61724-1 (performance monitoring).
+ *   - OPEN_CIRCUIT : voltage present but 0 A — wiring/connector/fuse fault
+ *   - OFFLINE      : no recent signal (replaces the older 'DISCONNECTED'
+ *                    label which implied intentional disconnection; in
+ *                    practice we only know comms are lost)
+ */
+export type StringStatus = 'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'OFFLINE'
 export type AlertSeverity = 'CRITICAL' | 'WARNING' | 'INFO'
 export type HealthBucket = 'healthy' | 'warning' | 'critical' | 'no_data'
 
@@ -264,11 +272,11 @@ export function classifyRealtime(
   peerAvg: number | null,
   stale: boolean,
 ): RealtimeResult {
-  if (stale) return { status: 'DISCONNECTED', gapPercent: 100 }
+  if (stale) return { status: 'OFFLINE', gapPercent: 100 }
 
   if (!isActive(current)) {
     if (voltage > 0) return { status: 'OPEN_CIRCUIT', gapPercent: 100 }
-    return { status: 'DISCONNECTED', gapPercent: 100 }
+    return { status: 'OFFLINE', gapPercent: 100 }
   }
 
   if (peerAvg !== null && peerAvg > 0) {

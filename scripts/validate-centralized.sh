@@ -211,7 +211,7 @@ echo ""
 
 # ── 2.1: No duplicate StringStatus type ─────────────────────────────
 VIOLATIONS=$(grep -rn --include="*.ts" --include="*.tsx" $EXCLUDE \
-  "'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'DISCONNECTED'" $SRC_DIRS 2>/dev/null \
+  "'NORMAL' | 'WARNING' | 'CRITICAL' | 'OPEN_CIRCUIT' | 'OFFLINE'" $SRC_DIRS 2>/dev/null \
   | grep -v "$ALLOWED" \
   | grep -v 'import.*StringStatus' \
   || true)

@@ -110,7 +110,7 @@ export function statusKeyFromStringStatus(s: StringStatus): StatusKey {
       return 'critical'
     case 'OPEN_CIRCUIT':
       return 'open-circuit'
-    case 'DISCONNECTED':
+    case 'OFFLINE':
       return 'offline'
   }
 }

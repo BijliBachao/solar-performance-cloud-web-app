@@ -37,7 +37,7 @@ const ROW_TINT: Record<StringStatus, string> = {
   WARNING: 'bg-amber-50/40',
   CRITICAL: 'bg-red-50/40',
   OPEN_CIRCUIT: 'bg-violet-50/60',
-  DISCONNECTED: 'bg-slate-50',
+  OFFLINE: 'bg-slate-50',
 }
 
 function gapColorClass(gap: number): string {

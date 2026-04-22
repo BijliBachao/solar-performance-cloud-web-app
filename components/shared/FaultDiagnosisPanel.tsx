@@ -35,8 +35,12 @@ interface Diagnosis {
   icon: any
 }
 
-function diagnoseStrings(strings: StringData[], _avgCurrent: number): Diagnosis[] {
-  const diagnoses: Diagnosis[] = []
+interface DiagnosisWithRef extends Diagnosis {
+  reference?: string
+}
+
+function diagnoseStrings(strings: StringData[], _avgCurrent: number): DiagnosisWithRef[] {
+  const diagnoses: DiagnosisWithRef[] = []
 
   const openCircuit = strings.filter(s => s.status === 'OPEN_CIRCUIT')
   if (openCircuit.length > 0) {
@@ -47,18 +51,20 @@ function diagnoseStrings(strings: StringData[], _avgCurrent: number): Diagnosis[
       pattern: `Voltage present (${openCircuit[0].voltage.toFixed(0)} V) but 0 A current — panels connected but current cannot flow.`,
       action: 'Check MC4 connectors, string fuses, and combiner box switches. Inspect for loose or corroded connections.',
       icon: Cable,
+      reference: 'IEC 62446-1 · continuity & polarity test',
     })
   }
 
-  const disconnected = strings.filter(s => s.status === 'DISCONNECTED')
-  if (disconnected.length > 0) {
+  const offline = strings.filter(s => s.status === 'OFFLINE')
+  if (offline.length > 0) {
     diagnoses.push({
-      stringNumbers: disconnected.map(s => s.string_number),
+      stringNumbers: offline.map(s => s.string_number),
       severity: 'critical',
-      cause: 'Disconnected — Total Signal Loss',
-      pattern: '0 V and 0 A — no electrical connection detected.',
-      action: 'Emergency inspection: check cables for damage, verify inverter input terminals, inspect junction boxes.',
+      cause: 'Offline — Communication Loss',
+      pattern: 'No recent signal from the inverter for this string — could be comms drop, inverter input powered down, or a physical disconnection.',
+      action: 'Check inverter connection to monitoring gateway, verify the string\'s DC input is powered, inspect junction boxes and cabling.',
       icon: PlugZap,
+      reference: 'IEC 62446-1 · communication & data availability',
     })
   }
 
@@ -67,10 +73,11 @@ function diagnoseStrings(strings: StringData[], _avgCurrent: number): Diagnosis[
     diagnoses.push({
       stringNumbers: critical.map(s => s.string_number),
       severity: 'critical',
-      cause: 'Faulty Panel or Major Obstruction',
+      cause: 'Module Fault or Severe Shading',
       pattern: `Current ${critical[0].gap_percent.toFixed(0)}%+ below inverter average — severe underperformance.`,
-      action: 'Inspect for broken panel, heavy bird droppings, or major shading obstruction.',
+      action: 'Inspect for broken panel, heavy bird droppings, or major shading obstruction. Consider I-V curve test.',
       icon: Wrench,
+      reference: 'IEC 62446-1 · module & string power test',
     })
   }
 
@@ -79,10 +86,11 @@ function diagnoseStrings(strings: StringData[], _avgCurrent: number): Diagnosis[
     diagnoses.push({
       stringNumbers: warning.map(s => s.string_number),
       severity: 'warning',
-      cause: 'Partial Shading or Dirty Panels',
+      cause: 'Partial Shading or Soiling',
       pattern: `Current ${GAP_WARNING}–${GAP_WARNING * 2}% below average — moderate underperformance.`,
-      action: 'Schedule cleaning or check for tree shadow during peak hours.',
+      action: 'Schedule module cleaning or check for tree/chimney shadow during peak hours.',
       icon: TreePine,
+      reference: 'IEC 62446-1 · performance verification',
     })
   }
 
@@ -91,10 +99,11 @@ function diagnoseStrings(strings: StringData[], _avgCurrent: number): Diagnosis[
     diagnoses.push({
       stringNumbers: mild.map(s => s.string_number),
       severity: 'info',
-      cause: 'Minor Dust or Light Soiling',
+      cause: 'Light Soiling or Mild Shading',
       pattern: `Current ${GAP_INFO}–${GAP_WARNING}% below average — mild underperformance.`,
       action: 'Monitor trend; schedule routine cleaning if persistent.',
       icon: Droplets,
+      reference: 'IEC 62446-1 · performance verification',
     })
   }
 
@@ -216,13 +225,18 @@ export function FaultDiagnosisPanel({ strings, avgCurrent }: FaultDiagnosisPanel
             <div className="px-3.5 py-2 bg-white border-t border-slate-100">
               <div className="flex items-start gap-2">
                 <ArrowRight className={cn('w-3.5 h-3.5 mt-0.5 shrink-0', style.fg)} strokeWidth={2.5} />
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mr-1.5">
                     Action
                   </span>
                   <span className="text-[12px] text-slate-700">{d.action}</span>
                 </div>
               </div>
+              {d.reference && (
+                <div className="mt-1 pl-5 text-[10px] font-mono text-slate-400">
+                  {d.reference}
+                </div>
+              )}
             </div>
           </div>
         )

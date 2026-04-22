@@ -84,15 +84,15 @@ export function StringHealthMatrix({ strings, avgCurrent }: StringHealthMatrixPr
                     <span
                       className={cn(
                         'font-semibold',
-                        s.status === 'OPEN_CIRCUIT' || s.status === 'DISCONNECTED'
+                        s.status === 'OPEN_CIRCUIT' || s.status === 'OFFLINE'
                           ? 'text-slate-400'
                           : 'text-slate-500',
                       )}
                     >
                       {s.status === 'OPEN_CIRCUIT'
                         ? 'Open'
-                        : s.status === 'DISCONNECTED'
-                          ? 'No sig'
+                        : s.status === 'OFFLINE'
+                          ? 'Offline'
                           : deviationStr}
                     </span>
                   </div>
@@ -107,15 +107,15 @@ export function StringHealthMatrix({ strings, avgCurrent }: StringHealthMatrixPr
                     </span>
                   </p>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Voltage</span>
+                    <span className="text-slate-500">V (operating)</span>
                     <span>{s.voltage.toFixed(1)} V</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Current</span>
+                    <span className="text-slate-500">I (operating)</span>
                     <span>{s.current.toFixed(2)} A</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Power</span>
+                    <span className="text-slate-500">P</span>
                     <span>{(s.power / 1000).toFixed(2)} kW</span>
                   </div>
                   {s.energy_kwh != null && (
@@ -144,6 +144,6 @@ function statusLabel(status: StringStatus): string {
     case 'WARNING': return 'Warning'
     case 'CRITICAL': return 'Critical'
     case 'OPEN_CIRCUIT': return 'Open Circuit'
-    case 'DISCONNECTED': return 'Disconnected'
+    case 'OFFLINE': return 'Offline'
   }
 }

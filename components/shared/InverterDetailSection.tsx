@@ -201,14 +201,14 @@ export function InverterDetailSection({
     s => s.status === 'NORMAL' || s.status === 'WARNING' || s.status === 'CRITICAL',
   )
   const deadStrings = strings.filter(
-    s => s.status === 'OPEN_CIRCUIT' || s.status === 'DISCONNECTED',
+    s => s.status === 'OPEN_CIRCUIT' || s.status === 'OFFLINE',
   )
   const summary = {
     normal: strings.filter(s => s.status === 'NORMAL').length,
     warning: strings.filter(s => s.status === 'WARNING').length,
     critical: strings.filter(s => s.status === 'CRITICAL').length,
     openCircuit: strings.filter(s => s.status === 'OPEN_CIRCUIT').length,
-    disconnected: strings.filter(s => s.status === 'DISCONNECTED').length,
+    disconnected: strings.filter(s => s.status === 'OFFLINE').length,
   }
   const totalStrings = strings.length
   const totalPower = producingStrings.reduce((sum, s) => sum + s.power, 0)
@@ -256,7 +256,15 @@ export function InverterDetailSection({
       if (!res.ok) return
 
       const history = await res.json()
+      // Apply two-axis sensor-fault filter client-side (defence in depth —
+      // same guard used elsewhere, see string-health.ts MAX_STRING_CURRENT_A /
+      // MAX_STRING_POWER_W). Prevents bad CT readings from polluting trend lines.
       const grouped = (history.data || []).reduce((acc: any[], d: any) => {
+        const curr = Number(d.avg_current)
+        const pw = Number(d.avg_power)
+        if (!isNaN(curr) && curr >= MAX_STRING_CURRENT_A) return acc
+        if (!isNaN(pw) && pw >= MAX_STRING_POWER_W) return acc
+
         const ts = d.hour || d.date
         let point = acc.find((p: any) => p.timestamp === ts)
         if (!point) {
@@ -265,7 +273,7 @@ export function InverterDetailSection({
         }
         point.strings.push({
           string_number: d.string_number,
-          current: Number(d.avg_current),
+          current: curr,
         })
         return acc
       }, [])
@@ -459,8 +467,11 @@ export function InverterDetailSection({
           <div>
             <div className="flex items-center justify-between text-[10px] mb-1.5">
               <span className="font-bold uppercase tracking-widest text-slate-400">String Health</span>
-              <span className="font-mono font-semibold text-slate-700">
-                {healthPct}% healthy
+              <span
+                className="font-mono font-semibold text-slate-700"
+                title="IEC 61724-1 availability proxy: strings in NORMAL status vs total"
+              >
+                {healthPct}% available
               </span>
             </div>
             <div className="flex gap-0.5 h-1.5 rounded-full overflow-hidden bg-slate-100">
@@ -519,7 +530,7 @@ export function InverterDetailSection({
               <span className="flex items-center gap-1">
                 <span className={cn('w-1.5 h-1.5 rounded-full', STATUS_STYLES.offline.dot)} />
                 <span className="font-mono font-semibold">{summary.disconnected}</span>
-                <span>Disconnected</span>
+                <span>Offline</span>
               </span>
             </div>
           </div>
@@ -645,7 +656,7 @@ export function InverterDetailSection({
                 </span>
                 <span className="flex items-center gap-1">
                   <span className={cn('w-2 h-2 rounded-full', STATUS_STYLES.offline.dot)} />
-                  <span><strong>Disconnected</strong> — 0V 0A (total loss)</span>
+                  <span><strong>Offline</strong> — 0V 0A or stale signal</span>
                 </span>
               </div>
             </div>

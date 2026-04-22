@@ -8,10 +8,12 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  ReferenceLine,
   ResponsiveContainer,
 } from 'recharts'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
+import { ACTIVE_CURRENT_THRESHOLD } from '@/lib/string-health'
 
 interface TrendDataPoint {
   timestamp: string
@@ -23,13 +25,19 @@ interface StringTrendChartProps {
 }
 
 /**
- * Multi-line string-current trend.
- *   - Inverter average drawn as a thick solar-gold line (the hero signal).
- *   - Individual strings drawn at low opacity so the bundle is calm.
- *   - Clicking a string chip in the legend highlights that line (100% opacity,
- *     thicker stroke). Click again to unpin.
- *   - Empty → null so the parent shows its own empty state.
+ * Multi-line string-current trend. IEC 61724-1 aligned:
+ *   - Explicit null-fill so Recharts shows visible gaps where data is missing
+ *     (instead of interpolating through dropouts — a string that went offline
+ *     and returned won't silently connect "100% performance" across the gap).
+ *   - `connectNulls={false}` set explicitly.
+ *   - Flat-zero strings (max current < ACTIVE_CURRENT_THRESHOLD) dropped from
+ *     the plot but shown in the chip legend with a "silent" tag, so the
+ *     viewer knows they exist without adding flat-line noise.
+ *   - Per-chip uptime %: how much of the window had non-zero current (visual
+ *     proxy for IEC 61724-1 data availability).
+ *   - Day-boundary vertical rule + date label where HH:mm resets across midnight.
  */
+
 const TREND_LINE_COLORS = [
   '#2563eb', // blue-600
   '#ea580c', // orange-600
@@ -58,37 +66,124 @@ const AVG_COLOR = '#F59E0B' // solar-gold-500
 export function StringTrendChart({ data }: StringTrendChartProps) {
   const [focus, setFocus] = useState<number | null>(null)
 
-  const { stringNumbers, chartData } = useMemo(() => {
-    if (!data || data.length === 0) return { stringNumbers: [] as number[], chartData: [] as any[] }
-    const nums = [...new Set(data.flatMap((d) => d.strings.map((s) => s.string_number)))].sort(
-      (a, b) => a - b,
-    )
-    const rows = data.map((point) => {
+  const {
+    stringNumbers,
+    activeNumbers,
+    silentNumbers,
+    uptimeByString,
+    chartData,
+    dayBreakIdx,
+    secondDayLabel,
+  } = useMemo(() => {
+    const empty = {
+      stringNumbers: [] as number[],
+      activeNumbers: [] as number[],
+      silentNumbers: [] as number[],
+      uptimeByString: {} as Record<number, number>,
+      chartData: [] as any[],
+      dayBreakIdx: -1,
+      secondDayLabel: '',
+    }
+    if (!data || data.length === 0) return empty
+
+    // All distinct string numbers that appear in the window (sorted)
+    const nums = [
+      ...new Set(data.flatMap((d) => d.strings.map((s) => s.string_number))),
+    ].sort((a, b) => a - b)
+
+    // Max current per string in this window — drives "silent" filtering
+    const maxByString: Record<number, number> = {}
+    const activeCountByString: Record<number, number> = {}
+    const presenceCountByString: Record<number, number> = {}
+    for (const p of data) {
+      for (const s of p.strings) {
+        presenceCountByString[s.string_number] = (presenceCountByString[s.string_number] || 0) + 1
+        if (s.current > maxByString[s.string_number] || 0) {
+          maxByString[s.string_number] = s.current
+        }
+        if (s.current > ACTIVE_CURRENT_THRESHOLD) {
+          activeCountByString[s.string_number] = (activeCountByString[s.string_number] || 0) + 1
+        }
+      }
+    }
+
+    // Active (plot) vs silent (chip only, not on chart)
+    const activeNums = nums.filter((n) => (maxByString[n] || 0) > ACTIVE_CURRENT_THRESHOLD)
+    const silentNums = nums.filter((n) => (maxByString[n] || 0) <= ACTIVE_CURRENT_THRESHOLD)
+
+    // Uptime % per string = non-zero-current points ÷ total points in window
+    const totalPoints = data.length
+    const uptime: Record<number, number> = {}
+    for (const n of nums) {
+      const produced = activeCountByString[n] || 0
+      uptime[n] = totalPoints > 0 ? Math.round((produced / totalPoints) * 100) : 0
+    }
+
+    // Build chart rows. For each point, ensure EVERY active string has an
+    // explicit value (number or null). Recharts treats null as a gap.
+    const rows = data.map((point, idx) => {
       const entry: Record<string, any> = {
         time: format(new Date(point.timestamp), 'HH:mm'),
+        // remember the date boundary (first row of a new day)
+        _dateKey: format(new Date(point.timestamp), 'yyyy-MM-dd'),
+        _dateLabel: format(new Date(point.timestamp), 'MMM d'),
+        _idx: idx,
       }
+      // Map reported strings by number for O(1) lookup
+      const reported: Record<number, number> = {}
+      for (const s of point.strings) reported[s.string_number] = s.current
+      // Fill every active string — missing → explicit null
       let sum = 0
       let n = 0
-      for (const s of point.strings) {
-        entry[`PV${s.string_number}`] = s.current
-        if (s.current > 0) {
-          sum += s.current
-          n += 1
+      for (const num of activeNums) {
+        const v = reported[num]
+        if (v === undefined || v === null) {
+          entry[`PV${num}`] = null
+        } else {
+          entry[`PV${num}`] = v
+          if (v > ACTIVE_CURRENT_THRESHOLD) {
+            sum += v
+            n += 1
+          }
         }
       }
       entry.__avg = n > 0 ? sum / n : null
       return entry
     })
-    return { stringNumbers: nums, chartData: rows }
+
+    // Find first row whose date differs from row 0's date → day boundary
+    let dayBreak = -1
+    let day2Label = ''
+    if (rows.length > 1) {
+      const firstDay = rows[0]._dateKey
+      for (let i = 1; i < rows.length; i++) {
+        if (rows[i]._dateKey !== firstDay) {
+          dayBreak = i
+          day2Label = rows[i]._dateLabel
+          break
+        }
+      }
+    }
+
+    return {
+      stringNumbers: nums,
+      activeNumbers: activeNums,
+      silentNumbers: silentNums,
+      uptimeByString: uptime,
+      chartData: rows,
+      dayBreakIdx: dayBreak,
+      secondDayLabel: day2Label,
+    }
   }, [data])
 
   if (!data || data.length === 0) return null
 
   const handleToggle = (n: number) => setFocus((f) => (f === n ? null : n))
+  const dayBreakTime = dayBreakIdx >= 0 ? chartData[dayBreakIdx]?.time : null
 
   return (
     <div className="w-full">
-      {/* Legend row — chips scroll horizontally if many strings */}
+      {/* Legend row — Avg chip + active string chips + silent chips */}
       <div className="flex items-center gap-2 mb-2">
         <button
           onClick={() => setFocus(null)}
@@ -104,13 +199,16 @@ export function StringTrendChart({ data }: StringTrendChartProps) {
         </button>
         <div className="flex-1 overflow-x-auto">
           <div className="flex gap-1">
-            {stringNumbers.map((num, idx) => {
+            {activeNumbers.map((num) => {
+              const idx = stringNumbers.indexOf(num)
               const color = TREND_LINE_COLORS[idx % TREND_LINE_COLORS.length]
               const active = focus === num
+              const uptime = uptimeByString[num] ?? 0
               return (
                 <button
                   key={num}
                   onClick={() => handleToggle(num)}
+                  title={`PV${num} · uptime ${uptime}% of window`}
                   className={cn(
                     'shrink-0 inline-flex items-center gap-1 text-[10px] font-mono font-bold px-1.5 py-1 rounded-sm border transition-colors',
                     active
@@ -120,9 +218,26 @@ export function StringTrendChart({ data }: StringTrendChartProps) {
                 >
                   <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
                   PV{num}
+                  <span
+                    className={cn(
+                      'text-[9px] font-semibold',
+                      active ? 'text-slate-300' : uptime >= 80 ? 'text-emerald-600' : uptime >= 40 ? 'text-amber-600' : 'text-red-600',
+                    )}
+                  >
+                    {uptime}%
+                  </span>
                 </button>
               )
             })}
+            {silentNumbers.length > 0 && (
+              <span
+                title={`Strings below the ${ACTIVE_CURRENT_THRESHOLD} A active threshold in this window — not plotted`}
+                className="shrink-0 inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-1.5 py-1 rounded-sm bg-slate-50 text-slate-500 border border-slate-200"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                {silentNumbers.length} silent
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -132,6 +247,24 @@ export function StringTrendChart({ data }: StringTrendChartProps) {
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData} margin={{ top: 6, right: 12, left: 0, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+
+            {/* Day-boundary marker — subtle vertical rule + label */}
+            {dayBreakTime && (
+              <ReferenceLine
+                x={dayBreakTime}
+                stroke="#CBD5E1"
+                strokeDasharray="4 4"
+                label={{
+                  value: secondDayLabel,
+                  position: 'top',
+                  fill: '#64748B',
+                  fontSize: 10,
+                  fontWeight: 600,
+                }}
+                ifOverflow="visible"
+              />
+            )}
+
             <XAxis
               dataKey="time"
               tick={{ fontSize: 10, fill: '#94A3B8', fontFamily: 'var(--font-mono, monospace)' }}
@@ -160,13 +293,15 @@ export function StringTrendChart({ data }: StringTrendChartProps) {
                 item.dataKey === '__avg' ? -1 : -(item.value ?? 0)
               }
               formatter={(value: any, name: any) => {
+                if (value === null || value === undefined) return ['—', String(name)]
                 if (name === '__avg') return [`${Number(value).toFixed(2)} A`, 'Avg']
                 return [`${Number(value).toFixed(2)} A`, String(name)]
               }}
             />
 
-            {/* Individual string lines — dim unless one is focused */}
-            {stringNumbers.map((num, idx) => {
+            {/* Individual active string lines — null values render as gaps */}
+            {activeNumbers.map((num) => {
+              const idx = stringNumbers.indexOf(num)
               const color = TREND_LINE_COLORS[idx % TREND_LINE_COLORS.length]
               const isFocus = focus === num
               const isDimmed = focus !== null && !isFocus
@@ -180,6 +315,7 @@ export function StringTrendChart({ data }: StringTrendChartProps) {
                   strokeOpacity={isDimmed ? 0.1 : isFocus ? 1 : 0.35}
                   dot={false}
                   activeDot={isFocus ? { r: 4 } : false}
+                  connectNulls={false}
                   isAnimationActive={false}
                 />
               )
@@ -195,6 +331,7 @@ export function StringTrendChart({ data }: StringTrendChartProps) {
               strokeOpacity={focus === null ? 1 : 0.5}
               dot={false}
               activeDot={{ r: 5 }}
+              connectNulls={false}
               isAnimationActive={false}
             />
           </LineChart>
@@ -204,8 +341,8 @@ export function StringTrendChart({ data }: StringTrendChartProps) {
       {/* Footer hint */}
       <p className="text-[10px] text-slate-400 mt-2">
         {focus === null
-          ? 'Click a string chip above to isolate its line. Click Avg to reset.'
-          : `Highlighting PV${focus} — click again to reset, or pick a different string.`}
+          ? `Click a PV chip to isolate its line. Chip uptime shows % of ${chartData.length} points with current above ${ACTIVE_CURRENT_THRESHOLD} A (IEC 61724-1 data availability).`
+          : `Highlighting PV${focus} — click again to reset.`}
       </p>
     </div>
   )

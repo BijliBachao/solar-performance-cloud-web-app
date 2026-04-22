@@ -37,7 +37,7 @@ const BAR_COLOR_BY_STATUS: Record<StringStatus, string> = {
   WARNING: '#F59E0B', // amber-500
   CRITICAL: '#EF4444', // red-500
   OPEN_CIRCUIT: '#8B5CF6', // violet-500
-  DISCONNECTED: '#94A3B8', // slate-400
+  OFFLINE: '#94A3B8', // slate-400
 }
 
 const STATUS_LABELS: Record<StringStatus, string> = {
@@ -45,7 +45,7 @@ const STATUS_LABELS: Record<StringStatus, string> = {
   WARNING: 'Warning',
   CRITICAL: 'Critical',
   OPEN_CIRCUIT: 'Open Circuit',
-  DISCONNECTED: 'Disconnected',
+  OFFLINE: 'Offline',
 }
 
 export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationChartProps) {
@@ -82,7 +82,7 @@ export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationC
       {/* ── Top row — inline legend + Avg readout ───────────────── */}
       <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-600">
-          {(['NORMAL', 'WARNING', 'CRITICAL', 'OPEN_CIRCUIT', 'DISCONNECTED'] as StringStatus[]).map((k) => (
+          {(['NORMAL', 'WARNING', 'CRITICAL', 'OPEN_CIRCUIT', 'OFFLINE'] as StringStatus[]).map((k) => (
             <span key={k} className="flex items-center gap-1">
               <span
                 className="w-1.5 h-1.5 rounded-full"
