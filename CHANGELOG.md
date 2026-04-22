@@ -1,5 +1,42 @@
 # SPC Infrastructure & Feature Change Log
 
+## 2026-04-22 — Security patch
+
+### `[SEC-1]` · Clerk CRITICAL bypass CVE patched (GHSA-vqx2-fgx2-5wq9)
+
+- **What:** `@clerk/nextjs` upgraded `6.35.0 → ^6.39.2` (within major version — no breaking changes). Also bumps `@clerk/shared` transitively past the fix.
+- **Why:** `npm audit` flagged `GHSA-vqx2-fgx2-5wq9` — "Middleware-based route protection bypass", affecting `>=6.0.0-snapshot.vb87a27f <6.39.2`. We were on 6.35.0 → vulnerable. Post-upgrade verified **0 critical, 0 moderate, 7 high** (all transitive to Next 14.x, below).
+- **When:** 2026-04-22
+- **Verification:** `npm audit --omit=dev` shows no Clerk vulnerability. TS + validator 20/20 still clean. Production build compiled without warnings related to Clerk.
+
+### `[SEC-2]` · Known-risk register — Next.js 14.x high-severity CVEs deferred
+
+Remaining 7 `high` severity advisories are all against `next@14.2.35`:
+
+| GHSA | Title | Fixed in |
+|---|---|---|
+| [GHSA-9g9p-9gw9-jx7f](https://github.com/advisories/GHSA-9g9p-9gw9-jx7f) | DoS via Image Optimizer `remotePatterns` | 15.5.10 |
+| [GHSA-h25m-26qc-wcjf](https://github.com/advisories/GHSA-h25m-26qc-wcjf) | HTTP request deserialization → DoS via insecure RSC | 15.0.8 |
+| [GHSA-ggv3-7p47-pfv8](https://github.com/advisories/GHSA-ggv3-7p47-pfv8) | HTTP request smuggling in rewrites | 15.5.13 |
+| [GHSA-3x4c-7xq6-9pq8](https://github.com/advisories/GHSA-3x4c-7xq6-9pq8) | `next/image` unbounded disk cache | 15.5.14 |
+| [GHSA-q4gf-8mx6-v5v3](https://github.com/advisories/GHSA-q4gf-8mx6-v5v3) | DoS with Server Components | 15.5.15 |
+
+**Why deferred:** All fixes require jumping to **Next.js 15.x** — a major-version upgrade. Risky pre-handover.
+
+**Why low operational risk today:**
+- All CVEs are DoS / resource-exhaustion (not auth bypass, not data leakage).
+- We do NOT use `images.remotePatterns` (we use `domains` only).
+- Nginx front-of-house has rate limiting (`limit_req zone=api burst=20 nodelay`) which blunts most DoS vectors.
+- Nginx rewrites handle path rewriting (not Next rewrites) — the smuggling CVE's attack surface is reduced.
+- `fail2ban` active with `nginx-4xx` jail — auto-ban on abuse patterns.
+
+**Planned action:** Next 15.x upgrade within 30 days post-handover. Requires testing App Router behaviour (server-component boundaries changed), `output: 'standalone'` mode check, and updating `@sentry/nextjs` to a version compatible with 15.x.
+
+**Tracking:** this entry. Re-evaluate if new critical appears or a Next 14.x patch becomes available.
+
+---
+
+
 > **Purpose:** single append-only record of every infrastructure, security,
 > observability, or platform change — what, why, when, who, how verified.
 >
