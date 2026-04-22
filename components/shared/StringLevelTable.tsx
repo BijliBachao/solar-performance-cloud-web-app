@@ -77,9 +77,6 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
             <th className="sticky left-[204px] z-20 bg-gray-50 px-2 py-2 text-left text-xs font-semibold text-gray-600 border-r border-gray-200 min-w-[60px]">
               String
             </th>
-            <th className="sticky left-[264px] z-20 bg-gray-50 px-2 py-2 text-right text-xs font-semibold text-gray-600 border-r border-gray-200 min-w-[80px]">
-              kW/String
-            </th>
             <th className="px-2 py-2 text-center text-xs font-semibold text-blue-700 border-r border-gray-200 min-w-[52px] bg-blue-50/50">
               Perf
             </th>
@@ -125,9 +122,6 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
                 <td className="sticky left-[204px] z-10 bg-white group-hover:bg-blue-50/50 px-2 py-1.5 text-xs font-medium text-gray-900 border-r border-gray-200 transition-colors">
                   PV{row.string_number}
                 </td>
-                <td className="sticky left-[264px] z-10 bg-white group-hover:bg-blue-50/50 px-2 py-1.5 text-xs text-gray-600 text-right border-r border-gray-200 transition-colors">
-                  {row.kw_per_string ? `${row.kw_per_string} kW` : '—'}
-                </td>
                 <td className={cn('px-2 py-1.5 text-center text-xs font-mono border-r border-gray-200 bg-blue-50/30', metricCell(row.perf_avg, 'perf'))}>
                   {row.perf_avg !== null ? `${row.perf_avg}%` : '—'}
                 </td>
@@ -152,7 +146,7 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
             <>
               <tr>
                 <td
-                  colSpan={7 + dates.length}
+                  colSpan={6 + dates.length}
                   className="bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 border-t-2 border-amber-300"
                 >
                   Stopped Producing ({inactiveRows.length}) — these strings had data before but stopped. Inspect for faults.
@@ -171,9 +165,6 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
                   </td>
                   <td className="sticky left-[204px] z-10 bg-amber-50/50 px-2 py-1 text-xs font-medium text-amber-700 border-r border-gray-200">
                     PV{row.string_number}
-                  </td>
-                  <td className="sticky left-[264px] z-10 bg-amber-50/50 px-2 py-1 text-xs text-amber-400 text-right border-r border-gray-200">
-                    —
                   </td>
                   <td className="px-2 py-1 text-center text-xs text-amber-400 border-r border-gray-200 bg-amber-50/30">—</td>
                   <td className="px-2 py-1 text-center text-xs text-amber-400 border-r border-gray-200 bg-amber-50/30">—</td>
@@ -196,7 +187,7 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
             <>
               <tr>
                 <td
-                  colSpan={7 + dates.length}
+                  colSpan={6 + dates.length}
                   className="bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-500 border-t-2 border-gray-300"
                 >
                   Unused / Spare Ports ({unusedRows.length})
@@ -215,9 +206,6 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
                   </td>
                   <td className="sticky left-[204px] z-10 bg-gray-50 px-2 py-1 text-xs text-gray-400 border-r border-gray-200">
                     PV{row.string_number}
-                  </td>
-                  <td className="sticky left-[264px] z-10 bg-gray-50 px-2 py-1 text-xs text-gray-300 text-right border-r border-gray-200">
-                    —
                   </td>
                   <td className="px-2 py-1 text-center text-xs text-gray-300 border-r border-gray-200 bg-gray-50/50">—</td>
                   <td className="px-2 py-1 text-center text-xs text-gray-300 border-r border-gray-200 bg-gray-50/50">—</td>

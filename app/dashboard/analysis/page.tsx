@@ -13,6 +13,7 @@ type Tab = 'string' | 'inverter'
 interface PlantOption {
   id: string
   plant_name: string
+  capacity_kw: number | null
 }
 
 interface DeviceOption {
@@ -56,6 +57,7 @@ export default function DashboardAnalysisPage() {
         const pl = (data.plants || []).map((p: any) => ({
           id: p.id,
           plant_name: p.plant_name,
+          capacity_kw: p.capacity_kw != null ? Number(p.capacity_kw) : null,
         }))
         setPlants(pl)
       })
@@ -306,6 +308,77 @@ export default function DashboardAnalysisPage() {
           {validationError}
         </div>
       )}
+
+      {/* Nominal DC capacity card — shown when a specific plant is selected.
+          IEC 62446-1 documents the plant's nominal DC array power; IEC 61724-1
+          uses it as the denominator for Performance Ratio. */}
+      {plantId && !loading && tab === 'string' && (() => {
+        const selected = plants.find(p => p.id === plantId)
+        if (!selected) return null
+        const activeStrings = summary?.active_strings ?? null
+        const nominalPerString =
+          selected.capacity_kw && activeStrings && activeStrings > 0
+            ? Math.round((selected.capacity_kw / activeStrings) * 100) / 100
+            : null
+        return (
+          <div className="bg-white border border-slate-200 rounded-md shadow-card overflow-hidden">
+            <div className="h-[2px] bg-gradient-to-r from-solar-gold-400 via-solar-gold-500 to-solar-gold-600" />
+            <div className="px-4 py-3 flex flex-wrap items-end gap-x-6 gap-y-2">
+              <div>
+                <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">
+                  Plant
+                </div>
+                <div className="text-sm font-bold text-slate-900">
+                  {selected.plant_name}
+                </div>
+              </div>
+              <div>
+                <div
+                  className="text-[9px] font-bold uppercase tracking-widest text-slate-400"
+                  title="IEC 62446-1: Nominal DC array power (plant nameplate)"
+                >
+                  Nominal DC Capacity
+                </div>
+                <div className="text-lg font-mono font-bold text-slate-900 leading-none">
+                  {selected.capacity_kw != null ? selected.capacity_kw.toFixed(1) : '—'}
+                  <span className="text-[10px] font-mono font-semibold text-slate-500 ml-1">
+                    kWp
+                  </span>
+                </div>
+              </div>
+              {activeStrings !== null && (
+                <div>
+                  <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">
+                    Active Strings
+                  </div>
+                  <div className="text-lg font-mono font-bold text-slate-900 leading-none">
+                    {activeStrings}
+                  </div>
+                </div>
+              )}
+              {nominalPerString !== null && (
+                <div>
+                  <div
+                    className="text-[9px] font-bold uppercase tracking-widest text-slate-400"
+                    title="Plant nominal ÷ active strings. Derived plant-average, not a per-string spec."
+                  >
+                    Nominal per String (avg)
+                  </div>
+                  <div className="text-lg font-mono font-bold text-slate-900 leading-none">
+                    {nominalPerString.toFixed(2)}
+                    <span className="text-[10px] font-mono font-semibold text-slate-500 ml-1">
+                      kWp
+                    </span>
+                  </div>
+                </div>
+              )}
+              <div className="ml-auto text-[10px] text-slate-400 font-mono">
+                Reference: IEC 62446-1 § nominal DC array power
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Summary bar (string level only) */}
       {summary && !loading && (

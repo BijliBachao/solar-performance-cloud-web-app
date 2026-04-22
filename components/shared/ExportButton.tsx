@@ -29,8 +29,8 @@ export function ExportButton({ dates, rows, type }: ExportButtonProps) {
       const inactiveRows = rows.filter((r: any) => r.type === 'inactive')
       const unusedRows = rows.filter((r: any) => r.type === 'unused')
 
-      // Header
-      lines.push(['Plant', 'Inverter', 'MPPT', 'String', 'Type', 'kW/String', 'Perf(%)', 'Avail(%)', 'kWh', ...dates].join(','))
+      // Header — per IEC 61724-1 columns: Plant · Inverter · String identity · Perf · Avail · Energy
+      lines.push(['Plant', 'Inverter', 'MPPT', 'String', 'Type', 'Perf(%)', 'Avail(%)', 'kWh', ...dates].join(','))
       // Active rows
       for (const row of activeRows) {
         const scores = dates.map(d => {
@@ -43,7 +43,6 @@ export function ExportButton({ dates, rows, type }: ExportButtonProps) {
           `MPPT${row.mppt}`,
           `PV${row.string_number}`,
           'Active',
-          row.kw_per_string != null ? `${row.kw_per_string} kW` : '',
           row.perf_avg != null ? `${row.perf_avg}%` : '',
           row.avail_avg != null ? `${row.avail_avg}%` : '',
           row.energy_kwh != null ? `${row.energy_kwh}` : '',
@@ -63,7 +62,6 @@ export function ExportButton({ dates, rows, type }: ExportButtonProps) {
             'Inactive',
             '',
             '',
-            '',
           ].join(','))
         }
       }
@@ -78,7 +76,6 @@ export function ExportButton({ dates, rows, type }: ExportButtonProps) {
             `MPPT${row.mppt}`,
             `PV${row.string_number}`,
             'Unused',
-            '',
             '',
             '',
           ].join(','))
