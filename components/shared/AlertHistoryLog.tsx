@@ -16,12 +16,11 @@ import {
   XCircle,
   Info,
   CheckCircle,
-  Clock,
   Calendar,
-  Filter,
   Loader2,
   RefreshCw,
   ChevronDown,
+  Check,
 } from 'lucide-react'
 import {
   STATUS_STYLES,
@@ -36,10 +35,13 @@ interface AlertHistoryLogProps {
   className?: string
 }
 
+type SeverityFilter = 'ALL' | 'CRITICAL' | 'WARNING' | 'INFO'
+type StatusFilter = 'ALL' | 'ACTIVE' | 'RESOLVED'
+
 interface AlertFilters {
-  severity: 'ALL' | 'CRITICAL' | 'WARNING' | 'INFO'
-  status: 'ALL' | 'ACTIVE' | 'RESOLVED'
-  stringNumber: string // 'ALL' or number as string
+  severity: SeverityFilter
+  status: StatusFilter
+  stringNumber: string
 }
 
 interface PaginationInfo {
@@ -49,16 +51,15 @@ interface PaginationInfo {
   totalPages: number
 }
 
-const severityIcons: Record<string, any> = {
-  CRITICAL: XCircle,
-  WARNING: AlertTriangle,
-  INFO: Info,
+const ICONS_BY_KEY: Record<StatusKey, any> = {
+  critical: XCircle,
+  warning: AlertTriangle,
+  info: Info,
+  healthy: CheckCircle,
+  offline: Info,
+  'open-circuit': XCircle,
 }
 
-/**
- * Strong left-border accent per severity. Maps to the dot/solid-500 variant
- * of the status, matching AlertPanel + FaultDiagnosisPanel.
- */
 const LEFT_BORDER_BY_KEY: Record<StatusKey, string> = {
   critical: 'border-l-red-600',
   warning: 'border-l-amber-600',
@@ -99,22 +100,12 @@ export function AlertHistoryLog({
         limit: '50',
       })
 
-      if (filters.severity !== 'ALL') {
-        params.set('severity', filters.severity)
-      }
-      if (filters.status === 'ACTIVE') {
-        params.set('resolved', 'false')
-      } else if (filters.status === 'RESOLVED') {
-        params.set('resolved', 'true')
-      } else {
-        params.set('resolved', 'all')
-      }
-      if (filters.stringNumber !== 'ALL') {
-        params.set('string_number', filters.stringNumber)
-      }
-      if (deviceId) {
-        params.set('device_id', deviceId)
-      }
+      if (filters.severity !== 'ALL') params.set('severity', filters.severity)
+      if (filters.status === 'ACTIVE') params.set('resolved', 'false')
+      else if (filters.status === 'RESOLVED') params.set('resolved', 'true')
+      else params.set('resolved', 'all')
+      if (filters.stringNumber !== 'ALL') params.set('string_number', filters.stringNumber)
+      if (deviceId) params.set('device_id', deviceId)
 
       const res = await fetch(`/api/alerts?${params}`, { credentials: 'include' })
       if (!res.ok) {
@@ -123,7 +114,6 @@ export function AlertHistoryLog({
       }
 
       const data = await res.json()
-
       if (append) {
         setAlerts(prev => [...prev, ...data.alerts])
       } else {
@@ -178,23 +168,23 @@ export function AlertHistoryLog({
   const resolvedCount = alerts.filter(a => a.resolved_at).length
   const groupedAlerts = groupAlertsByDate(alerts)
 
-  // Loading state
+  // ── Loading state ─────────────────────────────────────────
   if (loading && alerts.length === 0) {
     return (
       <div className={cn('flex items-center justify-center py-12', className)}>
         <div className="text-center">
           <div className="w-5 h-5 border-2 border-solar-gold border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs font-semibold text-slate-400 mt-2">Loading alert history...</p>
+          <p className="text-xs font-semibold text-slate-400 mt-2">Loading alert history…</p>
         </div>
       </div>
     )
   }
 
-  // Error state
+  // ── Error state ───────────────────────────────────────────
   if (error) {
     const e = STATUS_STYLES.critical
     return (
-      <div className={cn('p-4 rounded-sm border', e.bg, e.border, className)}>
+      <div className={cn('p-4 rounded-md border', e.bg, e.border, className)}>
         <p className={cn('text-sm font-semibold mb-2', e.fg)}>Failed to load alert history</p>
         <p className={cn('text-xs mb-3', e.fg)}>{error}</p>
         <Button variant="outline" size="sm" onClick={() => fetchAlerts(1)}>
@@ -204,53 +194,70 @@ export function AlertHistoryLog({
     )
   }
 
+  const total = pagination?.total ?? alerts.length
+
   return (
     <div className={cn('space-y-4', className)}>
-      {/* Filter Bar */}
+      {/* ── Summary pills — clickable to filter by status ──────── */}
+      <div className="grid grid-cols-3 gap-2">
+        <SummaryPill
+          label="Total"
+          count={total}
+          dotColor="bg-slate-400"
+          active={filters.status === 'ALL'}
+          onClick={() => setFilters(f => ({ ...f, status: 'ALL' }))}
+        />
+        <SummaryPill
+          label="Active"
+          count={activeCount}
+          dotColor={STATUS_STYLES.critical.dot}
+          active={filters.status === 'ACTIVE'}
+          onClick={() => setFilters(f => ({ ...f, status: 'ACTIVE' }))}
+        />
+        <SummaryPill
+          label="Resolved"
+          count={resolvedCount}
+          dotColor={STATUS_STYLES.healthy.dot}
+          active={filters.status === 'RESOLVED'}
+          onClick={() => setFilters(f => ({ ...f, status: 'RESOLVED' }))}
+        />
+      </div>
+
+      {/* ── Filter row — severity pills + PV select + refresh ─── */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 text-xs text-slate-500">
-          <Filter className="w-3.5 h-3.5" strokeWidth={2} />
-          <span>Filters:</span>
-        </div>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mr-1">
+          Severity
+        </span>
+        <SeverityPill
+          label="All"
+          active={filters.severity === 'ALL'}
+          onClick={() => setFilters(f => ({ ...f, severity: 'ALL' }))}
+        />
+        <SeverityPill
+          label="Critical"
+          dotColor={STATUS_STYLES.critical.dot}
+          active={filters.severity === 'CRITICAL'}
+          onClick={() => setFilters(f => ({ ...f, severity: 'CRITICAL' }))}
+        />
+        <SeverityPill
+          label="Warning"
+          dotColor={STATUS_STYLES.warning.dot}
+          active={filters.severity === 'WARNING'}
+          onClick={() => setFilters(f => ({ ...f, severity: 'WARNING' }))}
+        />
+        <SeverityPill
+          label="Info"
+          dotColor={STATUS_STYLES.info.dot}
+          active={filters.severity === 'INFO'}
+          onClick={() => setFilters(f => ({ ...f, severity: 'INFO' }))}
+        />
 
-        {/* Severity Filter */}
-        <Select
-          value={filters.severity}
-          onValueChange={(v) => setFilters(prev => ({ ...prev, severity: v as any }))}
-        >
-          <SelectTrigger className="w-[130px] h-8 text-xs">
-            <SelectValue placeholder="Severity" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">All Severities</SelectItem>
-            <SelectItem value="CRITICAL">Critical</SelectItem>
-            <SelectItem value="WARNING">Warning</SelectItem>
-            <SelectItem value="INFO">Info</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* Status Filter */}
-        <Select
-          value={filters.status}
-          onValueChange={(v) => setFilters(prev => ({ ...prev, status: v as any }))}
-        >
-          <SelectTrigger className="w-[120px] h-8 text-xs">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">All Status</SelectItem>
-            <SelectItem value="ACTIVE">Active</SelectItem>
-            <SelectItem value="RESOLVED">Resolved</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* String Filter */}
         {availableStrings.length > 1 && (
           <Select
             value={filters.stringNumber}
             onValueChange={(v) => setFilters(prev => ({ ...prev, stringNumber: v }))}
           >
-            <SelectTrigger className="w-[110px] h-8 text-xs">
+            <SelectTrigger className="w-[110px] h-7 text-[11px] ml-2">
               <SelectValue placeholder="String" />
             </SelectTrigger>
             <SelectContent>
@@ -262,201 +269,186 @@ export function AlertHistoryLog({
           </Select>
         )}
 
-        {/* Refresh Button */}
         <Button
           variant="ghost"
           size="sm"
-          className="h-8 px-2"
+          className="h-7 px-2 ml-auto"
           onClick={() => fetchAlerts(1)}
           disabled={loading}
+          aria-label="Refresh"
         >
           <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} strokeWidth={2} />
         </Button>
       </div>
 
-      {/* Summary Stats */}
-      {pagination && (
-        <div className="flex items-center gap-4 text-xs text-slate-500">
-          <span>
-            <span className="font-mono font-semibold text-slate-700">{pagination.total}</span> total alerts
-          </span>
-          <span className="flex items-center gap-1">
-            <span className={cn('w-2 h-2 rounded-full', STATUS_STYLES.critical.dot)} />
-            <span className="font-mono font-semibold text-slate-700">{activeCount}</span>
-            <span>active</span>
-          </span>
-          <span className="flex items-center gap-1">
-            <span className={cn('w-2 h-2 rounded-full', STATUS_STYLES.healthy.dot)} />
-            <span className="font-mono font-semibold text-slate-700">{resolvedCount}</span>
-            <span>resolved</span>
-          </span>
-        </div>
-      )}
-
-      {/* Empty State */}
+      {/* ── Empty state ─────────────────────────────────────── */}
       {alerts.length === 0 && (
-        <div className="text-center py-12 text-slate-500">
-          <CheckCircle className={cn('w-8 h-8 mx-auto mb-2', STATUS_STYLES.healthy.fg)} strokeWidth={2} />
-          <p className="text-sm">No alerts found for the selected filters</p>
+        <div className="text-center py-10 bg-emerald-50/40 rounded-md border border-emerald-100">
+          <CheckCircle className="w-6 h-6 mx-auto mb-1.5 text-emerald-500" strokeWidth={2} />
+          <p className="text-sm font-bold text-emerald-700">No alerts found</p>
+          <p className="text-[11px] text-slate-500 mt-0.5">for the selected filters</p>
         </div>
       )}
 
-      {/* Grouped Alert List */}
-      <div className="space-y-6">
+      {/* ── Grouped list ────────────────────────────────────── */}
+      <div className="space-y-5">
         {Array.from(groupedAlerts.entries()).map(([dateKey, dayAlerts]) => (
           <div key={dateKey}>
-            {/* Date Header */}
-            <div className="flex items-center gap-2 mb-3">
-              <Calendar className="w-4 h-4 text-slate-400" strokeWidth={2} />
-              <h3 className="text-sm font-bold text-slate-700">{formatDateHeader(dateKey)}</h3>
-              <span className="text-xs text-slate-400 font-mono">({dayAlerts.length} alerts)</span>
+            <div className="flex items-center gap-2 mb-2">
+              <Calendar className="w-3.5 h-3.5 text-slate-400" strokeWidth={2} />
+              <h3 className="text-[12px] font-bold text-slate-700">
+                {formatDateHeader(dateKey)}
+              </h3>
+              <span className="text-[10px] text-slate-400 font-mono">
+                · {dayAlerts.length} alert{dayAlerts.length !== 1 ? 's' : ''}
+              </span>
             </div>
 
-            {/* Alerts for this date */}
-            <div className="space-y-2 pl-1">
+            <div className="space-y-1">
               {dayAlerts.map(alert => {
                 const key = statusKeyFromSeverity(alert.severity)
                 const style = STATUS_STYLES[key]
                 const leftBorder = LEFT_BORDER_BY_KEY[key]
-                const Icon = severityIcons[alert.severity] || Info
+                const Icon = ICONS_BY_KEY[key]
                 const isResolved = !!alert.resolved_at
                 const isResolving = resolvingId === alert.id
-                const resolvedStyle = STATUS_STYLES.healthy
 
                 return (
                   <div
                     key={alert.id}
                     className={cn(
-                      'rounded-sm border border-l-[3px] border-slate-200 p-3 transition-colors',
+                      'rounded-sm border border-l-[3px] px-3 py-2 transition-colors',
                       leftBorder,
-                      isResolved ? 'bg-slate-50' : style.bg,
+                      'border-slate-200',
+                      isResolved ? 'bg-slate-50/60' : 'bg-white hover:bg-slate-50',
                     )}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                        <Icon
-                          className={cn(
-                            'h-4 w-4 mt-0.5 shrink-0',
-                            isResolved ? 'text-slate-400' : style.fg,
-                          )}
-                          strokeWidth={2}
-                        />
-                        <div className="min-w-0 flex-1">
-                          {/* Top line: severity + string + device + gap */}
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span
-                              className={cn(
-                                'text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-sm',
-                                isResolved
-                                  ? 'bg-slate-200 text-slate-600'
-                                  : cn(style.bg, style.fg),
-                              )}
-                            >
-                              {alert.severity}
-                            </span>
-                            <span
-                              className={cn(
-                                'text-sm font-bold',
-                                isResolved ? 'text-slate-500' : 'text-slate-900',
-                              )}
-                            >
-                              PV{alert.string_number}
-                            </span>
-                            {alert.device_name && (
-                              <span className="text-xs text-slate-400">{alert.device_name}</span>
-                            )}
-                            {alert.gap_percent != null && (
-                              <span className="text-xs font-mono text-slate-500">
-                                {Number(alert.gap_percent).toFixed(1)}% below avg
-                              </span>
-                            )}
-                            {isResolved && (
-                              <span
-                                className={cn(
-                                  'text-[10px] font-bold uppercase tracking-wide px-1.5 py-0 rounded-sm border',
-                                  resolvedStyle.bg,
-                                  resolvedStyle.fg,
-                                  resolvedStyle.border,
-                                )}
-                              >
-                                Resolved
-                              </span>
-                            )}
-                            {!isResolved && (
-                              <span
-                                className={cn(
-                                  'text-[10px] font-bold uppercase tracking-wide px-1.5 py-0 rounded-sm',
-                                  STATUS_STYLES.critical.solid,
-                                )}
-                              >
-                                Active
-                              </span>
-                            )}
-                          </div>
+                    {/* Row 1 — identity + status + time */}
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Icon
+                        className={cn(
+                          'w-3.5 h-3.5 shrink-0',
+                          isResolved ? 'text-slate-400' : style.fg,
+                        )}
+                        strokeWidth={2}
+                      />
+                      <span
+                        className={cn(
+                          'text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-sm shrink-0',
+                          isResolved ? 'bg-slate-200 text-slate-600' : cn(style.bg, style.fg),
+                        )}
+                      >
+                        {alert.severity}
+                      </span>
+                      <span
+                        className={cn(
+                          'text-[12px] font-bold shrink-0',
+                          isResolved ? 'text-slate-500' : 'text-slate-900',
+                        )}
+                      >
+                        PV{alert.string_number}
+                      </span>
+                      {alert.device_name && (
+                        <span className="text-[10px] text-slate-400 truncate">
+                          {alert.device_name}
+                        </span>
+                      )}
+                      {alert.gap_percent != null && (
+                        <span className="text-[10px] font-mono text-slate-500 shrink-0">
+                          {Number(alert.gap_percent).toFixed(1)}% below avg
+                        </span>
+                      )}
+                      <span
+                        className={cn(
+                          'text-[9px] font-bold uppercase tracking-widest px-1.5 py-0 rounded-sm shrink-0 ml-1',
+                          isResolved
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-red-50 text-red-700 border border-red-200',
+                        )}
+                      >
+                        {isResolved ? 'Resolved' : 'Active'}
+                      </span>
 
-                          {/* Message */}
-                          <p
-                            className={cn(
-                              'text-xs mt-1',
-                              isResolved ? 'text-slate-400' : 'text-slate-600',
-                            )}
+                      <span className="ml-auto shrink-0 flex items-center gap-2">
+                        {showResolveButton && !isResolved && (
+                          <button
+                            onClick={() => handleResolve(alert.id)}
+                            disabled={isResolving}
+                            title="Resolve alert"
+                            className="shrink-0 flex items-center justify-center w-5 h-5 rounded-sm border border-solar-gold/40 text-solar-gold-700 hover:bg-solar-gold hover:text-white hover:border-solar-gold transition-colors disabled:opacity-50"
                           >
-                            {alert.message}
-                          </p>
-
-                          {/* Values if present */}
-                          {(alert.expected_value != null || alert.actual_value != null) && (
-                            <div className="flex gap-4 mt-1 text-[11px] text-slate-500 font-mono">
-                              {alert.expected_value != null && (
-                                <span>Expected: {Number(alert.expected_value).toFixed(2)}A</span>
-                              )}
-                              {alert.actual_value != null && (
-                                <span>Actual: {Number(alert.actual_value).toFixed(2)}A</span>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Timeline info */}
-                          <div className="flex items-center gap-4 mt-2 text-[11px] text-slate-500 border-t border-slate-100 pt-2">
-                            <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" strokeWidth={2} />
-                              Created: <span className="font-mono">{formatAlertTime(alert.created_at)}</span>
-                            </span>
-                            {isResolved ? (
-                              <>
-                                <span className={cn('flex items-center gap-1', STATUS_STYLES.healthy.fg)}>
-                                  <CheckCircle className="w-3 h-3" strokeWidth={2} />
-                                  Resolved: <span className="font-mono">{formatAlertTime(alert.resolved_at!)}</span>
-                                  {alert.resolved_by_name && ` by ${alert.resolved_by_name}`}
-                                </span>
-                                <span className="text-slate-400 font-mono">
-                                  Duration: {calculateDuration(new Date(alert.created_at), new Date(alert.resolved_at!))}
-                                </span>
-                              </>
+                            {isResolving ? (
+                              <Loader2 className="w-3 h-3 animate-spin" strokeWidth={2} />
                             ) : (
-                              <span className="flex items-center gap-1 font-semibold text-slate-700 font-mono">
-                                Active for {calculateDuration(new Date(alert.created_at))}
-                              </span>
+                              <Check className="w-3 h-3" strokeWidth={2.5} />
                             )}
-                          </div>
-                        </div>
-                      </div>
+                          </button>
+                        )}
+                      </span>
+                    </div>
 
-                      {/* Resolve Button */}
-                      {showResolveButton && !isResolved && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleResolve(alert.id)}
-                          disabled={isResolving}
-                          className="text-xs shrink-0 h-7"
-                        >
-                          {isResolving ? (
-                            <Loader2 className="w-3 h-3 animate-spin" strokeWidth={2} />
-                          ) : (
-                            'Resolve'
-                          )}
-                        </Button>
+                    {/* Row 2 — message */}
+                    {alert.message && (
+                      <p
+                        className={cn(
+                          'text-[11px] mt-1 ml-[1.5rem] truncate',
+                          isResolved ? 'text-slate-400' : 'text-slate-600',
+                        )}
+                      >
+                        {alert.message}
+                      </p>
+                    )}
+
+                    {/* Row 3 — expected vs actual (if present) */}
+                    {(alert.expected_value != null || alert.actual_value != null) && (
+                      <div className="flex gap-3 mt-1 ml-[1.5rem] text-[10px] font-mono text-slate-500">
+                        {alert.expected_value != null && (
+                          <span>
+                            <span className="text-slate-400">Expected</span>{' '}
+                            {Number(alert.expected_value).toFixed(2)} A
+                          </span>
+                        )}
+                        {alert.actual_value != null && (
+                          <span>
+                            <span className="text-slate-400">Actual</span>{' '}
+                            {Number(alert.actual_value).toFixed(2)} A
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Row 4 — timeline (created · resolved · duration) */}
+                    <div className="flex items-center gap-3 mt-1 ml-[1.5rem] text-[10px] text-slate-500 flex-wrap">
+                      <span>
+                        <span className="text-slate-400">Created</span>{' '}
+                        <span className="font-mono font-semibold text-slate-600">
+                          {formatAlertTime(alert.created_at)}
+                        </span>
+                      </span>
+                      {isResolved ? (
+                        <>
+                          <span className="text-slate-300">·</span>
+                          <span className="text-emerald-700">
+                            <span className="text-slate-400">Resolved</span>{' '}
+                            <span className="font-mono font-semibold">
+                              {formatAlertTime(alert.resolved_at!)}
+                            </span>
+                            {alert.resolved_by_name && (
+                              <span className="text-slate-500"> by {alert.resolved_by_name}</span>
+                            )}
+                          </span>
+                          <span className="text-slate-300">·</span>
+                          <span className="font-mono text-slate-500">
+                            Duration {calculateDuration(new Date(alert.created_at), new Date(alert.resolved_at!))}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-slate-300">·</span>
+                          <span className="font-mono font-semibold text-slate-700">
+                            Active {calculateDuration(new Date(alert.created_at))}
+                          </span>
+                        </>
                       )}
                     </div>
                   </div>
@@ -467,9 +459,9 @@ export function AlertHistoryLog({
         ))}
       </div>
 
-      {/* Load More */}
+      {/* ── Load more ──────────────────────────────────────── */}
       {pagination && pagination.page < pagination.totalPages && (
-        <div className="text-center pt-4">
+        <div className="text-center pt-3">
           <Button
             variant="outline"
             size="sm"
@@ -482,17 +474,81 @@ export function AlertHistoryLog({
             ) : (
               <ChevronDown className="w-3 h-3 mr-1" strokeWidth={2} />
             )}
-            Load More ({pagination.total - alerts.length} remaining)
+            Load more ({pagination.total - alerts.length} remaining)
           </Button>
         </div>
       )}
 
-      {/* Page indicator */}
       {pagination && pagination.totalPages > 1 && (
-        <div className="text-center text-xs text-slate-400 font-mono">
-          Showing {alerts.length} of {pagination.total} alerts
+        <div className="text-center text-[10px] text-slate-400 font-mono">
+          Showing {alerts.length} of {pagination.total}
         </div>
       )}
     </div>
+  )
+}
+
+// ── Small stateless helpers ──────────────────────────────────
+
+function SummaryPill({
+  label,
+  count,
+  dotColor,
+  active,
+  onClick,
+}: {
+  label: string
+  count: number
+  dotColor: string
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'flex items-center justify-between gap-3 px-3 py-2.5 rounded-md border transition-all text-left',
+        active
+          ? 'bg-white border-solar-gold/40 shadow-card'
+          : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50',
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <span className={cn('w-1.5 h-1.5 rounded-full', dotColor)} />
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+          {label}
+        </span>
+      </div>
+      <span className="text-lg font-mono font-bold text-slate-900 leading-none">
+        {count}
+      </span>
+    </button>
+  )
+}
+
+function SeverityPill({
+  label,
+  dotColor,
+  active,
+  onClick,
+}: {
+  label: string
+  dotColor?: string
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-sm border transition-colors',
+        active
+          ? 'bg-solar-gold/10 text-solar-gold-700 border-solar-gold/40'
+          : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:text-slate-700',
+      )}
+    >
+      {dotColor && <span className={cn('w-1.5 h-1.5 rounded-full', dotColor)} />}
+      {label}
+    </button>
   )
 }
