@@ -32,7 +32,7 @@ Sr    Description
 |---|---|---|---|---|---|
 | 1 | Remove `kW/String` column | 🟢 Trivial (~1 h) | 🟢 Low | ✅ Column already removed from the rendered table on both dashboard + admin `/analysis` pages. Dead code (unused field) remains — queued as tech-debt cleanup. | 🟢 **DONE** (column) / 🟡 TECH DEBT (field) |
 | 2 | Pull vendor-native inverter faults from APIs and display | 🟡 Medium (~1–2 days) | 🟡 Medium | Not implemented — we only compute our own 7 fault classes | 🔴 TODO |
-| 3 | Remove the UI label "Open Circuit" (keep status internally) | 🟢 Trivial (~2 h) | 🟢 Low | Label appears in 6+ files | 🔴 TODO |
+| 3 | Remove the UI label "Open Circuit" (keep status internally) · relabelled to "0 A Fault" · colour changed violet → crimson (rose family) · enriched descriptions for all 5 statuses · collapsible Status Guide on plant detail page | 🟢 Actual: ~40 min | 🟢 Low | ✅ Live (commit `999863b`) | 🟢 **DONE** |
 | 4 | Remove donut/pie chart (healthy / abnormal / critical) | 🟢 Trivial | 🟢 Low | **NOT FOUND — we may have never had one.** Needs client confirmation. | 🟡 BLOCKED — ask client |
 | 5 | Add `used` / `unused` / `undershade` tags at Super Admin level (keep both levels for 2 weeks) | 🟡 Medium (~1–2 days) | 🟡 Medium | Not implemented — no tagging schema today | 🔴 TODO |
 | 6 | Super Admin can merge multiple plants (separate-logins scenario) into one organization-visible site | 🔴 High (~3–5 days) | 🔴 High | Not implemented — data model has no Site layer | 🔴 TODO |
@@ -769,6 +769,7 @@ As decisions get made, record them here with date and reasoning.
 |---|---|---|---|
 | 2026-04-23 | **Item 1 marked DONE.** Code audit confirmed the `kW/String` column is already removed from the `/analysis` table on both `/dashboard/analysis` and `/admin/analysis`. Table renders 6 static columns (Inverter · MPPT · String · Perf · Avail · kWh) + date columns. The `kWh` column shows *real* measured per-string energy over the selected date range — the meaningful replacement for the old theoretical `kW/String`. No user-facing change required. | Ali + Claude (audit-verified) | 1 |
 | 2026-04-23 | **Dead-code cleanup queued as tech debt** (not blocking). 3 references to `kw_per_string` remain in API routes + TypeScript interface — invisible to users. ~15 min cleanup when next we touch those files. | Ali | 1 |
+| 2026-04-23 | **Item 3 DONE — "0 A Fault" + crimson + rich descriptions.** Label "Open Circuit" → "0 A Fault" · colour violet → rose-* (crimson, Option C — distinct from CRITICAL red) · enriched label vocabulary across all 5 statuses (Healthy, Underperforming, Major Loss, 0 A Fault, Offline) · added shortDesc/fullDesc/whatToCheck fields to STATUS_STYLES (single source of truth) · collapsible Status Guide on plant detail with full explanations + actionable "What to check" per status. Internal enum `StringStatus.OPEN_CIRCUIT` preserved. Commit `999863b`. | Ali + Claude | 3 |
 
 ---
 
@@ -776,14 +777,14 @@ As decisions get made, record them here with date and reasoning.
 
 Update this section as items are completed. Currently:
 
-- 🔴 **5 TODO** (items 2, 3, 4, 5, 6)
+- 🔴 **4 TODO** (items 2, 4, 5, 6)
 - 🟡 **0 IN PROGRESS**
-- 🟢 **1 DONE** (item 1 — confirmed already removed)
+- 🟢 **2 DONE** (items 1, 3)
 - 🟠 **1 TECH DEBT** (item 1 dead code — non-blocking, ~15 min cleanup later)
 - ⛔ **1 BLOCKED** (Item 4 — awaiting client screenshot)
-- ❓ **8 items awaiting client/Ali answers** (4 client + 4 Ali)
+- ❓ **7 items awaiting client/Ali answers** (4 client + 3 Ali)
 
-**Next action:** Send client CQ1–CQ5 + get Ali's answers to AQ1–AQ4. Once answered, start Sprint 1 (Items 3, 4).
+**Next action:** Client screenshot for Item 4; then pick between Item 5 (tags) and Item 2 (vendor faults) for Sprint 2.
 
 ---
 
@@ -793,6 +794,7 @@ Update this section as items are completed. Currently:
 |---|---|
 | 2026-04-23 | Document created · verbatim client message captured · all 6 items interpreted · current-code state verified in each item · 9 open questions listed · execution order proposed |
 | 2026-04-23 | **Item 1 closed as DONE** — audit verified the column is already removed from rendering on both `/dashboard/analysis` and `/admin/analysis` tables. Dead field (`kw_per_string` in API routes + `StringRow` interface) logged as tech debt for future cleanup. Decision log entry added. |
+| 2026-04-23 | **Item 3 shipped and DONE** — label changed to "0 A Fault" with crimson (rose) color; added rich shortDesc/fullDesc/whatToCheck fields to STATUS_STYLES for all 5 statuses; collapsible Status Guide added to plant detail page; label vocabulary updated across all 5 statuses. Live at commit `999863b`. Post-deploy audit 5/5 pass. |
 
 ---
 
