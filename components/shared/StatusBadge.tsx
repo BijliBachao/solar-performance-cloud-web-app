@@ -20,8 +20,9 @@ export function StatusBadge({ status }: StatusBadgeProps) {
   const s = STATUS_STYLES[key]
   return (
     <span
+      title={s.shortDesc}
       className={cn(
-        'inline-flex items-center rounded-sm border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide',
+        'inline-flex items-center rounded-sm border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide cursor-help',
         s.bg,
         s.fg,
         s.border,

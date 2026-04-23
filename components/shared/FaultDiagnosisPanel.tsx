@@ -47,9 +47,9 @@ function diagnoseStrings(strings: StringData[], _avgCurrent: number): DiagnosisW
     diagnoses.push({
       stringNumbers: openCircuit.map(s => s.string_number),
       severity: 'critical',
-      cause: 'Open Circuit — No Current Flow',
-      pattern: `Voltage present (${openCircuit[0].voltage.toFixed(0)} V) but 0 A current — panels connected but current cannot flow.`,
-      action: 'Check MC4 connectors, string fuses, and combiner box switches. Inspect for loose or corroded connections.',
+      cause: '0 A Fault — No Current Flow',
+      pattern: `Panels are generating voltage (${openCircuit[0].voltage.toFixed(0)} V — sunlight is hitting them), but zero current is flowing through the string. The electrical circuit has a physical break somewhere on the DC side. This is NOT a panel issue.`,
+      action: 'Focus on the wiring path. Check, in order: (1) loose or disconnected MC4 connectors — common after heavy rain, wind, or animals. (2) Blown string fuses in the combiner box. (3) Open string switches or damaged DC isolators. (4) Broken DC cables between panels and combiner. Do not waste time inspecting panels.',
       icon: Cable,
       reference: 'IEC 62446-1 · continuity & polarity test',
     })
@@ -60,9 +60,9 @@ function diagnoseStrings(strings: StringData[], _avgCurrent: number): DiagnosisW
     diagnoses.push({
       stringNumbers: offline.map(s => s.string_number),
       severity: 'critical',
-      cause: 'Offline — Communication Loss',
-      pattern: 'No recent signal from the inverter for this string — could be comms drop, inverter input powered down, or a physical disconnection.',
-      action: 'Check inverter connection to monitoring gateway, verify the string\'s DC input is powered, inspect junction boxes and cabling.',
+      cause: 'Offline — No Signal',
+      pattern: 'No data is arriving from this string. Either the inverter has lost its connection to our monitoring gateway (network outage, router issue, power cut at the inverter), or the string\'s DC input has been switched off at the inverter itself.',
+      action: 'Check the inverter\'s local display first. If it shows this string as active, the issue is in comms — inspect the network / gateway path. If the inverter also shows "no input" for this string, the DC side is off — check DC breakers and physical connections.',
       icon: PlugZap,
       reference: 'IEC 62446-1 · communication & data availability',
     })
@@ -73,9 +73,9 @@ function diagnoseStrings(strings: StringData[], _avgCurrent: number): DiagnosisW
     diagnoses.push({
       stringNumbers: critical.map(s => s.string_number),
       severity: 'critical',
-      cause: 'Module Fault or Severe Shading',
-      pattern: `Current ${critical[0].gap_percent.toFixed(0)}%+ below inverter average — severe underperformance.`,
-      action: 'Inspect for broken panel, heavy bird droppings, or major shading obstruction. Consider I-V curve test.',
+      cause: 'Major Loss — Panel-Level Fault',
+      pattern: `Current is ${critical[0].gap_percent.toFixed(0)}% below the peer-string average — this string is producing less than half of what its neighbours produce. A serious panel-level issue.`,
+      action: 'On-site inspection is needed — this usually cannot wait. Look for: physical panel damage (cracked glass, delamination), heavy permanent shading (new construction, tree growth), a failed cell, or severe soiling. Consider running an I-V curve test to confirm the module.',
       icon: Wrench,
       reference: 'IEC 62446-1 · module & string power test',
     })
@@ -86,9 +86,9 @@ function diagnoseStrings(strings: StringData[], _avgCurrent: number): DiagnosisW
     diagnoses.push({
       stringNumbers: warning.map(s => s.string_number),
       severity: 'warning',
-      cause: 'Partial Shading or Soiling',
-      pattern: `Current ${GAP_WARNING}–${GAP_WARNING * 2}% below average — moderate underperformance.`,
-      action: 'Schedule module cleaning or check for tree/chimney shadow during peak hours.',
+      cause: 'Underperforming — Shading or Soiling',
+      pattern: `Current ${GAP_WARNING}–${GAP_WARNING * 2}% below the peer-string average. Producing noticeably less than neighbour strings but still generating. Typical root causes are: shading from a tree or building, dust or dirt on the panel surface, bird droppings, or minor panel degradation.`,
+      action: 'Schedule a daylight inspection. Start with the quickest wins: clean the panel surface, trim any overhanging branches, check for bird droppings. If the issue persists after cleaning, check for time-of-day patterns (shading) by watching when the drop appears.',
       icon: TreePine,
       reference: 'IEC 62446-1 · performance verification',
     })
@@ -134,7 +134,7 @@ const LEFT_BORDER_BY_KEY: Record<StatusKey, string> = {
   info: 'border-l-blue-700',
   healthy: 'border-l-emerald-600',
   offline: 'border-l-slate-500',
-  'open-circuit': 'border-l-violet-600',
+  'open-circuit': 'border-l-rose-600',
 }
 
 const SEVERITY_LABEL: Record<DiagSeverity, string> = {

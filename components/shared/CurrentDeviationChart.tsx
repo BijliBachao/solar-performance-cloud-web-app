@@ -36,15 +36,15 @@ const BAR_COLOR_BY_STATUS: Record<StringStatus, string> = {
   NORMAL: '#10B981', // emerald-500
   WARNING: '#F59E0B', // amber-500
   CRITICAL: '#EF4444', // red-500
-  OPEN_CIRCUIT: '#8B5CF6', // violet-500
+  OPEN_CIRCUIT: '#F43F5E', // rose-500 (crimson — distinct from CRITICAL red)
   OFFLINE: '#94A3B8', // slate-400
 }
 
 const STATUS_LABELS: Record<StringStatus, string> = {
-  NORMAL: 'Normal',
-  WARNING: 'Warning',
-  CRITICAL: 'Critical',
-  OPEN_CIRCUIT: 'Open Circuit',
+  NORMAL: 'Healthy',
+  WARNING: 'Underperforming',
+  CRITICAL: 'Major Loss',
+  OPEN_CIRCUIT: '0 A Fault',
   OFFLINE: 'Offline',
 }
 

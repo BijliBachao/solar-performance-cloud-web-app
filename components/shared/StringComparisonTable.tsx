@@ -36,7 +36,7 @@ const ROW_TINT: Record<StringStatus, string> = {
   NORMAL: '',
   WARNING: 'bg-amber-50/40',
   CRITICAL: 'bg-red-50/40',
-  OPEN_CIRCUIT: 'bg-violet-50/60',
+  OPEN_CIRCUIT: 'bg-rose-50/60',
   OFFLINE: 'bg-slate-50',
 }
 

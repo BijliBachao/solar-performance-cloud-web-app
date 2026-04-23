@@ -43,6 +43,9 @@ export interface StatusStyle {
   solid: string // solid-fill variant (for buttons, active indicators)
   dot: string // dot indicator (stats bars, legend markers)
   label: string // default display label
+  shortDesc: string // one-line description (tooltips, compact legends)
+  fullDesc: string // full explanation (Fault Diagnosis panel, help card)
+  whatToCheck: string // actionable next step
 }
 
 export const STATUS_STYLES: Record<StatusKey, StatusStyle> = {
@@ -53,6 +56,9 @@ export const STATUS_STYLES: Record<StatusKey, StatusStyle> = {
     solid: 'bg-emerald-600 text-white',
     dot: 'bg-emerald-500',
     label: 'Healthy',
+    shortDesc: 'Producing normally — output matches peer strings.',
+    fullDesc: 'The string is producing current very close to what its neighbour strings on the same inverter are producing. Everything is working correctly.',
+    whatToCheck: 'No action needed. Continue routine monitoring.',
   },
   warning: {
     fg: 'text-amber-700',
@@ -60,7 +66,10 @@ export const STATUS_STYLES: Record<StatusKey, StatusStyle> = {
     border: 'border-amber-200',
     solid: 'bg-amber-600 text-white',
     dot: 'bg-amber-500',
-    label: 'Warning',
+    label: 'Underperforming',
+    shortDesc: 'Producing 10 – 50% less than peer strings.',
+    fullDesc: 'This string is generating noticeably less than its neighbours — typically 10 to 50 percent below. Usual causes: shading (a tree or building casting a shadow), dust or dirt on the panel surface, bird droppings, or minor panel degradation.',
+    whatToCheck: 'Check the panel surface during daylight hours. Often a quick clean or trim solves it.',
   },
   critical: {
     fg: 'text-red-700',
@@ -68,7 +77,10 @@ export const STATUS_STYLES: Record<StatusKey, StatusStyle> = {
     border: 'border-red-200',
     solid: 'bg-red-600 text-white',
     dot: 'bg-red-500',
-    label: 'Critical',
+    label: 'Major Loss',
+    shortDesc: 'Producing more than 50% less than peer strings.',
+    fullDesc: 'This string is generating less than half of what its neighbours produce — a serious panel-level problem. Possible causes: heavy permanent shading, physical panel damage (cracked glass, delamination), a failed cell, or severe soiling.',
+    whatToCheck: 'On-site inspection is needed — this usually cannot wait. Consider an I-V curve test.',
   },
   offline: {
     fg: 'text-slate-500',
@@ -77,14 +89,21 @@ export const STATUS_STYLES: Record<StatusKey, StatusStyle> = {
     solid: 'bg-slate-500 text-white',
     dot: 'bg-slate-400',
     label: 'Offline',
+    shortDesc: 'No recent data — comms loss or DC input powered off.',
+    fullDesc: 'No data is coming from this string. Either the inverter has lost its connection to our monitoring gateway (network outage, router issue, power cut at the inverter), or the string\'s DC input has been switched off at the inverter.',
+    whatToCheck: 'Check the inverter local display first. If it shows this string as active, the issue is comms. If the inverter also shows "no input", check DC breakers and physical connections.',
   },
   'open-circuit': {
-    fg: 'text-violet-700',
-    bg: 'bg-violet-50',
-    border: 'border-violet-200',
-    solid: 'bg-violet-600 text-white',
-    dot: 'bg-violet-500',
-    label: 'Open Circuit',
+    // Crimson (rose family) — conveys severity without colliding with CRITICAL's red
+    fg: 'text-rose-700',
+    bg: 'bg-rose-50',
+    border: 'border-rose-200',
+    solid: 'bg-rose-600 text-white',
+    dot: 'bg-rose-500',
+    label: '0 A Fault',
+    shortDesc: 'Voltage present but no current — wiring break in the DC path.',
+    fullDesc: 'The panels ARE generating voltage (sunlight is hitting them, the panels are working) — but zero current is flowing through the string. The electrical circuit has a physical break somewhere between the panels and the inverter. This is NOT a panel issue — inspecting panels is a waste of time.',
+    whatToCheck: 'Focus on the wiring path. Check, in order: (1) loose or disconnected MC4 connectors — common after heavy rain, wind, or animals. (2) Blown string fuses in the combiner box. (3) Open string switches or damaged DC isolators. (4) Broken DC cables between panels and combiner.',
   },
   info: {
     fg: 'text-blue-700',
@@ -93,6 +112,9 @@ export const STATUS_STYLES: Record<StatusKey, StatusStyle> = {
     solid: 'bg-blue-700 text-white',
     dot: 'bg-blue-500',
     label: 'Info',
+    shortDesc: 'Informational — monitor the trend.',
+    fullDesc: 'An informational signal, typically mild underperformance (less than 10-25 percent below peer average) that may resolve on its own.',
+    whatToCheck: 'Monitor trend. If persistent, schedule a routine cleaning or inspection.',
   },
 }
 

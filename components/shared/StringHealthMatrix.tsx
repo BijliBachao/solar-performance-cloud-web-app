@@ -90,7 +90,7 @@ export function StringHealthMatrix({ strings, avgCurrent }: StringHealthMatrixPr
                       )}
                     >
                       {s.status === 'OPEN_CIRCUIT'
-                        ? 'Open'
+                        ? '0 A'
                         : s.status === 'OFFLINE'
                           ? 'Offline'
                           : deviationStr}
@@ -140,10 +140,10 @@ export function StringHealthMatrix({ strings, avgCurrent }: StringHealthMatrixPr
 
 function statusLabel(status: StringStatus): string {
   switch (status) {
-    case 'NORMAL': return 'Normal'
-    case 'WARNING': return 'Warning'
-    case 'CRITICAL': return 'Critical'
-    case 'OPEN_CIRCUIT': return 'Open Circuit'
+    case 'NORMAL': return 'Healthy'
+    case 'WARNING': return 'Underperforming'
+    case 'CRITICAL': return 'Major Loss'
+    case 'OPEN_CIRCUIT': return '0 A Fault'
     case 'OFFLINE': return 'Offline'
   }
 }

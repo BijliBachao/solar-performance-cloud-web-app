@@ -632,34 +632,52 @@ export function InverterDetailSection({
                 </span>
               )}
             </div>
-            {/* Status Legend */}
-            <div className="mb-3 p-2.5 rounded-sm border border-slate-200 bg-slate-50">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                Status Guide (IEC 62446)
-              </p>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-600">
-                <span className="flex items-center gap-1">
-                  <span className={cn('w-2 h-2 rounded-full', STATUS_STYLES.healthy.dot)} />
-                  <span><strong>Normal</strong> — Within 10% of avg</span>
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className={cn('w-2 h-2 rounded-full', STATUS_STYLES.warning.dot)} />
-                  <span><strong>Warning</strong> — 10-50% below avg</span>
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className={cn('w-2 h-2 rounded-full', STATUS_STYLES.critical.dot)} />
-                  <span><strong>Critical</strong> — &gt;50% below avg</span>
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className={cn('w-2 h-2 rounded-full', STATUS_STYLES['open-circuit'].dot)} />
-                  <span><strong>Open Circuit</strong> — Voltage but 0A (wiring)</span>
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className={cn('w-2 h-2 rounded-full', STATUS_STYLES.offline.dot)} />
-                  <span><strong>Offline</strong> — 0V 0A or stale signal</span>
-                </span>
+            {/* Status Legend — compact view, expand for full explanations */}
+            <details className="mb-3 rounded-sm border border-slate-200 bg-slate-50 group">
+              <summary className="px-2.5 py-2 cursor-pointer list-none flex items-center justify-between hover:bg-slate-100/60 transition-colors">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  Status Guide (IEC 62446)
+                </p>
+                <span className="text-[10px] text-slate-400 group-open:hidden">▾ click to expand</span>
+                <span className="text-[10px] text-slate-400 hidden group-open:inline">▴ collapse</span>
+              </summary>
+              <div className="px-2.5 pb-2.5 pt-1">
+                {/* Compact one-liner row — always the first view inside the expand */}
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-600 mb-3">
+                  {([
+                    { key: 'healthy', short: STATUS_STYLES.healthy.shortDesc },
+                    { key: 'warning', short: STATUS_STYLES.warning.shortDesc },
+                    { key: 'critical', short: STATUS_STYLES.critical.shortDesc },
+                    { key: 'open-circuit', short: STATUS_STYLES['open-circuit'].shortDesc },
+                    { key: 'offline', short: STATUS_STYLES.offline.shortDesc },
+                  ] as const).map((item) => {
+                    const style = STATUS_STYLES[item.key]
+                    return (
+                      <span key={item.key} className="flex items-center gap-1.5" title={style.fullDesc}>
+                        <span className={cn('w-2 h-2 rounded-full', style.dot)} />
+                        <span><strong className={style.fg}>{style.label}</strong> — {item.short}</span>
+                      </span>
+                    )
+                  })}
+                </div>
+                {/* Full explanations — collapsible detail per status */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2 border-t border-slate-200">
+                  {(['healthy', 'warning', 'critical', 'open-circuit', 'offline'] as const).map((key) => {
+                    const style = STATUS_STYLES[key]
+                    return (
+                      <div key={key} className={cn('rounded-sm border p-2', style.border, style.bg)}>
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className={cn('w-2 h-2 rounded-full', style.dot)} />
+                          <span className={cn('text-[11px] font-bold uppercase tracking-wider', style.fg)}>{style.label}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-700 leading-snug mb-1">{style.fullDesc}</p>
+                        <p className="text-[10px] text-slate-500 leading-snug"><strong className="text-slate-600">What to check:</strong> {style.whatToCheck}</p>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
-            </div>
+            </details>
             <div className="overflow-x-auto">
               <StringComparisonTable strings={strings} />
             </div>
