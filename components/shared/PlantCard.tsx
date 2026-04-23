@@ -48,7 +48,7 @@ const LEFT_ACCENT: Record<string, string> = {
   warning: 'bg-amber-500',
   critical: 'bg-red-500',
   offline: 'bg-slate-400',
-  'open-circuit': 'bg-violet-500',
+  'open-circuit': 'bg-rose-500',
   info: 'bg-blue-500',
 }
 

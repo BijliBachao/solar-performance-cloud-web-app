@@ -66,7 +66,7 @@ const LEFT_BORDER_BY_KEY: Record<StatusKey, string> = {
   info: 'border-l-blue-700',
   healthy: 'border-l-emerald-600',
   offline: 'border-l-slate-500',
-  'open-circuit': 'border-l-violet-600',
+  'open-circuit': 'border-l-rose-600',
 }
 
 export function AlertHistoryLog({
