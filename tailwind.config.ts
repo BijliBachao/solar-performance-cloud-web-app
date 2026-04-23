@@ -56,6 +56,18 @@ const config: Config = {
           900: '#273D00',
         },
 
+        // ━━━ WARM NEUTRALS — LANDING PAGE ONLY (per DESIGN.md §2.9) ━━━
+        // Mastercard + Pinterest warm canvas — replaces cool slate tones
+        // on app/page.tsx. Dashboard/admin stay on cool slate palette.
+        warm: {
+          cream: '#F8F7F6',      // canvas (Mastercard §2)
+          'cream-lifted': '#F3F0EE', // lifted card surface
+          divider: '#E0E0D8',    // card border / subtle separator
+          text: '#1A1A1A',       // heading near-black (Pinterest)
+          body: '#454545',       // body warm mid-gray
+          muted: '#7A7A7A',      // captions / metadata (Vodafone #7e7e7e)
+        },
+
         // ━━━ SPC namespace alias — backward-compat ━━━━━━━━━━
         // Legacy class names (bg-spc-green, text-spc-green-dark) still work —
         // they now render as Solar Gold. Gradual migration; new code should

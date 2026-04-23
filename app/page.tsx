@@ -73,9 +73,9 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 antialiased">
+    <div className="min-h-screen bg-warm-cream text-warm-text antialiased">
       {/* ══ NAVIGATION ══════════════════════════════════════════════ */}
-      <nav className="fixed top-0 w-full bg-white/95 backdrop-blur-md border-b border-slate-200 z-50">
+      <nav className="fixed top-0 w-full bg-warm-cream/90 backdrop-blur-md border-b border-warm-divider z-50">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex justify-between h-16 items-center">
             <Link href="/" className="flex items-center gap-2.5">
@@ -115,61 +115,123 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* ══ HERO ════════════════════════════════════════════════════ */}
-      <section className="relative pt-36 pb-24 px-6 overflow-hidden">
-        {/* Subtle gold radial gradient background */}
+      {/* ══ HERO — ASYMMETRIC 60/40 (NVIDIA + Wise + Mastercard) ════ */}
+      <section className="relative pt-32 md:pt-40 pb-20 md:pb-32 px-6 overflow-hidden">
+        {/* Subtle bb-green + warm-gold radial wash — reduced vs previous */}
         <div
           aria-hidden="true"
           className="absolute inset-0 -z-10"
           style={{
             background:
-              'radial-gradient(1200px circle at 50% -10%, rgba(245,158,11,0.12), transparent 60%), radial-gradient(900px circle at 80% 40%, rgba(251,191,36,0.08), transparent 50%)',
+              'radial-gradient(1000px circle at 90% 10%, rgba(118,185,0,0.10), transparent 55%), radial-gradient(800px circle at 5% 90%, rgba(245,158,11,0.05), transparent 50%)',
           }}
         />
 
-        <div className="max-w-6xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-3 md:px-4 py-1.5 border border-solar-gold-200 bg-solar-gold-50 rounded-full text-solar-gold-800 text-[9px] md:text-[10px] font-bold uppercase tracking-wider md:tracking-widest mb-8 shadow-sm max-w-[95vw] text-center">
-            <span className="w-1.5 h-1.5 bg-bb-green-500 rounded-full flex-shrink-0 animate-pulse" />
-            <span>A Product of Bijli Bachao <span className="hidden sm:inline">· Pakistan&apos;s First String-Level Monitoring</span></span>
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-12 lg:gap-16 items-center">
+          {/* LEFT — headline + CTA */}
+          <div className="text-left">
+            <EyebrowDot>A Product of Bijli Bachao · Pakistan&apos;s First</EyebrowDot>
+
+            <h1 className="mt-6 text-[42px] sm:text-5xl md:text-6xl lg:text-[64px] font-bold leading-[1.05] tracking-[-0.02em] text-warm-text">
+              Detect underperforming strings
+              <br className="hidden md:block" />
+              <span className="text-warm-body font-normal"> before they cost you money.</span>
+            </h1>
+
+            <p className="mt-6 text-lg md:text-xl text-warm-body max-w-xl leading-relaxed font-medium">
+              Our engineers install a compact monitoring device at your plant —
+              live string-level data every 5 minutes, fault diagnosis in seconds.
+            </p>
+
+            <div className="mt-10 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <a
+                href="#cta"
+                className="group px-7 py-3.5 text-sm font-bold bg-bb-green-500 text-white rounded-full hover:bg-bb-green-600 transition-all flex items-center gap-2 shadow-lg shadow-bb-green-500/25 hover:-translate-y-0.5"
+              >
+                Book a Free Site Visit
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </a>
+              <a
+                href={WHATSAPP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-7 py-3.5 text-sm font-bold text-warm-text rounded-full border-2 border-warm-text/15 hover:border-warm-text/40 transition-all flex items-center gap-2"
+              >
+                <MessageCircle className="w-4 h-4" />
+                WhatsApp {WHATSAPP_LABEL}
+              </a>
+            </div>
+
+            <div className="mt-10 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] font-semibold text-warm-muted uppercase tracking-wider">
+              <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-bb-green-500" /> No commitment</span>
+              <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-bb-green-500" /> Engineer-installed</span>
+              <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-bb-green-500" /> IEC 61724</span>
+            </div>
           </div>
 
-          <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold leading-[1.05] mb-8 tracking-tight text-slate-900">
-            Detect underperforming strings
-            <br className="hidden md:block" />
-            <span className="text-solar-gold-600"> before they cost you money.</span>
-          </h1>
+          {/* RIGHT — laptop mockup with live-dashboard peek */}
+          <div className="relative">
+            <LaptopMockup>
+              <HeroDashPeek />
+            </LaptopMockup>
+            {/* Thin orbital curve — Mastercard signature */}
+            <svg aria-hidden="true" className="hidden lg:block absolute -top-8 -left-12 w-64 h-64 -z-10 opacity-70" viewBox="0 0 200 200">
+              <path d="M 20 180 Q 60 20 180 40" fill="none" stroke="#76B900" strokeWidth="1" strokeDasharray="2 4" />
+            </svg>
+          </div>
+        </div>
+      </section>
 
-          <p className="text-lg md:text-xl text-slate-600 mb-10 max-w-3xl mx-auto leading-relaxed">
-            Our engineers install a compact monitoring device at your plant —
-            live string-level data every 5 minutes, fault diagnosis in seconds,
-            no guesswork, no downtime surprises.
+      {/* ══ DASHBOARD SHOWCASE (right after hero — Wise product-shot) */}
+      <section id="demo" className="relative pt-12 pb-24 px-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="mb-10 max-w-2xl">
+            <EyebrowDot>See it live</EyebrowDot>
+            <h2 className="mt-4 text-3xl md:text-4xl font-bold tracking-[-0.02em] text-warm-text leading-tight">
+              Every string. One screen.
+            </h2>
+            <p className="mt-3 text-base text-warm-body leading-relaxed font-medium">
+              This is how your plant looks inside SPC — health scores, live alerts, fault diagnosis, all on one pane.
+            </p>
+          </div>
+
+          <div className="relative">
+            {/* Floating dashboard card on warm cream */}
+            <MiniDashboard />
+
+            {/* Micro-label */}
+            <p className="mt-4 text-[11px] font-semibold text-warm-muted uppercase tracking-wider flex items-center gap-1.5">
+              <Eye className="w-3.5 h-3.5" />
+              Representative data · Real plants update every 5 minutes
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ══ 3 MINI-DASHBOARDS — Pinterest masonry ═══════════════════ */}
+      <section className="py-24 px-6 bg-white border-y border-warm-divider">
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-12 max-w-2xl">
+            <EyebrowDot>More views</EyebrowDot>
+            <h2 className="mt-4 text-3xl md:text-4xl font-bold tracking-[-0.02em] text-warm-text leading-tight">
+              Same data. Different lenses.
+            </h2>
+            <p className="mt-3 text-base text-warm-body leading-relaxed font-medium">
+              Follow one fault — PV7 — from the alert feed to the plant drill-down to the 7-day heatmap.
+            </p>
+          </div>
+
+          {/* Masonry: alert feed tall (spans 2 rows) · plant detail short · heatmap medium */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 lg:auto-rows-[1fr]">
+            <div className="lg:row-span-2"><MiniAlertFeed /></div>
+            <MiniPlantDetail />
+            <MiniHeatmap />
+          </div>
+
+          <p className="mt-8 text-[11px] font-semibold text-warm-muted uppercase tracking-wider flex items-center gap-1.5">
+            <Eye className="w-3.5 h-3.5" />
+            Follow PV7 · fault → plant drill-down → 7-day history
           </p>
-
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
-            <a
-              href="#cta"
-              className="group px-8 py-4 text-sm font-bold bg-solar-gold-500 text-white rounded-sm hover:bg-solar-gold-600 transition-all flex items-center gap-2 shadow-lg shadow-solar-gold-500/20 hover:shadow-xl hover:shadow-solar-gold-500/30 hover:-translate-y-0.5"
-            >
-              Book a Free Site Visit
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </a>
-            <a
-              href={WHATSAPP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-6 sm:px-8 py-4 text-sm font-bold border-2 border-bb-green-500 text-bb-green-700 rounded-sm hover:bg-bb-green-500 hover:text-white transition-all flex items-center gap-2"
-            >
-              <MessageCircle className="w-4 h-4" />
-              WhatsApp {WHATSAPP_LABEL}
-            </a>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-bb-green-500" /> No commitment</span>
-            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-bb-green-500" /> Engineer-installed</span>
-            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-bb-green-500" /> IEC 61724 aligned</span>
-            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-bb-green-500" /> 14+ years in Pakistan</span>
-          </div>
         </div>
       </section>
 
@@ -362,72 +424,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ══ INLINE MINI-DASHBOARD (THE DEMO) ═════════════════════════ */}
-      <section id="demo" className="py-24 px-6 bg-slate-50 relative overflow-hidden">
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 -z-0"
-          style={{
-            background:
-              'radial-gradient(900px circle at 15% 25%, rgba(245,158,11,0.10), transparent 55%), radial-gradient(800px circle at 85% 75%, rgba(118,185,0,0.08), transparent 55%)',
-          }}
-        />
-
-        <div className="max-w-6xl mx-auto relative z-10">
-          <div className="text-center mb-12">
-            <p className="text-[10px] font-bold text-solar-gold-600 uppercase tracking-widest mb-4">See It Live</p>
-            <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-slate-900 mb-4">
-              Every string. One screen. <span className="text-bb-green-600">Live.</span>
-            </h2>
-            <p className="text-base text-slate-600 max-w-2xl mx-auto">
-              This is how your plant looks inside SPC. Scroll through — health scores, alerts, fault diagnosis, all on one pane.
-            </p>
-          </div>
-
-          <MiniDashboard />
-
-          <div className="flex items-center justify-center gap-2 mt-6 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-            <Eye className="w-3.5 h-3.5" />
-            Representative data · Your actual plants are visualized with real 5-minute live feeds
-          </div>
-
-          <div className="flex justify-center mt-10">
-            <a
-              href="#cta"
-              className="group px-8 py-4 text-sm font-bold bg-solar-gold-500 text-white rounded-sm hover:bg-solar-gold-600 transition-all flex items-center gap-2 shadow-lg"
-            >
-              See Your Plant on This Dashboard
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </a>
-          </div>
-        </div>
-      </section>
-
-      {/* ══ PRODUCT TOUR — 3 MINI-DASHBOARDS ═════════════════════════ */}
-      <section className="py-24 px-6 bg-white">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-14">
-            <p className="text-[10px] font-bold text-solar-gold-600 uppercase tracking-widest mb-4">More Views, More Control</p>
-            <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-slate-900 mb-4">
-              Same data. <span className="text-solar-gold-600">Different lenses.</span>
-            </h2>
-            <p className="text-base text-slate-600 max-w-2xl mx-auto">
-              Jump between alert stream, plant detail, and time-based history — all live, all linked. Follow one fault from the moment it fires to the day it resolves.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            <MiniAlertFeed />
-            <MiniPlantDetail />
-            <MiniHeatmap />
-          </div>
-
-          <div className="flex items-center justify-center gap-2 mt-8 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-            <Eye className="w-3.5 h-3.5" />
-            Follow the story · PV7 appears in all three — fault → drill-down → 7-day history
-          </div>
-        </div>
-      </section>
 
       {/* ══ CAPABILITIES ═════════════════════════════════════════════ */}
       <section className="py-24 px-6 bg-slate-50">
@@ -1053,6 +1049,115 @@ function Sparkline() {
       <path d={path} fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       <circle cx={peakX} cy={peakY} r="3.5" fill="#f59e0b" stroke="#ffffff" strokeWidth="1.5" />
     </svg>
+  )
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// SIGNATURE PRIMITIVES — used across the landing page.
+// Per DESIGN.md §2.9 — landing-page-only Mastercard-style patterns.
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function EyebrowDot({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-warm-muted">
+      <span className="w-1.5 h-1.5 bg-bb-green-500 rounded-full" />
+      {children}
+    </span>
+  )
+}
+
+function LaptopMockup({ children }: { children: React.ReactNode }) {
+  // CSS-only laptop frame — Wise-style product shot on landing.
+  // The screen area clips its children with a rounded top radius; a base
+  // bar + notch suggest a physical laptop without using an image asset.
+  return (
+    <div className="relative w-full max-w-xl mx-auto">
+      {/* Outer laptop lid */}
+      <div className="relative rounded-t-xl bg-warm-text p-2 pb-0 shadow-[0_30px_60px_-20px_rgba(26,26,26,0.25),0_18px_36px_-18px_rgba(26,26,26,0.2)]">
+        {/* Camera dot */}
+        <div className="absolute top-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-warm-text/60 ring-1 ring-warm-divider/20" />
+        {/* Screen */}
+        <div className="rounded-t-md overflow-hidden bg-white aspect-[16/10]">
+          <div className="w-full h-full overflow-hidden">{children}</div>
+        </div>
+      </div>
+      {/* Base bar */}
+      <div className="mx-auto h-2 w-[108%] -ml-[4%] bg-gradient-to-b from-warm-text/95 to-warm-text/75 rounded-b-xl" />
+      <div className="mx-auto h-1 w-[30%] bg-warm-text/80 rounded-b-md" />
+    </div>
+  )
+}
+
+function HeroDashPeek() {
+  // Compact teaser for the hero laptop frame — 4 KPI chips + a tiny
+  // spark + 6 string bars. Different view from the big MiniDashboard
+  // below so visitors get two moments, not a duplicate.
+  return (
+    <div className="w-full h-full bg-white p-3 flex flex-col gap-2.5 text-left">
+      {/* Top bar */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <div className="w-4 h-4 rounded-sm bg-gradient-to-br from-solar-gold-400 to-solar-gold-600 flex items-center justify-center">
+            <Sun className="w-2 h-2 text-white" />
+          </div>
+          <span className="text-[9px] font-bold text-warm-text">Fleet overview · 48 plants</span>
+        </div>
+        <div className="flex items-center gap-1 px-1.5 py-0.5 bg-bb-green-50 border border-bb-green-200 rounded-sm">
+          <span className="w-1 h-1 bg-bb-green-500 rounded-full animate-pulse" />
+          <span className="text-[7px] font-bold text-bb-green-700 uppercase tracking-wider">Live</span>
+        </div>
+      </div>
+
+      {/* KPI chips */}
+      <div className="grid grid-cols-4 gap-1">
+        {[
+          { v: '96%', l: 'Health', c: 'text-bb-green-700' },
+          { v: '2.2 MW', l: 'Fleet', c: 'text-warm-text' },
+          { v: '44/48', l: 'Live', c: 'text-bb-green-700' },
+          { v: '3', l: 'Alerts', c: 'text-red-600' },
+        ].map((k) => (
+          <div key={k.l} className="bg-warm-cream rounded-sm p-1.5 border border-warm-divider">
+            <p className={`text-[10px] font-bold ${k.c} font-mono leading-none`}>{k.v}</p>
+            <p className="text-[6px] font-semibold text-warm-muted uppercase tracking-wider mt-0.5">{k.l}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Mini spark */}
+      <div className="flex-1 min-h-0 bg-warm-cream rounded-sm border border-warm-divider p-2 flex flex-col">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[7px] font-bold text-warm-muted uppercase tracking-wider">24h Fleet Power</span>
+          <span className="text-[7px] font-mono text-solar-gold-700 font-bold">Peak 11.2 MW</span>
+        </div>
+        <div className="flex-1 relative">
+          <svg viewBox="0 0 200 60" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+            <defs>
+              <linearGradient id="peek-fill" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.35" />
+                <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path d="M 0 58 L 10 55 L 25 48 L 45 32 L 70 15 L 90 6 L 110 5 L 130 12 L 155 30 L 175 50 L 195 58 L 200 58 L 200 60 L 0 60 Z" fill="url(#peek-fill)" />
+            <path d="M 0 58 L 10 55 L 25 48 L 45 32 L 70 15 L 90 6 L 110 5 L 130 12 L 155 30 L 175 50 L 195 58" fill="none" stroke="#f59e0b" strokeWidth="1.2" />
+          </svg>
+        </div>
+      </div>
+
+      {/* String bars */}
+      <div className="grid grid-cols-6 gap-0.5">
+        {[97, 94, 91, 23, 88, 93].map((v, i) => {
+          const isBad = v < 40
+          return (
+            <div key={i} className={`rounded-sm p-1 border ${isBad ? 'bg-red-50 border-red-200' : 'bg-bb-green-50 border-bb-green-200'}`}>
+              <p className={`text-[7px] font-mono font-bold ${isBad ? 'text-red-700' : 'text-bb-green-700'}`}>{v}%</p>
+              <div className="h-0.5 bg-warm-divider rounded-full overflow-hidden mt-0.5">
+                <div className={`h-full ${isBad ? 'bg-red-500' : 'bg-bb-green-500'}`} style={{ width: `${v}%` }} />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
