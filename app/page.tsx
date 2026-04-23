@@ -129,7 +129,7 @@ export default function LandingPage() {
 
         <div className="max-w-6xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 px-3 md:px-4 py-1.5 border border-solar-gold-200 bg-solar-gold-50 rounded-full text-solar-gold-800 text-[9px] md:text-[10px] font-bold uppercase tracking-wider md:tracking-widest mb-8 shadow-sm max-w-[95vw] text-center">
-            <span className="w-1.5 h-1.5 bg-solar-gold-500 rounded-full flex-shrink-0" />
+            <span className="w-1.5 h-1.5 bg-bb-green-500 rounded-full flex-shrink-0 animate-pulse" />
             <span>A Product of Bijli Bachao <span className="hidden sm:inline">· Pakistan&apos;s First String-Level Monitoring</span></span>
           </div>
 
@@ -157,7 +157,7 @@ export default function LandingPage() {
               href={WHATSAPP_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="px-6 sm:px-8 py-4 text-sm font-bold border-2 border-emerald-500 text-emerald-700 rounded-sm hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-2"
+              className="px-6 sm:px-8 py-4 text-sm font-bold border-2 border-bb-green-500 text-bb-green-700 rounded-sm hover:bg-bb-green-500 hover:text-white transition-all flex items-center gap-2"
             >
               <MessageCircle className="w-4 h-4" />
               WhatsApp {WHATSAPP_LABEL}
@@ -165,10 +165,10 @@ export default function LandingPage() {
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> No commitment</span>
-            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Engineer-installed</span>
-            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> IEC 61724 aligned</span>
-            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> 14+ years in Pakistan</span>
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-bb-green-500" /> No commitment</span>
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-bb-green-500" /> Engineer-installed</span>
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-bb-green-500" /> IEC 61724 aligned</span>
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-bb-green-500" /> 14+ years in Pakistan</span>
           </div>
         </div>
       </section>
@@ -232,13 +232,13 @@ export default function LandingPage() {
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-10">
             {[
-              { value: '48 plants · 2.2 MW', label: 'Across Pakistan' },
-              { value: '44 / 48', label: 'Producing right now' },
-              { value: '1.3M+', label: 'Data points captured' },
-              { value: '25,000+', label: 'Faults detected & resolved' },
+              { value: '48 plants · 2.2 MW', label: 'Across Pakistan', accent: 'text-slate-900' },
+              { value: '44 / 48', label: 'Producing right now', accent: 'text-bb-green-600' },
+              { value: '1.3M+', label: 'Data points captured', accent: 'text-slate-900' },
+              { value: '25,000+', label: 'Faults detected & resolved', accent: 'text-slate-900' },
             ].map((stat) => (
               <div key={stat.label} className="text-center">
-                <p className="text-2xl md:text-3xl font-bold text-slate-900 font-mono tracking-tight">{stat.value}</p>
+                <p className={`text-2xl md:text-3xl font-bold ${stat.accent} font-mono tracking-tight`}>{stat.value}</p>
                 <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mt-2">{stat.label}</p>
               </div>
             ))}
@@ -283,17 +283,17 @@ export default function LandingPage() {
             </div>
 
             {/* Solution card */}
-            <div className="bg-emerald-50 border border-emerald-200 rounded-sm p-8">
+            <div className="bg-bb-green-50 border border-bb-green-200 rounded-sm p-8">
               <div className="flex items-center gap-2 mb-4">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">With SPC</span>
+                <CheckCircle2 className="w-5 h-5 text-bb-green-600" />
+                <span className="text-[10px] font-bold text-bb-green-700 uppercase tracking-widest">With SPC</span>
               </div>
               <h3 className="text-xl font-bold text-slate-900 mb-4">Every string. Every 5 minutes.</h3>
               <ul className="space-y-3 text-sm text-slate-700 leading-relaxed">
-                <li className="flex gap-2"><span className="text-emerald-600 font-bold">✓</span> Our engineers install a monitoring device at your plant.</li>
-                <li className="flex gap-2"><span className="text-emerald-600 font-bold">✓</span> Live health scores per string — see faults in minutes.</li>
-                <li className="flex gap-2"><span className="text-emerald-600 font-bold">✓</span> Automatic fault diagnosis tells you <em>why</em> and <em>what to fix</em>.</li>
-                <li className="flex gap-2"><span className="text-emerald-600 font-bold">✓</span> Most sites recover the device cost within <strong>90 days</strong>.</li>
+                <li className="flex gap-2"><span className="text-bb-green-600 font-bold">✓</span> Our engineers install a monitoring device at your plant.</li>
+                <li className="flex gap-2"><span className="text-bb-green-600 font-bold">✓</span> Live health scores per string — see faults in minutes.</li>
+                <li className="flex gap-2"><span className="text-bb-green-600 font-bold">✓</span> Automatic fault diagnosis tells you <em>why</em> and <em>what to fix</em>.</li>
+                <li className="flex gap-2"><span className="text-bb-green-600 font-bold">✓</span> Most sites recover the device cost within <strong>90 days</strong>.</li>
               </ul>
             </div>
           </div>
@@ -363,30 +363,30 @@ export default function LandingPage() {
       </section>
 
       {/* ══ INLINE MINI-DASHBOARD (THE DEMO) ═════════════════════════ */}
-      <section id="demo" className="py-24 px-6 bg-slate-900 relative overflow-hidden">
+      <section id="demo" className="py-24 px-6 bg-slate-50 relative overflow-hidden">
         <div
           aria-hidden="true"
-          className="absolute inset-0 -z-0 opacity-30"
+          className="absolute inset-0 -z-0"
           style={{
             background:
-              'radial-gradient(1000px circle at 20% 30%, rgba(245,158,11,0.15), transparent 60%), radial-gradient(800px circle at 80% 70%, rgba(16,185,129,0.1), transparent 50%)',
+              'radial-gradient(900px circle at 15% 25%, rgba(245,158,11,0.10), transparent 55%), radial-gradient(800px circle at 85% 75%, rgba(118,185,0,0.08), transparent 55%)',
           }}
         />
 
         <div className="max-w-6xl mx-auto relative z-10">
           <div className="text-center mb-12">
-            <p className="text-[10px] font-bold text-solar-gold-400 uppercase tracking-widest mb-4">See It Live</p>
-            <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-white mb-4">
-              Every string. One screen. <span className="text-solar-gold-400">Live.</span>
+            <p className="text-[10px] font-bold text-solar-gold-600 uppercase tracking-widest mb-4">See It Live</p>
+            <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-slate-900 mb-4">
+              Every string. One screen. <span className="text-bb-green-600">Live.</span>
             </h2>
-            <p className="text-base text-slate-400 max-w-2xl mx-auto">
+            <p className="text-base text-slate-600 max-w-2xl mx-auto">
               This is how your plant looks inside SPC. Scroll through — health scores, alerts, fault diagnosis, all on one pane.
             </p>
           </div>
 
           <MiniDashboard />
 
-          <div className="flex items-center justify-center gap-2 mt-6 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+          <div className="flex items-center justify-center gap-2 mt-6 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
             <Eye className="w-3.5 h-3.5" />
             Representative data · Your actual plants are visualized with real 5-minute live feeds
           </div>
@@ -556,7 +556,7 @@ export default function LandingPage() {
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">{cs.where}</p>
                 <p className="text-sm text-slate-600 leading-relaxed flex-1 mb-5">{cs.body}</p>
                 <div className="pt-4 border-t border-slate-100 flex items-center gap-2">
-                  <Clock className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                  <Clock className="w-3.5 h-3.5 text-bb-green-500 flex-shrink-0" />
                   <p className="text-[11px] font-semibold text-slate-600">{cs.duration}</p>
                 </div>
               </div>
@@ -728,61 +728,61 @@ export default function LandingPage() {
       </section>
 
       {/* ══ BIJLI BACHAO PARENT ══════════════════════════════════════ */}
-      <section id="parent" className="py-24 px-6 bg-slate-900 relative overflow-hidden">
+      <section id="parent" className="py-24 px-6 bg-slate-50 relative overflow-hidden">
         <div
           aria-hidden="true"
-          className="absolute inset-0 -z-0 opacity-40"
+          className="absolute inset-0 -z-0"
           style={{
             background:
-              'radial-gradient(1000px circle at 70% 30%, rgba(245,158,11,0.15), transparent 60%)',
+              'radial-gradient(900px circle at 75% 25%, rgba(245,158,11,0.10), transparent 55%), radial-gradient(800px circle at 15% 75%, rgba(118,185,0,0.08), transparent 55%)',
           }}
         />
 
         <div className="max-w-6xl mx-auto relative z-10">
           <div className="text-center mb-14">
-            <p className="text-[10px] font-bold text-solar-gold-400 uppercase tracking-widest mb-4">Part of the Bijli Bachao Family</p>
-            <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-white mb-4">
+            <p className="text-[10px] font-bold text-solar-gold-600 uppercase tracking-widest mb-4">Part of the Bijli Bachao Family</p>
+            <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-slate-900 mb-4">
               Pakistan&apos;s Solar + Energy
               <br className="hidden md:block"/>
-              <span className="text-solar-gold-400"> Automation Company.</span>
+              <span className="text-solar-gold-600"> Automation Company.</span>
             </h2>
-            <p className="text-base md:text-lg text-slate-300 max-w-2xl mx-auto">
+            <p className="text-base md:text-lg text-slate-600 max-w-2xl mx-auto">
               We install solar. Then we stay — for 25 years. SPC is one of three platforms Bijli Bachao has built to make every kilowatt count.
             </p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-5 mb-14">
-            <div className="bg-white/5 border-2 border-solar-gold-400 rounded-sm p-7 relative">
-              <div className="absolute top-3 right-3 px-2 py-0.5 bg-solar-gold-400 text-slate-900 text-[9px] font-bold uppercase tracking-wider rounded-full">You are here</div>
+            <div className="bg-white border-2 border-solar-gold-400 rounded-sm p-7 relative shadow-md">
+              <div className="absolute top-3 right-3 px-2 py-0.5 bg-solar-gold-500 text-white text-[9px] font-bold uppercase tracking-wider rounded-full">You are here</div>
               <div className="w-10 h-10 rounded-sm bg-gradient-to-br from-solar-gold-400 to-solar-gold-600 flex items-center justify-center mb-4">
                 <Sun className="w-5 h-5 text-white" />
               </div>
-              <h3 className="text-lg font-bold text-white mb-2">Solar Performance Cloud</h3>
-              <p className="text-xs text-slate-400 leading-relaxed mb-3">Per-string solar monitoring across Huawei, Solis, Growatt, Sungrow. Pakistan&apos;s first.</p>
-              <p className="text-[11px] font-mono text-solar-gold-400">spc.bijlibachao.pk</p>
+              <h3 className="text-lg font-bold text-slate-900 mb-2">Solar Performance Cloud</h3>
+              <p className="text-xs text-slate-600 leading-relaxed mb-3">Per-string solar monitoring across Huawei, Solis, Growatt, Sungrow. Pakistan&apos;s first.</p>
+              <p className="text-[11px] font-mono text-solar-gold-700 font-bold">spc.bijlibachao.pk</p>
             </div>
 
-            <div className="bg-white/5 border border-white/10 rounded-sm p-7 hover:border-white/30 transition-colors">
-              <div className="w-10 h-10 rounded-sm bg-emerald-500 flex items-center justify-center mb-4">
+            <div className="bg-white border border-slate-200 rounded-sm p-7 hover:border-bb-green-300 hover:shadow-md transition-all">
+              <div className="w-10 h-10 rounded-sm bg-bb-green-500 flex items-center justify-center mb-4">
                 <Zap className="w-5 h-5 text-white" />
               </div>
-              <h3 className="text-lg font-bold text-white mb-2">WATTEY</h3>
-              <p className="text-xs text-slate-400 leading-relaxed mb-3">Real-time IoT energy consumption — grid, generator, solar usage, all in one dashboard.</p>
-              <p className="text-[11px] font-mono text-slate-400">wattey.bijlibachao.pk</p>
+              <h3 className="text-lg font-bold text-slate-900 mb-2">WATTEY</h3>
+              <p className="text-xs text-slate-600 leading-relaxed mb-3">Real-time IoT energy consumption — grid, generator, solar usage, all in one dashboard.</p>
+              <p className="text-[11px] font-mono text-slate-500">wattey.bijlibachao.pk</p>
             </div>
 
-            <div className="bg-white/5 border border-white/10 rounded-sm p-7 hover:border-white/30 transition-colors">
+            <div className="bg-white border border-slate-200 rounded-sm p-7 hover:border-blue-300 hover:shadow-md transition-all">
               <div className="w-10 h-10 rounded-sm bg-blue-500 flex items-center justify-center mb-4">
                 <Target className="w-5 h-5 text-white" />
               </div>
-              <h3 className="text-lg font-bold text-white mb-2">Meter Billing</h3>
-              <p className="text-xs text-slate-400 leading-relaxed mb-3">Photo-verified automated tenant billing for shopping malls and housing societies.</p>
-              <p className="text-[11px] font-mono text-slate-400">metering.wattey.bijlibachao.pk</p>
+              <h3 className="text-lg font-bold text-slate-900 mb-2">Meter Billing</h3>
+              <p className="text-xs text-slate-600 leading-relaxed mb-3">Photo-verified automated tenant billing for shopping malls and housing societies.</p>
+              <p className="text-[11px] font-mono text-slate-500">metering.wattey.bijlibachao.pk</p>
             </div>
           </div>
 
           {/* Parent brand stats */}
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-px bg-white/10 border border-white/10 rounded-sm overflow-hidden">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-px bg-slate-200 border border-slate-200 rounded-sm overflow-hidden">
             {[
               { value: '100+', label: 'Installations' },
               { value: '500+ kW', label: 'Capacity installed' },
@@ -791,17 +791,17 @@ export default function LandingPage() {
               { value: '4 cities', label: 'Across Pakistan' },
               { value: '🇦🇺', label: 'AU subsidiary' },
             ].map((item) => (
-              <div key={item.label} className="bg-slate-900 px-4 py-5 text-center">
-                <p className="text-lg md:text-xl font-bold text-white font-mono tracking-tight">{item.value}</p>
-                <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mt-1">{item.label}</p>
+              <div key={item.label} className="bg-white px-4 py-5 text-center">
+                <p className="text-lg md:text-xl font-bold text-slate-900 font-mono tracking-tight">{item.value}</p>
+                <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider mt-1">{item.label}</p>
               </div>
             ))}
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-6 mt-10 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-            <span className="flex items-center gap-1.5"><Award className="w-3.5 h-3.5" /> IEC 61724 aligned</span>
-            <span className="flex items-center gap-1.5"><Award className="w-3.5 h-3.5" /> IEC 62446-1 compliant</span>
-            <span className="flex items-center gap-1.5"><Shield className="w-3.5 h-3.5" /> Engineer-led, not sales-led</span>
+          <div className="flex flex-wrap items-center justify-center gap-6 mt-10 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
+            <span className="flex items-center gap-1.5"><Award className="w-3.5 h-3.5 text-bb-green-600" /> IEC 61724 aligned</span>
+            <span className="flex items-center gap-1.5"><Award className="w-3.5 h-3.5 text-bb-green-600" /> IEC 62446-1 compliant</span>
+            <span className="flex items-center gap-1.5"><Shield className="w-3.5 h-3.5 text-bb-green-600" /> Engineer-led, not sales-led</span>
           </div>
         </div>
       </section>
@@ -837,7 +837,7 @@ export default function LandingPage() {
               href={WHATSAPP_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="px-8 py-4 text-sm font-bold border-2 border-emerald-500 text-emerald-700 rounded-sm hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-2"
+              className="px-8 py-4 text-sm font-bold border-2 border-bb-green-500 text-bb-green-700 rounded-sm hover:bg-bb-green-500 hover:text-white transition-all flex items-center gap-2"
             >
               <MessageCircle className="w-4 h-4" />
               WhatsApp {WHATSAPP_LABEL}
@@ -845,9 +845,9 @@ export default function LandingPage() {
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-            <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-emerald-500" /> Typical response within 2 hours</span>
-            <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-emerald-500" /> Available across Pakistan</span>
-            <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5 text-emerald-500" /> Founder-led engineering</span>
+            <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-bb-green-500" /> Typical response within 2 hours</span>
+            <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-bb-green-500" /> Available across Pakistan</span>
+            <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5 text-bb-green-500" /> Founder-led engineering</span>
           </div>
         </div>
       </section>
@@ -936,82 +936,82 @@ function MiniDashboard() {
   ]
 
   const stateColor = {
-    healthy: { bar: 'bg-emerald-500', text: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-    warning: { bar: 'bg-amber-500', text: 'text-amber-400', bg: 'bg-amber-500/10' },
-    critical: { bar: 'bg-red-500', text: 'text-red-400', bg: 'bg-red-500/10' },
+    healthy: { bar: 'bg-bb-green-500', text: 'text-bb-green-700', bg: 'bg-bb-green-50', border: 'border-bb-green-200' },
+    warning: { bar: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200' },
+    critical: { bar: 'bg-red-500', text: 'text-red-700', bg: 'bg-red-50', border: 'border-red-200' },
   }
 
   return (
-    <div className="rounded-lg border border-slate-700/50 bg-slate-800/40 backdrop-blur-sm shadow-2xl overflow-hidden">
+    <div className="rounded-lg border border-slate-200 bg-white shadow-lg overflow-hidden">
       {/* Dashboard header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-5 py-3 bg-slate-900/80 border-b border-slate-700/50">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-5 py-3 bg-white border-b border-slate-200">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-7 h-7 rounded-sm bg-gradient-to-br from-solar-gold-400 to-solar-gold-600 flex items-center justify-center flex-shrink-0">
             <Sun className="w-3.5 h-3.5 text-white" />
           </div>
           <div className="min-w-0">
-            <p className="text-xs font-bold text-white truncate">Mall of Multan · Rooftop Solar</p>
-            <p className="text-[10px] text-slate-400 font-mono truncate">12.8 MW · 1,847 strings · 4 brands</p>
+            <p className="text-xs font-bold text-slate-900 truncate">Mall of Multan · Rooftop Solar</p>
+            <p className="text-[10px] text-slate-500 font-mono truncate">12.8 MW · 1,847 strings · 4 brands</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 px-2.5 py-1 bg-emerald-500/20 border border-emerald-500/30 rounded-sm self-start sm:self-auto flex-shrink-0">
-          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
-          <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-wider">Live · 5 min</span>
+        <div className="flex items-center gap-2 px-2.5 py-1 bg-bb-green-50 border border-bb-green-200 rounded-sm self-start sm:self-auto flex-shrink-0">
+          <span className="w-1.5 h-1.5 bg-bb-green-500 rounded-full animate-pulse" />
+          <span className="text-[10px] font-bold text-bb-green-700 uppercase tracking-wider">Live · 5 min</span>
         </div>
       </div>
 
       {/* Top KPI strip — 2x2 on mobile, 4 across on desktop */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-slate-700/50 border-b border-slate-700/50">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-slate-200 border-b border-slate-200">
         {[
-          { label: 'Fleet Health', value: '96%', trend: '+2.1%', color: 'text-emerald-400' },
-          { label: 'Energy Today', value: '47,283 kWh', trend: '+12% vs yest.', color: 'text-emerald-400' },
-          { label: 'Inverters Online', value: '44 / 44', trend: 'All online', color: 'text-emerald-400' },
-          { label: 'Active Alerts', value: '3', trend: '1 critical', color: 'text-red-400' },
+          { label: 'Fleet Health', value: '96%', trend: '+2.1%', color: 'text-bb-green-700' },
+          { label: 'Energy Today', value: '47,283 kWh', trend: '+12% vs yest.', color: 'text-bb-green-700' },
+          { label: 'Inverters Online', value: '44 / 44', trend: 'All online', color: 'text-bb-green-700' },
+          { label: 'Active Alerts', value: '3', trend: '1 critical', color: 'text-red-600' },
         ].map((kpi) => (
-          <div key={kpi.label} className="bg-slate-800/80 px-3 sm:px-4 py-3">
-            <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">{kpi.label}</p>
-            <p className="text-base sm:text-lg font-bold text-white font-mono tracking-tight truncate">{kpi.value}</p>
+          <div key={kpi.label} className="bg-white px-3 sm:px-4 py-3">
+            <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{kpi.label}</p>
+            <p className="text-base sm:text-lg font-bold text-slate-900 font-mono tracking-tight truncate">{kpi.value}</p>
             <p className={`text-[9px] font-bold ${kpi.color} uppercase tracking-wider`}>{kpi.trend}</p>
           </div>
         ))}
       </div>
 
       {/* Sparkline row */}
-      <div className="px-4 sm:px-5 py-4 border-b border-slate-700/50">
+      <div className="px-4 sm:px-5 py-4 border-b border-slate-200 bg-white">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-2">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">24h Fleet Power</p>
-          <p className="text-[10px] font-mono text-slate-500">Peak: <span className="text-solar-gold-400">11.2 MW @ 12:15 PKT</span></p>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">24h Fleet Power</p>
+          <p className="text-[10px] font-mono text-slate-500">Peak: <span className="text-solar-gold-700 font-bold">11.2 MW @ 12:15 PKT</span></p>
         </div>
         <Sparkline />
       </div>
 
       {/* Active alert */}
-      <div className="flex items-start gap-2.5 sm:gap-3 px-4 sm:px-5 py-3 bg-red-950/40 border-b border-red-900/30">
-        <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+      <div className="flex items-start gap-2.5 sm:gap-3 px-4 sm:px-5 py-3 bg-red-50 border-b border-red-200">
+        <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-bold text-red-300">Inverter 6 · PV7 — Critical underperformance</p>
-          <p className="text-[10px] text-red-400/80 mt-0.5 leading-relaxed">32% below peers · pattern matches <strong>tree shadow</strong> · 12 min ago</p>
+          <p className="text-xs font-bold text-red-700">Inverter 6 · PV7 — Critical underperformance</p>
+          <p className="text-[10px] text-red-600 mt-0.5 leading-relaxed">32% below peers · pattern matches <strong>tree shadow</strong> · 12 min ago</p>
         </div>
-        <button className="text-[10px] font-bold text-red-200 uppercase tracking-wider hover:text-white hidden sm:block flex-shrink-0">Diagnose →</button>
+        <button className="text-[10px] font-bold text-red-700 uppercase tracking-wider hover:text-red-900 hidden sm:block flex-shrink-0">Diagnose →</button>
       </div>
 
       {/* String grid — 4 on mobile, 6 on tablet, 12 on desktop */}
-      <div className="p-4 sm:p-5">
+      <div className="p-4 sm:p-5 bg-white">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-3">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Inverter 6 · 12 strings · Live</p>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Inverter 6 · 12 strings · Live</p>
           <p className="text-[10px] font-mono text-slate-500">Avg 8.3 A · Max 8.7 A · Fault 1</p>
         </div>
         <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-12 gap-1.5">
           {strings.map((s) => {
             const c = stateColor[s.state]
             return (
-              <div key={s.id} className={`${c.bg} rounded-sm p-2 border border-white/5`}>
-                <p className="text-[9px] font-mono font-bold text-slate-300 mb-1">{s.id}</p>
+              <div key={s.id} className={`${c.bg} rounded-sm p-2 border ${c.border}`}>
+                <p className="text-[9px] font-mono font-bold text-slate-700 mb-1">{s.id}</p>
                 <p className={`text-xs font-bold ${c.text} font-mono`}>{s.health}%</p>
-                <div className="mt-1.5 h-1 bg-slate-700/50 rounded-full overflow-hidden">
+                <div className="mt-1.5 h-1 bg-slate-200 rounded-full overflow-hidden">
                   <div className={`h-full ${c.bar}`} style={{ width: `${s.health}%` }} />
                 </div>
-                <p className="text-[8px] font-mono text-slate-400 mt-1">{s.c.toFixed(1)} A</p>
+                <p className="text-[8px] font-mono text-slate-500 mt-1">{s.c.toFixed(1)} A</p>
               </div>
             )
           })}
@@ -1051,7 +1051,7 @@ function Sparkline() {
       </defs>
       <path d={area} fill="url(#spk-fill)" />
       <path d={path} fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={peakX} cy={peakY} r="3.5" fill="#f59e0b" stroke="#0f172a" strokeWidth="1.5" />
+      <circle cx={peakX} cy={peakY} r="3.5" fill="#f59e0b" stroke="#ffffff" strokeWidth="1.5" />
     </svg>
   )
 }
@@ -1071,48 +1071,48 @@ function MiniAlertFeed() {
     { sev: 'info' as const, plant: 'Multan Hospital', pv: 'PV8', fault: 'Mild drop · Dust accumulation', time: '6 hr ago' },
   ]
   const sevStyle = {
-    critical: { bg: 'bg-red-500/15', text: 'text-red-300', dot: 'bg-red-500', label: 'CRITICAL' },
-    warning: { bg: 'bg-amber-500/15', text: 'text-amber-300', dot: 'bg-amber-500', label: 'WARNING' },
-    info: { bg: 'bg-sky-500/15', text: 'text-sky-300', dot: 'bg-sky-500', label: 'INFO' },
+    critical: { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500', label: 'CRITICAL' },
+    warning: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500', label: 'WARNING' },
+    info: { bg: 'bg-sky-50', text: 'text-sky-700', dot: 'bg-sky-500', label: 'INFO' },
   }
 
   return (
-    <div className="rounded-lg border border-slate-700/50 bg-slate-900 shadow-2xl overflow-hidden flex flex-col">
-      <div className="px-5 py-3 bg-slate-800/60 border-b border-slate-700/50 flex items-center justify-between">
+    <div className="rounded-lg border border-slate-200 bg-white shadow-md overflow-hidden flex flex-col">
+      <div className="px-5 py-3 bg-white border-b border-slate-200 flex items-center justify-between">
         <div>
-          <p className="text-xs font-bold text-white flex items-center gap-2">
-            <AlertTriangle className="w-3.5 h-3.5 text-solar-gold-400" />
+          <p className="text-xs font-bold text-slate-900 flex items-center gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 text-solar-gold-600" />
             Live Alerts
           </p>
-          <p className="text-[10px] text-slate-400 font-mono mt-0.5">Fleet-wide · 5 active</p>
+          <p className="text-[10px] text-slate-500 font-mono mt-0.5">Fleet-wide · 5 active</p>
         </div>
-        <div className="flex items-center gap-1 px-2 py-0.5 bg-red-500/20 border border-red-500/30 rounded-sm">
-          <span className="w-1 h-1 bg-red-400 rounded-full animate-pulse" />
-          <span className="text-[9px] font-bold text-red-300">1 CRITICAL</span>
+        <div className="flex items-center gap-1 px-2 py-0.5 bg-red-50 border border-red-200 rounded-sm">
+          <span className="w-1 h-1 bg-red-500 rounded-full animate-pulse" />
+          <span className="text-[9px] font-bold text-red-700">1 CRITICAL</span>
         </div>
       </div>
-      <div className="divide-y divide-slate-800 flex-1">
+      <div className="divide-y divide-slate-100 flex-1">
         {alerts.map((a, i) => {
           const s = sevStyle[a.sev]
           return (
-            <div key={i} className="px-4 sm:px-5 py-3 hover:bg-slate-800/30 transition-colors">
+            <div key={i} className="px-4 sm:px-5 py-3 hover:bg-slate-50 transition-colors">
               <div className="flex items-start gap-3">
                 <div className={`w-1 self-stretch rounded-full ${s.dot} flex-shrink-0`} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className={`text-[8px] font-bold ${s.text} ${s.bg} px-1.5 py-0.5 rounded-sm tracking-wider`}>{s.label}</span>
-                    <span className="text-xs font-bold text-white truncate">{a.plant} · {a.pv}</span>
+                    <span className="text-xs font-bold text-slate-900 truncate">{a.plant} · {a.pv}</span>
                   </div>
-                  <p className="text-[10px] text-slate-400 truncate">{a.fault}</p>
+                  <p className="text-[10px] text-slate-600 truncate">{a.fault}</p>
                 </div>
-                <span className="text-[9px] text-slate-500 font-mono flex-shrink-0 whitespace-nowrap mt-0.5">{a.time}</span>
+                <span className="text-[9px] text-slate-400 font-mono flex-shrink-0 whitespace-nowrap mt-0.5">{a.time}</span>
               </div>
             </div>
           )
         })}
       </div>
-      <div className="px-5 py-3 bg-slate-800/40 border-t border-slate-700/50 text-center">
-        <span className="text-[10px] font-bold text-solar-gold-400 uppercase tracking-wider">View all 96 alerts →</span>
+      <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 text-center">
+        <span className="text-[10px] font-bold text-solar-gold-700 uppercase tracking-wider">View all 96 alerts →</span>
       </div>
     </div>
   )
@@ -1129,45 +1129,45 @@ function MiniPlantDetail() {
   ]
 
   return (
-    <div className="rounded-lg border border-slate-700/50 bg-slate-900 shadow-2xl overflow-hidden flex flex-col">
-      <div className="px-5 py-3 bg-slate-800/60 border-b border-slate-700/50 flex items-center justify-between">
+    <div className="rounded-lg border border-slate-200 bg-white shadow-md overflow-hidden flex flex-col">
+      <div className="px-5 py-3 bg-white border-b border-slate-200 flex items-center justify-between">
         <div className="min-w-0">
-          <p className="text-xs font-bold text-white flex items-center gap-2">
-            <Activity className="w-3.5 h-3.5 text-solar-gold-400" />
+          <p className="text-xs font-bold text-slate-900 flex items-center gap-2">
+            <Activity className="w-3.5 h-3.5 text-solar-gold-600" />
             Faisalabad Mill
           </p>
-          <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">850 kW · 8 inv · 48 strings</p>
+          <p className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">850 kW · 8 inv · 48 strings</p>
         </div>
-        <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-500/20 border border-emerald-500/30 rounded-sm flex-shrink-0">
-          <span className="w-1 h-1 bg-emerald-400 rounded-full animate-pulse" />
-          <span className="text-[9px] font-bold text-emerald-300">LIVE</span>
+        <div className="flex items-center gap-1 px-2 py-0.5 bg-bb-green-50 border border-bb-green-200 rounded-sm flex-shrink-0">
+          <span className="w-1 h-1 bg-bb-green-500 rounded-full animate-pulse" />
+          <span className="text-[9px] font-bold text-bb-green-700">LIVE</span>
         </div>
       </div>
 
-      <div className="px-5 py-5 border-b border-slate-800 text-center">
-        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">Plant Health</p>
-        <p className="text-5xl font-bold text-emerald-400 font-mono tracking-tight leading-none">89<span className="text-2xl">%</span></p>
-        <p className="text-[10px] text-emerald-500/80 font-mono mt-2">+1.2% vs yesterday</p>
+      <div className="px-5 py-5 border-b border-slate-200 text-center bg-gradient-to-b from-bb-green-50/50 to-white">
+        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-2">Plant Health</p>
+        <p className="text-5xl font-bold text-bb-green-600 font-mono tracking-tight leading-none">89<span className="text-2xl">%</span></p>
+        <p className="text-[10px] text-bb-green-700 font-mono mt-2 font-semibold">+1.2% vs yesterday</p>
       </div>
 
-      <div className="px-5 py-3 border-b border-slate-800">
+      <div className="px-5 py-3 border-b border-slate-200 bg-white">
         <div className="flex items-center justify-between mb-1">
-          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">24h power</p>
-          <p className="text-[9px] font-mono text-slate-500">Peak <span className="text-solar-gold-400">712 kW</span></p>
+          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">24h power</p>
+          <p className="text-[9px] font-mono text-slate-500">Peak <span className="text-solar-gold-700 font-bold">712 kW</span></p>
         </div>
         <MiniSparkline />
       </div>
 
-      <div className="p-5 flex-1">
-        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-3">Inverter 3 · Top 6 strings</p>
+      <div className="p-5 flex-1 bg-white">
+        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-3">Inverter 3 · Top 6 strings</p>
         <div className="space-y-2">
           {strings.map((s) => (
             <div key={s.id} className="flex items-center gap-2">
-              <span className="text-[10px] font-mono font-bold text-slate-300 w-8 flex-shrink-0">{s.id}</span>
-              <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${s.pct}%` }} />
+              <span className="text-[10px] font-mono font-bold text-slate-700 w-8 flex-shrink-0">{s.id}</span>
+              <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full bg-bb-green-500 rounded-full" style={{ width: `${s.pct}%` }} />
               </div>
-              <span className="text-[10px] font-mono font-bold text-emerald-400 w-8 text-right flex-shrink-0">{s.pct}%</span>
+              <span className="text-[10px] font-mono font-bold text-bb-green-700 w-8 text-right flex-shrink-0">{s.pct}%</span>
             </div>
           ))}
         </div>
@@ -1210,34 +1210,34 @@ function MiniHeatmap() {
   ]
 
   const heatColor = (v: number) => {
-    if (v >= HEALTH_HEALTHY) return '#10b981' // emerald-500 — healthy
-    if (v >= HEALTH_CAUTION) return '#34d399' // emerald-400 — mostly healthy
+    if (v >= HEALTH_HEALTHY) return '#76B900' // bb-green-500 — healthy (NVIDIA green, landing-only signal)
+    if (v >= HEALTH_CAUTION) return '#9BD42E' // bb-green-400 — mostly healthy
     if (v >= HEALTH_WARNING) return '#fbbf24' // amber-400 — warning band
     if (v >= HEALTH_SEVERE) return '#f59e0b' // solar-gold-500 — severe
     return '#ef4444' // red-500 — critical
   }
 
   return (
-    <div className="rounded-lg border border-slate-700/50 bg-slate-900 shadow-2xl overflow-hidden flex flex-col">
-      <div className="px-5 py-3 bg-slate-800/60 border-b border-slate-700/50 flex items-center justify-between">
+    <div className="rounded-lg border border-slate-200 bg-white shadow-md overflow-hidden flex flex-col">
+      <div className="px-5 py-3 bg-white border-b border-slate-200 flex items-center justify-between">
         <div className="min-w-0">
-          <p className="text-xs font-bold text-white flex items-center gap-2">
-            <BarChart3 className="w-3.5 h-3.5 text-solar-gold-400" />
+          <p className="text-xs font-bold text-slate-900 flex items-center gap-2">
+            <BarChart3 className="w-3.5 h-3.5 text-solar-gold-600" />
             Health Heatmap · 7d
           </p>
-          <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">Mall of Multan · Inverter 6</p>
+          <p className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">Mall of Multan · Inverter 6</p>
         </div>
-        <div className="flex items-center gap-1 px-2 py-0.5 bg-red-500/20 border border-red-500/30 rounded-sm flex-shrink-0">
-          <AlertTriangle className="w-2.5 h-2.5 text-red-400" />
-          <span className="text-[9px] font-bold text-red-300">1 declining</span>
+        <div className="flex items-center gap-1 px-2 py-0.5 bg-red-50 border border-red-200 rounded-sm flex-shrink-0">
+          <AlertTriangle className="w-2.5 h-2.5 text-red-600" />
+          <span className="text-[9px] font-bold text-red-700">1 declining</span>
         </div>
       </div>
 
-      <div className="p-4 sm:p-5 flex-1">
+      <div className="p-4 sm:p-5 flex-1 bg-white">
         {/* Day header */}
         <div className="flex items-center gap-1 mb-2 pl-10">
           {days.map((d) => (
-            <span key={d} className="text-[8px] font-mono text-slate-500 flex-1 text-center uppercase tracking-wider">{d}</span>
+            <span key={d} className="text-[8px] font-mono text-slate-400 flex-1 text-center uppercase tracking-wider">{d}</span>
           ))}
         </div>
 
@@ -1245,12 +1245,12 @@ function MiniHeatmap() {
         <div className="space-y-1">
           {rows.map((row) => (
             <div key={row.id} className="flex items-center gap-1">
-              <span className={`text-[10px] font-mono font-bold w-9 flex-shrink-0 ${row.id === 'PV7' ? 'text-red-400' : 'text-slate-300'}`}>{row.id}</span>
+              <span className={`text-[10px] font-mono font-bold w-9 flex-shrink-0 ${row.id === 'PV7' ? 'text-red-600' : 'text-slate-700'}`}>{row.id}</span>
               {row.vals.map((v, i) => (
                 <div
                   key={i}
                   title={`${v}% health`}
-                  className="flex-1 h-6 rounded-[2px] ring-1 ring-slate-800/40"
+                  className="flex-1 h-6 rounded-[2px] ring-1 ring-slate-200"
                   style={{ backgroundColor: heatColor(v) }}
                 />
               ))}
@@ -1259,7 +1259,7 @@ function MiniHeatmap() {
         </div>
 
         {/* Legend */}
-        <div className="mt-4 pt-3 border-t border-slate-800 flex items-center gap-2">
+        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-2">
           <span className="text-[9px] text-slate-500 font-mono">Poor</span>
           <div className="flex h-1.5 flex-1 gap-0.5">
             {[15, 35, 55, 75, 95].map((v) => (
@@ -1270,9 +1270,9 @@ function MiniHeatmap() {
         </div>
 
         {/* Annotation */}
-        <div className="mt-3 flex items-start gap-2 p-2.5 bg-red-950/50 border border-red-900/40 rounded-sm">
-          <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" />
-          <p className="text-[10px] text-red-300 leading-relaxed">
+        <div className="mt-3 flex items-start gap-2 p-2.5 bg-red-50 border border-red-200 rounded-sm">
+          <AlertTriangle className="w-3.5 h-3.5 text-red-600 flex-shrink-0 mt-0.5" />
+          <p className="text-[10px] text-red-700 leading-relaxed">
             <strong className="font-mono">PV7</strong> declining 3 days running · auto-classified: <strong>tree shadow</strong>
           </p>
         </div>

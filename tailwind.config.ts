@@ -37,6 +37,25 @@ const config: Config = {
           900: '#78350F',
         },
 
+        // ━━━ BB-GREEN — LANDING PAGE ONLY (secondary signal) ━━━
+        // Scope: app/page.tsx ONLY per DESIGN.md §2.9.
+        // Never used on dashboard/admin — validator 5.6 blocks #76b900
+        // in app/dashboard/ + components/shared/.
+        // Rule: signal colour (live dots, producing, healthy accents),
+        // never a button fill. Solar-gold remains the brand / CTA colour.
+        'bb-green': {
+          DEFAULT: '#76B900',
+          50: '#F5FBE5',
+          100: '#E7F5BF',
+          200: '#CFEA7E',
+          400: '#9BD42E',
+          500: '#76B900',
+          600: '#5F9400',
+          700: '#4B7500',
+          800: '#375700',
+          900: '#273D00',
+        },
+
         // ━━━ SPC namespace alias — backward-compat ━━━━━━━━━━
         // Legacy class names (bg-spc-green, text-spc-green-dark) still work —
         // they now render as Solar Gold. Gradual migration; new code should

@@ -161,6 +161,32 @@ SPC uses shadows sparingly — borders carry most hierarchy. Shadows are reserve
 
 ---
 
+### 2.9 Landing-Page Exception — Dual Accent (bb-green)
+
+**Scope: `app/page.tsx` ONLY.** Every other file (dashboard, admin, auth, components/shared) continues to follow the single-brand rule in §2.1 (solar-gold is the *only* brand accent).
+
+The public landing page is allowed a **secondary signal colour** — `bb-green` (`#76B900`) — for energetic "alive" indicators alongside solar-gold. Rationale: the landing must convert cold traffic in a market where NVIDIA-green reads as "technical / electric / active" (Pakistani B2B). The product itself does not need a second accent because signed-in users already know they're in.
+
+| Token | Hex | Usage on landing |
+|---|---|---|
+| `bb-green-50` | `#F5FBE5` | Subtle tint — success-state row hover, healthy-cell background |
+| `bb-green-100` | `#E7F5BF` | Soft surface — live-badge background |
+| `bb-green-400` | `#9BD42E` | Progress-bar fill (healthy band) |
+| **`bb-green-500`** | **`#76B900`** | **PRIMARY SIGNAL — live pulse dots, "producing" indicators, heatmap healthy cells, trust-check icons** |
+| `bb-green-600` | `#5F9400` | Hover on green interactive elements, dark text on pale green |
+| `bb-green-700` | `#4B7500` | Bold accent text on bb-green-50 |
+
+**Rules of the exception:**
+
+1. **Solar-gold is still the CTA colour.** Every "Book Site Visit / Sign In / Get Started" button on the landing is solar-gold. Green is *never* a button fill — it's signal only (per Bijli Bachao parent-brand discipline).
+2. **Green means "alive / producing / healthy."** Live pulse dots, "44 of 48 producing" stats, healthy heatmap cells, trust-check icons. Nothing else.
+3. **Strictly scoped.** `bb-green-*` Tailwind classes must not appear outside `app/page.tsx`. The validator (check 5.6) enforces this for `app/dashboard/` and `components/shared/`.
+4. **Pull-away strategy.** If future marketing expands this to `app/(marketing)/*`, update this section — never silently.
+
+**Why this is still one brand:** solar-gold remains the *brand*. Green is a *signal colour* (like emerald in the status system). A visitor's mental model: "gold = SPC", "green = alive / healthy". Consistent with the semantic colour discipline of §2.4.
+
+---
+
 ## 3. Typography
 
 ### 3.1 Fonts
