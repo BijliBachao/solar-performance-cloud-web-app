@@ -13,6 +13,10 @@ const isPublicRoute = createRouteMatcher([
   '/api/sentry-test',
   // Sentry's /monitoring tunnel for client-side event delivery.
   '/monitoring(.*)',
+  // Next.js auto-generated social-preview images — must be reachable
+  // by WhatsApp / LinkedIn / Slack / Twitter link-preview bots.
+  '/opengraph-image(.*)',
+  '/twitter-image(.*)',
 ])
 
 const isAdminRoute = createRouteMatcher(['/admin(.*)'])
