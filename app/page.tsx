@@ -10,6 +10,9 @@ import {
   ArrowUpRight, Zap, Clock, Target, Users, MapPin, Award,
   Factory, Building2, Home, HeartPulse, Network, Gauge,
 } from 'lucide-react'
+import {
+  HEALTH_HEALTHY, HEALTH_CAUTION, HEALTH_WARNING, HEALTH_SEVERE,
+} from '@/lib/string-health'
 
 const WHATSAPP_URL = 'https://wa.me/923234578775'
 const WHATSAPP_LABEL = '+92 323 457 8775'
@@ -400,8 +403,34 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ══ PRODUCT TOUR — 3 MINI-DASHBOARDS ═════════════════════════ */}
+      <section className="py-24 px-6 bg-white">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-14">
+            <p className="text-[10px] font-bold text-solar-gold-600 uppercase tracking-widest mb-4">More Views, More Control</p>
+            <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-slate-900 mb-4">
+              Same data. <span className="text-solar-gold-600">Different lenses.</span>
+            </h2>
+            <p className="text-base text-slate-600 max-w-2xl mx-auto">
+              Jump between alert stream, plant detail, and time-based history — all live, all linked. Follow one fault from the moment it fires to the day it resolves.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <MiniAlertFeed />
+            <MiniPlantDetail />
+            <MiniHeatmap />
+          </div>
+
+          <div className="flex items-center justify-center gap-2 mt-8 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+            <Eye className="w-3.5 h-3.5" />
+            Follow the story · PV7 appears in all three — fault → drill-down → 7-day history
+          </div>
+        </div>
+      </section>
+
       {/* ══ CAPABILITIES ═════════════════════════════════════════════ */}
-      <section className="py-24 px-6">
+      <section className="py-24 px-6 bg-slate-50">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-14">
             <p className="text-[10px] font-bold text-solar-gold-600 uppercase tracking-widest mb-4">Capabilities</p>
@@ -1024,5 +1053,230 @@ function Sparkline() {
       <path d={path} fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       <circle cx={peakX} cy={peakY} r="3.5" fill="#f59e0b" stroke="#0f172a" strokeWidth="1.5" />
     </svg>
+  )
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// PRODUCT-TOUR MINI DASHBOARDS (§5.5) — all representative data.
+// Story thread: PV7 on Mall of Multan is flagged critical across all
+// three — alert feed (top row) → plant detail → 7-day heatmap history.
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function MiniAlertFeed() {
+  const alerts = [
+    { sev: 'critical' as const, plant: 'Mall of Multan', pv: 'PV7', fault: '32% below peers · Tree shadow', time: '12 min ago' },
+    { sev: 'warning' as const, plant: 'Faisalabad Mill', pv: 'PV23', fault: 'Intermittent availability · Loose cable', time: '38 min ago' },
+    { sev: 'warning' as const, plant: 'Lahore Society', pv: 'PV12', fault: '18% below peers · Partial shading', time: '2 hr ago' },
+    { sev: 'info' as const, plant: 'Karachi Factory', pv: 'PV41', fault: 'Gradual decline · Dirty panels', time: '4 hr ago' },
+    { sev: 'info' as const, plant: 'Multan Hospital', pv: 'PV8', fault: 'Mild drop · Dust accumulation', time: '6 hr ago' },
+  ]
+  const sevStyle = {
+    critical: { bg: 'bg-red-500/15', text: 'text-red-300', dot: 'bg-red-500', label: 'CRITICAL' },
+    warning: { bg: 'bg-amber-500/15', text: 'text-amber-300', dot: 'bg-amber-500', label: 'WARNING' },
+    info: { bg: 'bg-sky-500/15', text: 'text-sky-300', dot: 'bg-sky-500', label: 'INFO' },
+  }
+
+  return (
+    <div className="rounded-lg border border-slate-700/50 bg-slate-900 shadow-2xl overflow-hidden flex flex-col">
+      <div className="px-5 py-3 bg-slate-800/60 border-b border-slate-700/50 flex items-center justify-between">
+        <div>
+          <p className="text-xs font-bold text-white flex items-center gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 text-solar-gold-400" />
+            Live Alerts
+          </p>
+          <p className="text-[10px] text-slate-400 font-mono mt-0.5">Fleet-wide · 5 active</p>
+        </div>
+        <div className="flex items-center gap-1 px-2 py-0.5 bg-red-500/20 border border-red-500/30 rounded-sm">
+          <span className="w-1 h-1 bg-red-400 rounded-full animate-pulse" />
+          <span className="text-[9px] font-bold text-red-300">1 CRITICAL</span>
+        </div>
+      </div>
+      <div className="divide-y divide-slate-800 flex-1">
+        {alerts.map((a, i) => {
+          const s = sevStyle[a.sev]
+          return (
+            <div key={i} className="px-4 sm:px-5 py-3 hover:bg-slate-800/30 transition-colors">
+              <div className="flex items-start gap-3">
+                <div className={`w-1 self-stretch rounded-full ${s.dot} flex-shrink-0`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className={`text-[8px] font-bold ${s.text} ${s.bg} px-1.5 py-0.5 rounded-sm tracking-wider`}>{s.label}</span>
+                    <span className="text-xs font-bold text-white truncate">{a.plant} · {a.pv}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 truncate">{a.fault}</p>
+                </div>
+                <span className="text-[9px] text-slate-500 font-mono flex-shrink-0 whitespace-nowrap mt-0.5">{a.time}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div className="px-5 py-3 bg-slate-800/40 border-t border-slate-700/50 text-center">
+        <span className="text-[10px] font-bold text-solar-gold-400 uppercase tracking-wider">View all 96 alerts →</span>
+      </div>
+    </div>
+  )
+}
+
+function MiniPlantDetail() {
+  const strings = [
+    { id: 'PV1', pct: 97, state: 'healthy' as const },
+    { id: 'PV2', pct: 94, state: 'healthy' as const },
+    { id: 'PV3', pct: 92, state: 'healthy' as const },
+    { id: 'PV4', pct: 90, state: 'healthy' as const },
+    { id: 'PV5', pct: 89, state: 'healthy' as const },
+    { id: 'PV6', pct: 86, state: 'healthy' as const },
+  ]
+
+  return (
+    <div className="rounded-lg border border-slate-700/50 bg-slate-900 shadow-2xl overflow-hidden flex flex-col">
+      <div className="px-5 py-3 bg-slate-800/60 border-b border-slate-700/50 flex items-center justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-bold text-white flex items-center gap-2">
+            <Activity className="w-3.5 h-3.5 text-solar-gold-400" />
+            Faisalabad Mill
+          </p>
+          <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">850 kW · 8 inv · 48 strings</p>
+        </div>
+        <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-500/20 border border-emerald-500/30 rounded-sm flex-shrink-0">
+          <span className="w-1 h-1 bg-emerald-400 rounded-full animate-pulse" />
+          <span className="text-[9px] font-bold text-emerald-300">LIVE</span>
+        </div>
+      </div>
+
+      <div className="px-5 py-5 border-b border-slate-800 text-center">
+        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">Plant Health</p>
+        <p className="text-5xl font-bold text-emerald-400 font-mono tracking-tight leading-none">89<span className="text-2xl">%</span></p>
+        <p className="text-[10px] text-emerald-500/80 font-mono mt-2">+1.2% vs yesterday</p>
+      </div>
+
+      <div className="px-5 py-3 border-b border-slate-800">
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">24h power</p>
+          <p className="text-[9px] font-mono text-slate-500">Peak <span className="text-solar-gold-400">712 kW</span></p>
+        </div>
+        <MiniSparkline />
+      </div>
+
+      <div className="p-5 flex-1">
+        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-3">Inverter 3 · Top 6 strings</p>
+        <div className="space-y-2">
+          {strings.map((s) => (
+            <div key={s.id} className="flex items-center gap-2">
+              <span className="text-[10px] font-mono font-bold text-slate-300 w-8 flex-shrink-0">{s.id}</span>
+              <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${s.pct}%` }} />
+              </div>
+              <span className="text-[10px] font-mono font-bold text-emerald-400 w-8 text-right flex-shrink-0">{s.pct}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MiniSparkline() {
+  // Smaller version of the main sparkline
+  const pts = [0, 0.05, 0.15, 0.35, 0.6, 0.82, 0.95, 1.0, 0.97, 0.9, 0.75, 0.55, 0.3, 0.1, 0, 0]
+  const W = 400, H = 40
+  const stepX = W / (pts.length - 1)
+  const path = pts.map((v, i) => `${i === 0 ? 'M' : 'L'} ${i * stepX} ${H - v * (H - 4) - 2}`).join(' ')
+  const area = `${path} L ${W} ${H} L 0 ${H} Z`
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-8" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="mini-spk-fill" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.4" />
+          <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill="url(#mini-spk-fill)" />
+      <path d={path} fill="none" stroke="#f59e0b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function MiniHeatmap() {
+  // 6 strings × 7 days. PV7 declines over the last 3 days (story thread).
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  const rows = [
+    { id: 'PV5', vals: [95, 96, 94, 97, 95, 96, 94] },
+    { id: 'PV6', vals: [93, 94, 93, 95, 94, 93, 92] },
+    { id: 'PV7', vals: [94, 95, 93, 82, 58, 34, 23] },  // THE STORY
+    { id: 'PV8', vals: [92, 93, 91, 94, 93, 92, 91] },
+    { id: 'PV9', vals: [96, 94, 95, 93, 96, 95, 94] },
+    { id: 'PV10', vals: [88, 90, 89, 91, 90, 89, 87] },
+  ]
+
+  const heatColor = (v: number) => {
+    if (v >= HEALTH_HEALTHY) return '#10b981' // emerald-500 — healthy
+    if (v >= HEALTH_CAUTION) return '#34d399' // emerald-400 — mostly healthy
+    if (v >= HEALTH_WARNING) return '#fbbf24' // amber-400 — warning band
+    if (v >= HEALTH_SEVERE) return '#f59e0b' // solar-gold-500 — severe
+    return '#ef4444' // red-500 — critical
+  }
+
+  return (
+    <div className="rounded-lg border border-slate-700/50 bg-slate-900 shadow-2xl overflow-hidden flex flex-col">
+      <div className="px-5 py-3 bg-slate-800/60 border-b border-slate-700/50 flex items-center justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-bold text-white flex items-center gap-2">
+            <BarChart3 className="w-3.5 h-3.5 text-solar-gold-400" />
+            Health Heatmap · 7d
+          </p>
+          <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">Mall of Multan · Inverter 6</p>
+        </div>
+        <div className="flex items-center gap-1 px-2 py-0.5 bg-red-500/20 border border-red-500/30 rounded-sm flex-shrink-0">
+          <AlertTriangle className="w-2.5 h-2.5 text-red-400" />
+          <span className="text-[9px] font-bold text-red-300">1 declining</span>
+        </div>
+      </div>
+
+      <div className="p-4 sm:p-5 flex-1">
+        {/* Day header */}
+        <div className="flex items-center gap-1 mb-2 pl-10">
+          {days.map((d) => (
+            <span key={d} className="text-[8px] font-mono text-slate-500 flex-1 text-center uppercase tracking-wider">{d}</span>
+          ))}
+        </div>
+
+        {/* Rows */}
+        <div className="space-y-1">
+          {rows.map((row) => (
+            <div key={row.id} className="flex items-center gap-1">
+              <span className={`text-[10px] font-mono font-bold w-9 flex-shrink-0 ${row.id === 'PV7' ? 'text-red-400' : 'text-slate-300'}`}>{row.id}</span>
+              {row.vals.map((v, i) => (
+                <div
+                  key={i}
+                  title={`${v}% health`}
+                  className="flex-1 h-6 rounded-[2px] ring-1 ring-slate-800/40"
+                  style={{ backgroundColor: heatColor(v) }}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* Legend */}
+        <div className="mt-4 pt-3 border-t border-slate-800 flex items-center gap-2">
+          <span className="text-[9px] text-slate-500 font-mono">Poor</span>
+          <div className="flex h-1.5 flex-1 gap-0.5">
+            {[15, 35, 55, 75, 95].map((v) => (
+              <div key={v} className="flex-1 rounded-[1px]" style={{ backgroundColor: heatColor(v) }} />
+            ))}
+          </div>
+          <span className="text-[9px] text-slate-500 font-mono">Perfect</span>
+        </div>
+
+        {/* Annotation */}
+        <div className="mt-3 flex items-start gap-2 p-2.5 bg-red-950/50 border border-red-900/40 rounded-sm">
+          <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" />
+          <p className="text-[10px] text-red-300 leading-relaxed">
+            <strong className="font-mono">PV7</strong> declining 3 days running · auto-classified: <strong>tree shadow</strong>
+          </p>
+        </div>
+      </div>
+    </div>
   )
 }
