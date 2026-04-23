@@ -61,10 +61,10 @@ export default function LandingPage() {
     // Continue to landing page
   } else if (!isLoaded || redirecting) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
+      <div className="min-h-screen flex items-center justify-center bg-warm-cream">
         <div className="flex items-center gap-3">
-          <div className="w-5 h-5 border-2 border-solar-gold-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm font-semibold text-slate-600">
+          <div className="w-5 h-5 border-2 border-bb-green-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm font-semibold text-warm-muted">
             {!isLoaded ? 'Initializing...' : 'Redirecting to dashboard...'}
           </span>
         </div>
