@@ -5,10 +5,14 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@clerk/nextjs'
 import Link from 'next/link'
 import {
-  Sun, BarChart3, Bell, ArrowRight, Zap, Activity,
-  AlertTriangle, Check, Eye, TrendingUp, Shield, Clock,
-  Cpu, ChevronRight, Layers, Radio,
+  Sun, BarChart3, ArrowRight, Activity, AlertTriangle, Eye,
+  TrendingUp, Shield, Layers, MessageCircle, CheckCircle2,
+  ArrowUpRight, Zap, Clock, Target, Users, MapPin, Award,
+  Factory, Building2, Home, HeartPulse, Network, Gauge,
 } from 'lucide-react'
+
+const WHATSAPP_URL = 'https://wa.me/923234578775'
+const WHATSAPP_LABEL = '+92 323 457 8775'
 
 export default function LandingPage() {
   const router = useRouter()
@@ -54,10 +58,10 @@ export default function LandingPage() {
     // Continue to landing page
   } else if (!isLoaded || redirecting) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="flex items-center gap-3">
-          <div className="w-5 h-5 border-2 border-[#76b900] border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm font-semibold text-[#a7a7a7]">
+          <div className="w-5 h-5 border-2 border-solar-gold-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm font-semibold text-slate-600">
             {!isLoaded ? 'Initializing...' : 'Redirecting to dashboard...'}
           </span>
         </div>
@@ -66,39 +70,41 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      {/* ── Navigation ─────────────────────────────────────────────── */}
-      <nav className="fixed top-0 w-full bg-black/90 backdrop-blur-sm border-b border-[#333] z-50">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="flex justify-between h-14 items-center">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-sm bg-[#76b900]/20 flex items-center justify-center">
-                <Sun className="w-4 h-4 text-[#76b900]" />
+    <div className="min-h-screen bg-white text-slate-900 antialiased">
+      {/* ══ NAVIGATION ══════════════════════════════════════════════ */}
+      <nav className="fixed top-0 w-full bg-white/95 backdrop-blur-md border-b border-slate-200 z-50">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="flex justify-between h-16 items-center">
+            <Link href="/" className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-sm bg-gradient-to-br from-solar-gold-400 to-solar-gold-600 flex items-center justify-center shadow-sm">
+                <Sun className="w-5 h-5 text-white" />
               </div>
-              <div>
-                <span className="text-xs md:text-sm font-bold text-white whitespace-nowrap">Solar Performance Cloud</span>
+              <div className="flex flex-col leading-tight">
+                <span className="text-sm font-bold text-slate-900 whitespace-nowrap">Solar Performance Cloud</span>
+                <span className="text-[9px] font-semibold text-slate-500 tracking-wider uppercase">by BijliBachao.pk</span>
               </div>
+            </Link>
+
+            <div className="hidden md:flex items-center gap-5 lg:gap-8">
+              <a href="#demo" className="text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors">Demo</a>
+              <a href="#how-it-works" className="text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors">How It Works</a>
+              <a href="#founder" className="text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors">Founder</a>
+              <a href="#parent" className="text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors">Bijli Bachao</a>
             </div>
 
-            <div className="hidden md:flex items-center gap-8">
-              <a href="#features" className="text-xs font-semibold text-[#a7a7a7] hover:text-white transition-colors">Features</a>
-              <a href="#how-it-works" className="text-xs font-semibold text-[#a7a7a7] hover:text-white transition-colors">How It Works</a>
-              <a href="#faults" className="text-xs font-semibold text-[#a7a7a7] hover:text-white transition-colors">Fault Detection</a>
-            </div>
-
-            <div className="flex items-center gap-2 md:gap-3">
+            <div className="flex items-center gap-3">
               {isSignedIn ? (
-                <Link href="/auth-redirect" className="px-3 md:px-4 py-1.5 text-[10px] md:text-xs font-bold border-2 border-[#76b900] text-[#76b900] rounded-sm hover:bg-[#76b900] hover:text-white transition-colors">
-                  Dashboard
+                <Link href="/auth-redirect" className="px-4 py-2 text-xs font-bold bg-solar-gold-500 text-white rounded-sm hover:bg-solar-gold-600 transition-colors">
+                  Go to Dashboard →
                 </Link>
               ) : (
                 <>
-                  <Link href="/sign-in" className="hidden sm:inline text-xs font-semibold text-[#a7a7a7] hover:text-white transition-colors">
+                  <Link href="/sign-in" className="hidden sm:inline text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors">
                     Sign In
                   </Link>
-                  <Link href="/sign-up" className="px-3 md:px-4 py-1.5 text-[10px] md:text-xs font-bold border-2 border-[#76b900] text-[#76b900] rounded-sm hover:bg-[#76b900] hover:text-white transition-colors whitespace-nowrap">
-                    Get Started
-                  </Link>
+                  <a href="#cta" className="px-4 py-2 text-xs font-bold bg-solar-gold-500 text-white rounded-sm hover:bg-solar-gold-600 transition-colors whitespace-nowrap shadow-sm hover:shadow-md">
+                    Book Free Site Visit
+                  </a>
                 </>
               )}
             </div>
@@ -106,136 +112,107 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* ── Hero ───────────────────────────────────────────────────── */}
-      <section className="pt-28 pb-20 px-6">
-        <div className="max-w-5xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1 border border-[#76b900]/30 rounded-sm text-[#76b900] text-[10px] font-bold uppercase tracking-wider mb-8">
-            <span className="w-1.5 h-1.5 bg-[#76b900] rounded-full animate-pulse" />
-            IEC 61724 Aligned Monitoring
+      {/* ══ HERO ════════════════════════════════════════════════════ */}
+      <section className="relative pt-36 pb-24 px-6 overflow-hidden">
+        {/* Subtle gold radial gradient background */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 -z-10"
+          style={{
+            background:
+              'radial-gradient(1200px circle at 50% -10%, rgba(245,158,11,0.12), transparent 60%), radial-gradient(900px circle at 80% 40%, rgba(251,191,36,0.08), transparent 50%)',
+          }}
+        />
+
+        <div className="max-w-6xl mx-auto text-center">
+          <div className="inline-flex items-center gap-2 px-3 md:px-4 py-1.5 border border-solar-gold-200 bg-solar-gold-50 rounded-full text-solar-gold-800 text-[9px] md:text-[10px] font-bold uppercase tracking-wider md:tracking-widest mb-8 shadow-sm max-w-[95vw] text-center">
+            <span className="w-1.5 h-1.5 bg-solar-gold-500 rounded-full flex-shrink-0" />
+            <span>A Product of Bijli Bachao <span className="hidden sm:inline">· Pakistan&apos;s First String-Level Monitoring</span></span>
           </div>
 
-          <h1 className="text-4xl md:text-5xl lg:text-[56px] font-bold leading-[1.15] mb-6 tracking-tight">
+          <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold leading-[1.05] mb-8 tracking-tight text-slate-900">
             Detect underperforming strings
-            <br />
-            <span className="text-[#76b900]">before they cost you money.</span>
+            <br className="hidden md:block" />
+            <span className="text-solar-gold-600"> before they cost you money.</span>
           </h1>
 
-          <p className="text-base md:text-lg text-[#a7a7a7] mb-10 max-w-2xl mx-auto leading-relaxed">
-            Real-time PV string-level monitoring across Huawei, Solis, Growatt, and Sungrow inverters.
-            No hardware required. Data syncs every 5 minutes.
+          <p className="text-lg md:text-xl text-slate-600 mb-10 max-w-3xl mx-auto leading-relaxed">
+            Our engineers install a compact monitoring device at your plant —
+            live string-level data every 5 minutes, fault diagnosis in seconds,
+            no guesswork, no downtime surprises.
           </p>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
-            <Link
-              href="/sign-up"
-              className="px-6 py-2.5 text-sm font-bold border-2 border-[#76b900] text-white bg-[#76b900] rounded-sm hover:bg-[#5a8f00] hover:border-[#5a8f00] transition-colors flex items-center gap-2"
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
+            <a
+              href="#cta"
+              className="group px-8 py-4 text-sm font-bold bg-solar-gold-500 text-white rounded-sm hover:bg-solar-gold-600 transition-all flex items-center gap-2 shadow-lg shadow-solar-gold-500/20 hover:shadow-xl hover:shadow-solar-gold-500/30 hover:-translate-y-0.5"
             >
-              Start Monitoring <ArrowRight className="w-4 h-4" />
-            </Link>
-            <Link
-              href="/sign-in"
-              className="px-6 py-2.5 text-sm font-bold border-2 border-[#5e5e5e] text-[#a7a7a7] rounded-sm hover:border-white hover:text-white transition-colors"
+              Book a Free Site Visit
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </a>
+            <a
+              href={WHATSAPP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-6 sm:px-8 py-4 text-sm font-bold border-2 border-emerald-500 text-emerald-700 rounded-sm hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-2"
             >
-              Sign In
-            </Link>
+              <MessageCircle className="w-4 h-4" />
+              WhatsApp {WHATSAPP_LABEL}
+            </a>
           </div>
 
-          {/* Stats bar */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-[#333] rounded-sm overflow-hidden max-w-3xl mx-auto">
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> No commitment</span>
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Engineer-installed</span>
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> IEC 61724 aligned</span>
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> 14+ years in Pakistan</span>
+          </div>
+        </div>
+      </section>
+
+      {/* ══ THREE PILLARS ════════════════════════════════════════════ */}
+      <section className="py-20 px-6 border-t border-slate-100">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-14">
+            <p className="text-[10px] font-bold text-solar-gold-600 uppercase tracking-widest mb-4">Why SPC</p>
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-slate-900 max-w-3xl mx-auto">
+              Three reasons every commercial solar operator in Pakistan should care.
+            </h2>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-5">
             {[
-              { value: '41', label: 'Plants Monitored' },
-              { value: '46', label: 'Inverters Connected' },
-              { value: '245', label: 'Active PV Strings' },
-              { value: '5 min', label: 'Data Sync Interval' },
-            ].map((stat) => (
-              <div key={stat.label} className="bg-[#1a1a1a] px-6 py-4 text-center">
-                <p className="text-2xl font-bold text-white">{stat.value}</p>
-                <p className="text-[10px] font-semibold text-[#898989] uppercase tracking-wider mt-1">{stat.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Brands ─────────────────────────────────────────────────── */}
-      <section className="py-12 border-y border-[#333]">
-        <div className="max-w-5xl mx-auto px-6">
-          <p className="text-center text-[10px] font-bold text-[#898989] uppercase tracking-widest mb-6">
-            Works with your existing inverters
-          </p>
-          <div className="flex items-center justify-center gap-12 md:gap-20">
-            {['Huawei', 'Solis', 'Growatt', 'Sungrow'].map((brand) => (
-              <span key={brand} className="text-lg md:text-xl font-bold text-[#5e5e5e]">
-                {brand}
-              </span>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Zero Hardware ──────────────────────────────────────────── */}
-      <section className="py-20 px-6">
-        <div className="max-w-5xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1 border border-[#5e5e5e] rounded-sm text-[#898989] text-[10px] font-bold uppercase tracking-wider mb-6">
-            Zero Hardware Required
-          </div>
-          <h2 className="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
-            No sensors. No gateways. No wiring.
-          </h2>
-          <p className="text-base text-[#a7a7a7] max-w-2xl mx-auto leading-relaxed">
-            Your inverters are already collecting string-level data and uploading it to the cloud.
-            We connect to their APIs directly — Huawei FusionSolar, SolisCloud, Growatt OpenAPI, and Sungrow iSolarCloud.
-            Setup takes minutes, not days.
-          </p>
-        </div>
-      </section>
-
-      {/* ── Features ───────────────────────────────────────────────── */}
-      <section id="features" className="py-20 px-6 bg-[#0d0d0d]">
-        <div className="max-w-5xl mx-auto">
-          <p className="text-[10px] font-bold text-[#76b900] uppercase tracking-widest mb-3">Capabilities</p>
-          <h2 className="text-3xl md:text-4xl font-bold mb-12 tracking-tight">
-            String-level visibility.<br />Inverter-level clarity.
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[
-              { icon: Activity, title: 'Per-String Health Scores', desc: 'Performance and Availability scores per string, per day. See exactly which string is underperforming and whether it\'s a shading issue or a connection fault.' },
-              { icon: AlertTriangle, title: 'Intelligent Alerts', desc: 'Three severity levels — Critical (>50% drop), Warning (25-50%), Info (10-25%). Skips low-light conditions. Auto-resolves when strings recover.' },
-              { icon: Eye, title: 'Fault Diagnosis', desc: 'Distinguishes between dirty panels, bird droppings, tree shadows, loose cables, broken connections, and panel degradation — each with specific action guidance.' },
-              { icon: BarChart3, title: 'Performance Analysis', desc: 'Date-range heatmaps showing health scores across all strings. Export to CSV. Compare performance trends over weeks and months.' },
-              { icon: TrendingUp, title: 'Shading Detection', desc: 'Time-of-day pattern analysis identifies current drops at specific hours — pinpointing tree shadows and building obstructions as they grow.' },
-              { icon: Layers, title: 'Multi-Brand Dashboard', desc: 'Huawei, Solis, Growatt, and Sungrow inverters in one unified view. No switching between four different apps.' },
-            ].map((feature) => (
-              <div key={feature.title} className="bg-[#1a1a1a] border border-[#333] rounded-sm p-5">
-                <feature.icon className="w-5 h-5 text-[#76b900] mb-3" />
-                <h3 className="text-sm font-bold text-white mb-2">{feature.title}</h3>
-                <p className="text-xs text-[#a7a7a7] leading-relaxed">{feature.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── How It Works ───────────────────────────────────────────── */}
-      <section id="how-it-works" className="py-20 px-6">
-        <div className="max-w-5xl mx-auto">
-          <p className="text-[10px] font-bold text-[#76b900] uppercase tracking-widest mb-3">Process</p>
-          <h2 className="text-3xl md:text-4xl font-bold mb-12 tracking-tight">
-            From sign-up to monitoring<br />in under 5 minutes.
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[
-              { step: '01', title: 'Share Credentials', desc: 'Provide your inverter cloud API credentials (FusionSolar, SolisCloud, Growatt OpenAPI, or iSolarCloud). We handle the rest.' },
-              { step: '02', title: 'Automatic Discovery', desc: 'SPC discovers all your plants, inverters, and strings automatically. No manual configuration of devices or port numbers.' },
-              { step: '03', title: 'Real-Time Monitoring', desc: 'Data flows every 5 minutes. Health scores, alerts, and fault diagnosis start immediately. Access your dashboard from any device.' },
-            ].map((item) => (
-              <div key={item.step} className="relative">
-                <span className="text-5xl font-bold text-[#1a1a1a] absolute -top-2 -left-1">{item.step}</span>
-                <div className="pt-10">
-                  <h3 className="text-base font-bold text-white mb-2">{item.title}</h3>
-                  <p className="text-xs text-[#a7a7a7] leading-relaxed">{item.desc}</p>
+              {
+                icon: Gauge,
+                title: 'Catch losses fast',
+                desc: 'Alerts in 5 minutes, not 5 months. The average commercial solar plant loses 2–7% of annual generation to undetected string faults. SPC surfaces them same-day — before weeks of lost kWh stack up.',
+                stat: '< 5 min',
+                statLabel: 'from fault to your phone',
+              },
+              {
+                icon: Shield,
+                title: 'Independent second opinion',
+                desc: 'Your inverter vendor\'s app was built by the company that sold you the inverter. When hardware underperforms, their app has reasons to soften it. SPC has no inverter to sell you — just the truth about every string.',
+                stat: 'Zero',
+                statLabel: 'vendor conflicts of interest',
+              },
+              {
+                icon: Layers,
+                title: 'Every inverter brand, unified',
+                desc: 'Huawei FusionSolar, Solis, Growatt, Sungrow — one dashboard, one language, one alert stream. The only platform in Pakistan that unifies four inverter brands in a single pane of glass.',
+                stat: '4 brands',
+                statLabel: 'in one dashboard',
+              },
+            ].map((pillar) => (
+              <div key={pillar.title} className="bg-white border border-slate-200 rounded-sm p-7 hover:border-solar-gold-300 hover:shadow-md transition-all group">
+                <div className="w-12 h-12 rounded-sm bg-gradient-to-br from-solar-gold-100 to-solar-gold-200 border border-solar-gold-300 flex items-center justify-center mb-5 group-hover:scale-105 transition-transform">
+                  <pillar.icon className="w-6 h-6 text-solar-gold-700" />
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 mb-3">{pillar.title}</h3>
+                <p className="text-sm text-slate-600 leading-relaxed mb-5">{pillar.desc}</p>
+                <div className="pt-4 border-t border-slate-100">
+                  <p className="text-2xl font-bold text-solar-gold-600 font-mono tracking-tight">{pillar.stat}</p>
+                  <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mt-1">{pillar.statLabel}</p>
                 </div>
               </div>
             ))}
@@ -243,40 +220,366 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Fault Detection ────────────────────────────────────────── */}
-      <section id="faults" className="py-20 px-6 bg-[#0d0d0d]">
-        <div className="max-w-5xl mx-auto">
-          <p className="text-[10px] font-bold text-[#76b900] uppercase tracking-widest mb-3">Fault Detection</p>
-          <h2 className="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
-            Know what&apos;s wrong.<br />Know what to fix.
-          </h2>
-          <p className="text-base text-[#a7a7a7] mb-10 max-w-2xl leading-relaxed">
-            SPC doesn&apos;t just tell you a string is underperforming — it tells you why, and what action to take.
+      {/* ══ SOCIAL PROOF BAR ════════════════════════════════════════ */}
+      <section className="py-12 border-y border-slate-200 bg-slate-50">
+        <div className="max-w-6xl mx-auto px-6">
+          <p className="text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-8">
+            Trusted across Pakistan&apos;s solar fleet
           </p>
 
-          <div className="overflow-x-auto">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-10">
+            {[
+              { value: '48 plants · 2.2 MW', label: 'Across Pakistan' },
+              { value: '44 / 48', label: 'Producing right now' },
+              { value: '1.3M+', label: 'Data points captured' },
+              { value: '25,000+', label: 'Faults detected & resolved' },
+            ].map((stat) => (
+              <div key={stat.label} className="text-center">
+                <p className="text-2xl md:text-3xl font-bold text-slate-900 font-mono tracking-tight">{stat.value}</p>
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mt-2">{stat.label}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-center gap-8 md:gap-16 opacity-60">
+            {['Huawei', 'Solis', 'Growatt', 'Sungrow'].map((brand) => (
+              <span key={brand} className="text-base md:text-lg font-bold text-slate-500 tracking-tight">
+                {brand}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ══ PROBLEM → SOLUTION ═══════════════════════════════════════ */}
+      <section className="py-24 px-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <p className="text-[10px] font-bold text-solar-gold-600 uppercase tracking-widest mb-4">The Problem</p>
+            <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-slate-900 mb-4">
+              Your solar looks fine.
+              <br />
+              <span className="text-red-600">You&apos;re losing money every week.</span>
+            </h2>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-6 mb-14">
+            {/* Problem card */}
+            <div className="bg-red-50 border border-red-200 rounded-sm p-8">
+              <div className="flex items-center gap-2 mb-4">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+                <span className="text-[10px] font-bold text-red-700 uppercase tracking-widest">Without SPC</span>
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 mb-4">One number. Zero visibility.</h3>
+              <ul className="space-y-3 text-sm text-slate-700 leading-relaxed">
+                <li className="flex gap-2"><span className="text-red-600 font-bold">✗</span> Your inverter app shows a single total — no string detail.</li>
+                <li className="flex gap-2"><span className="text-red-600 font-bold">✗</span> Individual strings can drop 30% without you noticing.</li>
+                <li className="flex gap-2"><span className="text-red-600 font-bold">✗</span> Annual inspections catch faults 12 months too late.</li>
+                <li className="flex gap-2"><span className="text-red-600 font-bold">✗</span> Typical commercial site silently loses <strong>PKR 40,000–120,000 / year</strong>.</li>
+              </ul>
+            </div>
+
+            {/* Solution card */}
+            <div className="bg-emerald-50 border border-emerald-200 rounded-sm p-8">
+              <div className="flex items-center gap-2 mb-4">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">With SPC</span>
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 mb-4">Every string. Every 5 minutes.</h3>
+              <ul className="space-y-3 text-sm text-slate-700 leading-relaxed">
+                <li className="flex gap-2"><span className="text-emerald-600 font-bold">✓</span> Our engineers install a monitoring device at your plant.</li>
+                <li className="flex gap-2"><span className="text-emerald-600 font-bold">✓</span> Live health scores per string — see faults in minutes.</li>
+                <li className="flex gap-2"><span className="text-emerald-600 font-bold">✓</span> Automatic fault diagnosis tells you <em>why</em> and <em>what to fix</em>.</li>
+                <li className="flex gap-2"><span className="text-emerald-600 font-bold">✓</span> Most sites recover the device cost within <strong>90 days</strong>.</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Founder pull quote */}
+          <figure className="relative max-w-4xl mx-auto bg-gradient-to-br from-solar-gold-50 to-white border border-solar-gold-200 rounded-sm p-10 md:p-14 text-center">
+            <span aria-hidden="true" className="absolute top-4 left-6 text-7xl font-bold text-solar-gold-300 leading-none">&ldquo;</span>
+            <blockquote className="text-xl md:text-2xl font-bold text-slate-900 leading-snug relative z-10">
+              Your solar plant might look fine on the surface, but individual strings could be silently underperforming — costing you generation and revenue every day.
+            </blockquote>
+            <figcaption className="mt-6 flex items-center justify-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-solar-gold-500 to-solar-gold-700 flex items-center justify-center text-white text-xs font-bold">
+                RN
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-bold text-slate-900">Engr. Reyyan Niaz Khan</p>
+                <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Founder · Bijli Bachao</p>
+              </div>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      {/* ══ INDEPENDENCE ANGLE ══════════════════════════════════════ */}
+      <section className="py-24 px-6 bg-gradient-to-br from-solar-gold-50 via-white to-solar-gold-50 border-y border-solar-gold-200">
+        <div className="max-w-5xl mx-auto text-center">
+          <p className="text-[10px] font-bold text-solar-gold-700 uppercase tracking-widest mb-6">
+            The Independence Angle
+          </p>
+
+          <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold tracking-tight text-slate-900 leading-[1.15] md:leading-[1.1] mb-8">
+            Your inverter vendor shows you <br className="hidden md:block"/>
+            <span className="text-slate-500 line-through decoration-red-400 decoration-[3px] md:decoration-4">what they want you to see.</span>
+            <br />
+            <span className="text-solar-gold-600">SPC shows you what&apos;s actually happening.</span>
+          </h2>
+
+          <div className="max-w-3xl mx-auto text-base md:text-lg text-slate-700 leading-relaxed space-y-4">
+            <p>
+              Every inverter manufacturer ships their own monitoring app — <strong className="text-slate-900">FusionSolar</strong>,{' '}
+              <strong className="text-slate-900">SolisCloud</strong>, <strong className="text-slate-900">ShinePhone</strong>,{' '}
+              <strong className="text-slate-900">iSolarCloud</strong>. These apps were built by the company that sold you the inverter.
+              When the hardware underperforms, the app has every reason to soften it.
+            </p>
+            <p>
+              SPC is the <strong className="text-solar-gold-700">independent layer</strong>. We don&apos;t sell inverters.
+              We don&apos;t have quarterly numbers to protect. We have zero incentive to hide a broken string from you.
+              Just the truth — every string, every 5 minutes, across every brand.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-10">
+            <div className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-sm shadow-sm">
+              <Shield className="w-4 h-4 text-solar-gold-600" />
+              <span className="text-xs font-bold text-slate-700">No inverter to sell</span>
+            </div>
+            <div className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-sm shadow-sm">
+              <Eye className="w-4 h-4 text-solar-gold-600" />
+              <span className="text-xs font-bold text-slate-700">No shortfall to defend</span>
+            </div>
+            <div className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-sm shadow-sm">
+              <CheckCircle2 className="w-4 h-4 text-solar-gold-600" />
+              <span className="text-xs font-bold text-slate-700">No agenda but yours</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ══ INLINE MINI-DASHBOARD (THE DEMO) ═════════════════════════ */}
+      <section id="demo" className="py-24 px-6 bg-slate-900 relative overflow-hidden">
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 -z-0 opacity-30"
+          style={{
+            background:
+              'radial-gradient(1000px circle at 20% 30%, rgba(245,158,11,0.15), transparent 60%), radial-gradient(800px circle at 80% 70%, rgba(16,185,129,0.1), transparent 50%)',
+          }}
+        />
+
+        <div className="max-w-6xl mx-auto relative z-10">
+          <div className="text-center mb-12">
+            <p className="text-[10px] font-bold text-solar-gold-400 uppercase tracking-widest mb-4">See It Live</p>
+            <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-white mb-4">
+              Every string. One screen. <span className="text-solar-gold-400">Live.</span>
+            </h2>
+            <p className="text-base text-slate-400 max-w-2xl mx-auto">
+              This is how your plant looks inside SPC. Scroll through — health scores, alerts, fault diagnosis, all on one pane.
+            </p>
+          </div>
+
+          <MiniDashboard />
+
+          <div className="flex items-center justify-center gap-2 mt-6 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            <Eye className="w-3.5 h-3.5" />
+            Representative data · Your actual plants are visualized with real 5-minute live feeds
+          </div>
+
+          <div className="flex justify-center mt-10">
+            <a
+              href="#cta"
+              className="group px-8 py-4 text-sm font-bold bg-solar-gold-500 text-white rounded-sm hover:bg-solar-gold-600 transition-all flex items-center gap-2 shadow-lg"
+            >
+              See Your Plant on This Dashboard
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* ══ CAPABILITIES ═════════════════════════════════════════════ */}
+      <section className="py-24 px-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-14">
+            <p className="text-[10px] font-bold text-solar-gold-600 uppercase tracking-widest mb-4">Capabilities</p>
+            <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-slate-900 mb-4">
+              String-level visibility. Inverter-level clarity.
+            </h2>
+            <p className="text-base text-slate-600 max-w-2xl mx-auto">
+              Built by engineers for engineers. Every feature solves a problem Pakistani solar operators told us about.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {[
+              { icon: Activity, title: 'Per-String Health Scores', desc: 'Performance and Availability scores per string, per day. See exactly which string is underperforming and whether it is a shading issue or a connection fault.' },
+              { icon: AlertTriangle, title: 'Intelligent Alerts', desc: 'Three severity levels — Critical (>50% drop), Warning (25–50%), Info (10–25%). Skips low-light conditions. Auto-resolves when strings recover.' },
+              { icon: Eye, title: 'Fault Diagnosis', desc: 'Distinguishes dirty panels, bird droppings, tree shadows, loose cables, broken connections, panel degradation — each with specific action guidance.' },
+              { icon: BarChart3, title: 'Performance Analysis', desc: 'Date-range heatmaps of health scores across all strings. Export to CSV. Compare trends over weeks, months, or seasons.' },
+              { icon: TrendingUp, title: 'Shading Detection', desc: 'Time-of-day pattern analysis pinpoints tree shadows and building obstructions as they grow — before they cost a full season of generation.' },
+              { icon: Layers, title: 'Multi-Brand Dashboard', desc: 'Huawei, Solis, Growatt, Sungrow — one unified view. No switching between four different apps. The only platform in Pakistan that does this.' },
+            ].map((feature) => (
+              <div key={feature.title} className="bg-white border border-slate-200 rounded-sm p-6 hover:border-solar-gold-300 hover:shadow-md transition-all">
+                <div className="w-10 h-10 rounded-sm bg-solar-gold-50 border border-solar-gold-200 flex items-center justify-center mb-4">
+                  <feature.icon className="w-5 h-5 text-solar-gold-600" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900 mb-2">{feature.title}</h3>
+                <p className="text-sm text-slate-600 leading-relaxed">{feature.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ══ HOW IT WORKS ═════════════════════════════════════════════ */}
+      <section id="how-it-works" className="py-24 px-6 bg-slate-50">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <p className="text-[10px] font-bold text-solar-gold-600 uppercase tracking-widest mb-4">Process</p>
+            <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-slate-900 mb-4">
+              From site visit to live data <br className="hidden md:block"/>
+              <span className="text-solar-gold-600">in under an hour.</span>
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-4">
+            {[
+              { step: '01', title: 'On-Site Installation', desc: 'Our field engineer visits your plant. We install the SPC monitoring device, compatible with Huawei, Solis, Growatt, and Sungrow. Under an hour per site.', icon: MapPin },
+              { step: '02', title: 'Automatic Discovery', desc: 'The device auto-discovers every inverter and string. No manual configuration, no device IDs, no port numbers. Your full fleet is visible within minutes.', icon: Zap },
+              { step: '03', title: 'Live Monitoring', desc: 'Real-time data every 5 minutes. Health scores, alerts, fault diagnosis — all immediate. Dashboard access forever, from any device, anywhere.', icon: Activity },
+            ].map((item, i) => (
+              <div key={item.step} className="relative bg-white border border-slate-200 rounded-sm p-6 md:p-8 hover:border-solar-gold-300 hover:shadow-md transition-all overflow-hidden">
+                <div className="absolute top-0 right-2 md:-top-2 md:right-auto md:-left-1 text-[56px] md:text-[72px] font-bold text-solar-gold-100 leading-none font-mono select-none pointer-events-none">
+                  {item.step}
+                </div>
+                <div className="relative z-10">
+                  <div className="w-10 h-10 rounded-sm bg-solar-gold-500 flex items-center justify-center mb-4 md:mb-6">
+                    <item.icon className="w-5 h-5 text-white" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-900 mb-3">{item.title}</h3>
+                  <p className="text-sm text-slate-600 leading-relaxed">{item.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex justify-center mt-14">
+            <a href="#cta" className="group px-8 py-4 text-sm font-bold bg-solar-gold-500 text-white rounded-sm hover:bg-solar-gold-600 transition-all flex items-center gap-2 shadow-lg">
+              Schedule Site Visit
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* ══ CASE STUDIES (METRIC-FIRST) ══════════════════════════════ */}
+      <section className="py-24 px-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-14">
+            <p className="text-[10px] font-bold text-solar-gold-600 uppercase tracking-widest mb-4">Outcomes From The Field</p>
+            <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-slate-900 mb-4">
+              Real faults. Real numbers. <br className="hidden md:block"/>
+              <span className="text-solar-gold-600">Real recoveries.</span>
+            </h2>
+            <p className="text-sm md:text-base text-slate-500 max-w-2xl mx-auto">
+              Representative scenarios from our active fleet · Client names anonymized for privacy
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-5">
+            {[
+              {
+                metric: '32%',
+                metricLabel: 'generation loss detected',
+                title: 'Tree shadow auto-diagnosed in 12 minutes',
+                where: '400 kW rooftop · Multan',
+                body: 'SPC flagged PV7 underperforming vs peer strings with a recurring midday dip. Fault class: tree shadow (seasonal growth). Owner trimmed the adjacent mulberry within 48 hours — string recovered to 97% within a week.',
+                duration: '12 min to detect · 48 h to fix',
+              },
+              {
+                metric: '14%',
+                metricLabel: 'performance improvement',
+                title: 'Loose DC cable caught same-day',
+                where: '850 kW textile mill · Faisalabad',
+                body: 'Two strings on the same inverter showed intermittent availability drops, high performance when active — classic loose-cable signature. Site engineer re-torqued the combiner terminals the same afternoon. Issue resolved before the next billing cycle.',
+                duration: '3 h to detect · 6 h to fix',
+              },
+              {
+                metric: 'PKR 180K',
+                metricLabel: 'annual savings unlocked',
+                title: 'Four faulty panels identified',
+                where: '1.2 MW housing society · Lahore',
+                body: 'Fleet-wide health trend surfaced four strings declining together over 6 weeks. Fault class: panel degradation (batch defect). Manufacturer honoured warranty replacement. Recovered ~18,000 kWh/year — pays for SPC many times over.',
+                duration: '6 weeks tracked · 1 claim filed',
+              },
+            ].map((cs) => (
+              <div key={cs.title} className="bg-white border border-slate-200 rounded-sm p-7 hover:border-solar-gold-300 hover:shadow-md transition-all flex flex-col">
+                <div className="mb-5">
+                  <p className="text-4xl md:text-5xl font-bold text-solar-gold-600 font-mono tracking-tight leading-none mb-2">
+                    {cs.metric}
+                  </p>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{cs.metricLabel}</p>
+                </div>
+                <h3 className="text-base font-bold text-slate-900 mb-2 leading-snug">{cs.title}</h3>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">{cs.where}</p>
+                <p className="text-sm text-slate-600 leading-relaxed flex-1 mb-5">{cs.body}</p>
+                <div className="pt-4 border-t border-slate-100 flex items-center gap-2">
+                  <Clock className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                  <p className="text-[11px] font-semibold text-slate-600">{cs.duration}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex justify-center mt-12">
+            <a href="#cta" className="group px-8 py-4 text-sm font-bold bg-solar-gold-500 text-white rounded-sm hover:bg-solar-gold-600 transition-all flex items-center gap-2 shadow-lg">
+              See What SPC Finds on Your Plant
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* ══ FAULT DETECTION TABLE ════════════════════════════════════ */}
+      <section className="py-24 px-6 bg-slate-50">
+        <div className="max-w-6xl mx-auto">
+          <div className="mb-12">
+            <p className="text-[10px] font-bold text-solar-gold-600 uppercase tracking-widest mb-4">Fault Detection Intelligence</p>
+            <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-slate-900 mb-4">
+              Know what&apos;s wrong. <br className="hidden md:block"/>
+              <span className="text-solar-gold-600">Know what to fix.</span>
+            </h2>
+            <p className="text-base text-slate-600 max-w-2xl leading-relaxed">
+              SPC doesn&apos;t just tell you a string is underperforming — it tells you why, and what action to take. Seven fault classes, each with a specific signature.
+            </p>
+          </div>
+
+          <div className="overflow-x-auto bg-white border border-slate-200 rounded-sm shadow-sm">
             <table className="w-full text-left">
-              <thead>
-                <tr className="border-b-2 border-[#333]">
-                  <th className="py-3 pr-6 text-[10px] font-bold text-[#898989] uppercase tracking-wider">Fault Type</th>
-                  <th className="py-3 pr-6 text-[10px] font-bold text-[#898989] uppercase tracking-wider">Pattern</th>
-                  <th className="py-3 text-[10px] font-bold text-[#898989] uppercase tracking-wider">Detection</th>
+              <thead className="bg-slate-50">
+                <tr className="border-b-2 border-slate-200">
+                  <th className="py-4 px-5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Fault Type</th>
+                  <th className="py-4 px-5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Pattern</th>
+                  <th className="py-4 px-5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Detection</th>
                 </tr>
               </thead>
               <tbody>
                 {[
-                  { fault: 'Dirty / Dusty Panels', pattern: '10-30% current drop, gradual', detection: 'Multiple strings decline together over days' },
+                  { fault: 'Dirty / Dusty Panels', pattern: '10–30% current drop, gradual', detection: 'Multiple strings decline together over days' },
                   { fault: 'Bird Droppings', pattern: '>25% sudden drop', detection: 'Individual string, not time-dependent' },
                   { fault: 'Tree Shadow', pattern: 'Drops at specific hours', detection: 'Time-of-day pattern analysis' },
-                  { fault: 'Faulty Panel', pattern: '30-50% consistently lower', detection: 'Persistent regardless of weather/time' },
+                  { fault: 'Faulty Panel', pattern: '30–50% consistently lower', detection: 'Persistent regardless of weather/time' },
                   { fault: 'Loose Cable', pattern: 'Random on/off, intermittent', detection: 'High performance but low availability' },
                   { fault: 'Broken / Disconnected', pattern: '0V, 0A', detection: 'Complete loss of output' },
                   { fault: 'Panel Degradation', pattern: 'Gradual decline over months', detection: 'Slow health score decrease in trends' },
                 ].map((row) => (
-                  <tr key={row.fault} className="border-b border-[#252525] hover:bg-[#1a1a1a] transition-colors">
-                    <td className="py-3 pr-6 text-sm font-bold text-white">{row.fault}</td>
-                    <td className="py-3 pr-6 text-xs text-[#a7a7a7]">{row.pattern}</td>
-                    <td className="py-3 text-xs text-[#a7a7a7]">{row.detection}</td>
+                  <tr key={row.fault} className="border-b border-slate-100 hover:bg-slate-50 transition-colors last:border-b-0">
+                    <td className="py-4 px-5 text-sm font-bold text-slate-900">{row.fault}</td>
+                    <td className="py-4 px-5 text-xs text-slate-600">{row.pattern}</td>
+                    <td className="py-4 px-5 text-xs text-slate-600">{row.detection}</td>
                   </tr>
                 ))}
               </tbody>
@@ -285,21 +588,59 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── IEC Standard ───────────────────────────────────────────── */}
-      <section className="py-20 px-6">
+      {/* ══ WHO WE SERVE ═════════════════════════════════════════════ */}
+      <section className="py-24 px-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-14">
+            <p className="text-[10px] font-bold text-solar-gold-600 uppercase tracking-widest mb-4">Who We Serve</p>
+            <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-slate-900 mb-4">
+              Built for Pakistan&apos;s <br className="hidden md:block"/>
+              <span className="text-solar-gold-600">commercial solar fleet.</span>
+            </h2>
+            <p className="text-base text-slate-600 max-w-2xl mx-auto">
+              SPC is purpose-built for commercial and industrial operators with 10 kW to 5 MW installations. If your solar is worth money, SPC is worth installing.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {[
+              { icon: Factory, title: 'Factories & Manufacturing', desc: 'Textile mills, paper plants, food processing — where every kWh cuts production cost.' },
+              { icon: Layers, title: 'Textile Mills', desc: 'Large rooftop arrays, high stakes, thin margins. Catch faults before monthly target slips.' },
+              { icon: Building2, title: 'Shopping Malls', desc: 'Multi-tenant rooftops, air-con load, peak-hour tariffs. Protect the solar offset that pays for itself.' },
+              { icon: Home, title: 'Housing Societies', desc: 'Community solar for common-area lighting and lifts. Residents notice when generation drops — you get notified first.' },
+              { icon: HeartPulse, title: 'Hospitals & Data Centers', desc: 'Zero downtime tolerance, 24/7 load. String-level visibility means no hidden degradation on critical infrastructure.' },
+              { icon: Network, title: 'Multi-Site Operators', desc: 'Fleet owners with 5+ plants across cities. One dashboard, all sites, one alert stream — no juggling four vendor apps.' },
+            ].map((s) => (
+              <div key={s.title} className="bg-white border border-slate-200 rounded-sm p-5 sm:p-6 hover:border-solar-gold-300 hover:shadow-md transition-all">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-sm bg-solar-gold-50 border border-solar-gold-200 flex items-center justify-center flex-shrink-0">
+                    <s.icon className="w-5 h-5 text-solar-gold-600" />
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-900 leading-snug">{s.title}</h3>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">{s.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ══ IEC STANDARD ═════════════════════════════════════════════ */}
+      <section className="py-24 px-6 bg-slate-50">
         <div className="max-w-5xl mx-auto">
-          <div className="bg-[#1a1a1a] border border-[#333] rounded-sm p-8 md:p-12">
-            <div className="flex items-start gap-4">
-              <Shield className="w-8 h-8 text-[#76b900] flex-shrink-0 mt-1" />
-              <div>
-                <p className="text-[10px] font-bold text-[#76b900] uppercase tracking-widest mb-2">International Standard</p>
-                <h3 className="text-xl md:text-2xl font-bold mb-3">IEC 61724 Aligned Health Scoring</h3>
-                <p className="text-sm text-[#a7a7a7] leading-relaxed mb-6">
-                  Our health scoring system follows the IEC 61724 standard for photovoltaic system performance monitoring.
-                  Each string is evaluated on two separate metrics — <strong className="text-white">Performance</strong> (current quality when producing) and <strong className="text-white">Availability</strong> (percentage of daylight hours the string was active) — then combined into a single Health Score.
+          <div className="bg-gradient-to-br from-solar-gold-50 via-white to-solar-gold-50 border border-solar-gold-200 rounded-sm p-10 md:p-14 shadow-sm">
+            <div className="flex items-start gap-5">
+              <div className="w-12 h-12 rounded-sm bg-solar-gold-500 flex items-center justify-center flex-shrink-0">
+                <Shield className="w-6 h-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] font-bold text-solar-gold-700 uppercase tracking-widest mb-2">International Standard</p>
+                <h3 className="text-2xl md:text-3xl font-bold mb-4 text-slate-900">IEC 61724 Aligned Health Scoring</h3>
+                <p className="text-sm md:text-base text-slate-700 leading-relaxed mb-5">
+                  We didn&apos;t invent string monitoring. We made it work for Pakistani conditions, brands, and climate. SPC follows the <strong className="text-slate-900">IEC 61724</strong> international standard for photovoltaic system performance monitoring. Each string is evaluated on two separate metrics — <strong className="text-slate-900">Performance</strong> (current quality when producing) and <strong className="text-slate-900">Availability</strong> (percentage of daylight hours active) — combined into a single Health Score.
                 </p>
-                <p className="text-sm text-[#a7a7a7] leading-relaxed">
-                  This separation means you instantly know whether a problem is a <strong className="text-white">panel issue</strong> (low performance, high availability = shading or degradation) or a <strong className="text-white">wiring issue</strong> (high performance, low availability = loose cable or intermittent fault).
+                <p className="text-sm md:text-base text-slate-700 leading-relaxed">
+                  Fault classifications align to <strong className="text-slate-900">IEC 62446-1</strong> continuity, polarity, and insulation tests. This means you instantly know whether a problem is a <strong className="text-slate-900">panel issue</strong> (low performance, high availability = shading / degradation) or a <strong className="text-slate-900">wiring issue</strong> (high performance, low availability = loose cable / intermittent fault).
                 </p>
               </div>
             </div>
@@ -307,51 +648,381 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── CTA ────────────────────────────────────────────────────── */}
-      <section className="py-20 px-6 bg-[#0d0d0d] border-t border-[#333]">
-        <div className="max-w-3xl mx-auto text-center">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
-            Stop guessing. Start monitoring.
-          </h2>
-          <p className="text-base text-[#a7a7a7] mb-8 max-w-xl mx-auto leading-relaxed">
-            Every day without string-level monitoring is a day you&apos;re losing generation without knowing it.
+      {/* ══ FOUNDER ══════════════════════════════════════════════════ */}
+      <section id="founder" className="py-24 px-6">
+        <div className="max-w-5xl mx-auto text-center">
+          <p className="text-[10px] font-bold text-solar-gold-600 uppercase tracking-widest mb-6">Meet The Engineer Behind SPC</p>
+
+          <div className="w-24 h-24 md:w-28 md:h-28 mx-auto rounded-full bg-gradient-to-br from-solar-gold-400 via-solar-gold-500 to-solar-gold-700 flex items-center justify-center text-white text-3xl md:text-4xl font-bold mb-8 shadow-xl shadow-solar-gold-500/30">
+            RN
+          </div>
+
+          <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-slate-900 mb-2">Engr. Reyyan Niaz Khan</h2>
+          <p className="text-sm md:text-base text-slate-500 font-semibold uppercase tracking-wider mb-10">
+            Founder &amp; Director · Bijli Bachao
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link
-              href="/sign-up"
-              className="px-8 py-3 text-sm font-bold border-2 border-[#76b900] text-white bg-[#76b900] rounded-sm hover:bg-[#5a8f00] hover:border-[#5a8f00] transition-colors flex items-center gap-2"
-            >
-              Get Started Free <ArrowRight className="w-4 h-4" />
-            </Link>
-            <Link
-              href="/sign-in"
-              className="px-8 py-3 text-sm font-bold border-2 border-[#5e5e5e] text-[#a7a7a7] rounded-sm hover:border-white hover:text-white transition-colors"
-            >
-              Sign In to Dashboard
-            </Link>
+
+          <blockquote className="text-xl md:text-2xl font-bold text-slate-900 leading-snug max-w-3xl mx-auto mb-10 relative">
+            <span aria-hidden="true" className="absolute -top-4 -left-2 text-6xl text-solar-gold-300 leading-none">&ldquo;</span>
+            <span className="relative">
+              Pakistani businesses deserve the same energy visibility that multinationals have had for decades. SPC is how we deliver it.
+            </span>
+          </blockquote>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl mx-auto mb-10">
+            {[
+              { label: 'Education', value: 'UET Lahore' },
+              { label: 'Experience', value: '14+ years' },
+              { label: 'Field', value: 'Energy engineering' },
+              { label: 'Prior Clients', value: '50+ MNCs' },
+            ].map((item) => (
+              <div key={item.label} className="bg-white border border-slate-200 rounded-sm p-4">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{item.label}</p>
+                <p className="text-sm font-bold text-slate-900">{item.value}</p>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-4">
+            Previously consulted for
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-base md:text-lg font-bold text-slate-400">
+            <span>USAID</span>
+            <span className="w-1 h-1 rounded-full bg-slate-300" />
+            <span>Schlumberger</span>
+            <span className="w-1 h-1 rounded-full bg-slate-300" />
+            <span>Diversey</span>
+            <span className="w-1 h-1 rounded-full bg-slate-300" />
+            <span className="text-sm text-slate-500 font-semibold">+ 50 multinationals</span>
           </div>
         </div>
       </section>
 
-      {/* ── Footer ─────────────────────────────────────────────────── */}
-      <footer className="py-10 px-6 border-t border-[#333]">
-        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded-sm bg-[#76b900]/20 flex items-center justify-center">
-              <Sun className="w-3.5 h-3.5 text-[#76b900]" />
-            </div>
-            <span className="text-xs font-bold text-[#a7a7a7]">Solar Performance Cloud</span>
-            <span className="text-xs text-[#5e5e5e]">by BijliBachao.pk</span>
+      {/* ══ BIJLI BACHAO PARENT ══════════════════════════════════════ */}
+      <section id="parent" className="py-24 px-6 bg-slate-900 relative overflow-hidden">
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 -z-0 opacity-40"
+          style={{
+            background:
+              'radial-gradient(1000px circle at 70% 30%, rgba(245,158,11,0.15), transparent 60%)',
+          }}
+        />
+
+        <div className="max-w-6xl mx-auto relative z-10">
+          <div className="text-center mb-14">
+            <p className="text-[10px] font-bold text-solar-gold-400 uppercase tracking-widest mb-4">Part of the Bijli Bachao Family</p>
+            <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-white mb-4">
+              Pakistan&apos;s Solar + Energy
+              <br className="hidden md:block"/>
+              <span className="text-solar-gold-400"> Automation Company.</span>
+            </h2>
+            <p className="text-base md:text-lg text-slate-300 max-w-2xl mx-auto">
+              We install solar. Then we stay — for 25 years. SPC is one of three platforms Bijli Bachao has built to make every kilowatt count.
+            </p>
           </div>
-          <div className="flex items-center gap-6 text-xs text-[#5e5e5e]">
-            <span>Founded by Engr. Reyyan Niaz Khan</span>
-            <span>·</span>
-            <span>Lahore, Pakistan</span>
-            <span>·</span>
-            <a href="https://wa.me/923234578775" className="hover:text-[#76b900] transition-colors">WhatsApp</a>
+
+          <div className="grid md:grid-cols-3 gap-5 mb-14">
+            <div className="bg-white/5 border-2 border-solar-gold-400 rounded-sm p-7 relative">
+              <div className="absolute top-3 right-3 px-2 py-0.5 bg-solar-gold-400 text-slate-900 text-[9px] font-bold uppercase tracking-wider rounded-full">You are here</div>
+              <div className="w-10 h-10 rounded-sm bg-gradient-to-br from-solar-gold-400 to-solar-gold-600 flex items-center justify-center mb-4">
+                <Sun className="w-5 h-5 text-white" />
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2">Solar Performance Cloud</h3>
+              <p className="text-xs text-slate-400 leading-relaxed mb-3">Per-string solar monitoring across Huawei, Solis, Growatt, Sungrow. Pakistan&apos;s first.</p>
+              <p className="text-[11px] font-mono text-solar-gold-400">spc.bijlibachao.pk</p>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-sm p-7 hover:border-white/30 transition-colors">
+              <div className="w-10 h-10 rounded-sm bg-emerald-500 flex items-center justify-center mb-4">
+                <Zap className="w-5 h-5 text-white" />
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2">WATTEY</h3>
+              <p className="text-xs text-slate-400 leading-relaxed mb-3">Real-time IoT energy consumption — grid, generator, solar usage, all in one dashboard.</p>
+              <p className="text-[11px] font-mono text-slate-400">wattey.bijlibachao.pk</p>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-sm p-7 hover:border-white/30 transition-colors">
+              <div className="w-10 h-10 rounded-sm bg-blue-500 flex items-center justify-center mb-4">
+                <Target className="w-5 h-5 text-white" />
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2">Meter Billing</h3>
+              <p className="text-xs text-slate-400 leading-relaxed mb-3">Photo-verified automated tenant billing for shopping malls and housing societies.</p>
+              <p className="text-[11px] font-mono text-slate-400">metering.wattey.bijlibachao.pk</p>
+            </div>
+          </div>
+
+          {/* Parent brand stats */}
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-px bg-white/10 border border-white/10 rounded-sm overflow-hidden">
+            {[
+              { value: '100+', label: 'Installations' },
+              { value: '500+ kW', label: 'Capacity installed' },
+              { value: '0.96 GWh', label: 'Monitored' },
+              { value: '14+ yrs', label: 'In the field' },
+              { value: '4 cities', label: 'Across Pakistan' },
+              { value: '🇦🇺', label: 'AU subsidiary' },
+            ].map((item) => (
+              <div key={item.label} className="bg-slate-900 px-4 py-5 text-center">
+                <p className="text-lg md:text-xl font-bold text-white font-mono tracking-tight">{item.value}</p>
+                <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mt-1">{item.label}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-6 mt-10 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            <span className="flex items-center gap-1.5"><Award className="w-3.5 h-3.5" /> IEC 61724 aligned</span>
+            <span className="flex items-center gap-1.5"><Award className="w-3.5 h-3.5" /> IEC 62446-1 compliant</span>
+            <span className="flex items-center gap-1.5"><Shield className="w-3.5 h-3.5" /> Engineer-led, not sales-led</span>
+          </div>
+        </div>
+      </section>
+
+      {/* ══ FINAL CTA — RISK REVERSAL ════════════════════════════════ */}
+      <section id="cta" className="py-24 px-6 bg-gradient-to-br from-solar-gold-50 via-white to-solar-gold-50">
+        <div className="max-w-4xl mx-auto text-center">
+          <p className="text-[10px] font-bold text-solar-gold-700 uppercase tracking-widest mb-4">
+            Free Site Visit · No Commitment · No Obligation
+          </p>
+
+          <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-slate-900 mb-5">
+            Ready to see <br className="hidden md:block"/>
+            <span className="text-solar-gold-600">every string on your plant?</span>
+          </h2>
+
+          <p className="text-base md:text-lg text-slate-700 mb-10 max-w-2xl mx-auto leading-relaxed">
+            Our engineer visits your plant, assesses your inverter fleet, and shows you a <strong className="text-slate-900">live demo on your actual data</strong>.
+            If we&apos;re not a fit, we walk away. What have you got to lose?
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
+            <a
+              href={WHATSAPP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group px-8 py-4 text-sm font-bold bg-solar-gold-500 text-white rounded-sm hover:bg-solar-gold-600 transition-all flex items-center gap-2 shadow-lg shadow-solar-gold-500/20 hover:shadow-xl hover:shadow-solar-gold-500/30 hover:-translate-y-0.5"
+            >
+              Book Free Site Visit
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </a>
+            <a
+              href={WHATSAPP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-8 py-4 text-sm font-bold border-2 border-emerald-500 text-emerald-700 rounded-sm hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-2"
+            >
+              <MessageCircle className="w-4 h-4" />
+              WhatsApp {WHATSAPP_LABEL}
+            </a>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+            <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-emerald-500" /> Typical response within 2 hours</span>
+            <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-emerald-500" /> Available across Pakistan</span>
+            <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5 text-emerald-500" /> Founder-led engineering</span>
+          </div>
+        </div>
+      </section>
+
+      {/* ══ FOOTER ═══════════════════════════════════════════════════ */}
+      <footer className="py-14 px-6 border-t border-slate-200 bg-white">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-10">
+            <div className="col-span-2 md:col-span-1">
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="w-8 h-8 rounded-sm bg-gradient-to-br from-solar-gold-400 to-solar-gold-600 flex items-center justify-center">
+                  <Sun className="w-4 h-4 text-white" />
+                </div>
+                <span className="text-sm font-bold text-slate-900">Solar Performance Cloud</span>
+              </div>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Pakistan&apos;s first string-level solar monitoring platform.
+                Engineer-installed, engineer-maintained.
+              </p>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Product</p>
+              <ul className="space-y-2 text-xs text-slate-700">
+                <li><a href="#demo" className="hover:text-solar-gold-600">Dashboard Demo</a></li>
+                <li><a href="#how-it-works" className="hover:text-solar-gold-600">How It Works</a></li>
+                <li><Link href="/sign-in" className="hover:text-solar-gold-600">Sign In</Link></li>
+                <li><a href="#cta" className="hover:text-solar-gold-600">Book Site Visit</a></li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Bijli Bachao</p>
+              <ul className="space-y-2 text-xs text-slate-700">
+                <li><a href="#founder" className="hover:text-solar-gold-600">Meet the Founder</a></li>
+                <li><a href="#parent" className="hover:text-solar-gold-600">Our Products</a></li>
+                <li><a href="https://wattey.bijlibachao.pk" target="_blank" rel="noopener noreferrer" className="hover:text-solar-gold-600">Wattey <ArrowUpRight className="inline w-3 h-3" /></a></li>
+                <li><a href="https://bijlibachao.pk" target="_blank" rel="noopener noreferrer" className="hover:text-solar-gold-600">Bijli Bachao <ArrowUpRight className="inline w-3 h-3" /></a></li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Contact</p>
+              <ul className="space-y-2 text-xs text-slate-700">
+                <li className="flex items-start gap-1.5"><MapPin className="w-3 h-3 mt-0.5 text-slate-400 flex-shrink-0" /> 69-Abid Majeed Rd, Lahore</li>
+                <li><a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="hover:text-solar-gold-600">WhatsApp {WHATSAPP_LABEL}</a></li>
+                <li><a href="https://linkedin.com/company/bijli-bachao-pk" target="_blank" rel="noopener noreferrer" className="hover:text-solar-gold-600">LinkedIn <ArrowUpRight className="inline w-3 h-3" /></a></li>
+                <li><a href="https://facebook.com/BijliBachaoPk" target="_blank" rel="noopener noreferrer" className="hover:text-solar-gold-600">Facebook <ArrowUpRight className="inline w-3 h-3" /></a></li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="pt-8 border-t border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+            <div>© 2026 BijliBachao.pk · Founded by Engr. Reyyan Niaz Khan · Since 2012</div>
+            <div className="flex items-center gap-4">
+              <span>IEC 61724 aligned</span>
+              <span className="w-1 h-1 rounded-full bg-slate-300" />
+              <span>Made with engineering, not hype.</span>
+            </div>
           </div>
         </div>
       </footer>
     </div>
+  )
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// MINI-DASHBOARD — representative-but-fake data, renders the actual
+// look of SPC for landing-page visitors. All numbers are illustrative.
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function MiniDashboard() {
+  const strings = [
+    { id: 'PV1', health: 98, c: 8.7, state: 'healthy' as const },
+    { id: 'PV2', health: 96, c: 8.5, state: 'healthy' as const },
+    { id: 'PV3', health: 94, c: 8.3, state: 'healthy' as const },
+    { id: 'PV4', health: 92, c: 8.2, state: 'healthy' as const },
+    { id: 'PV5', health: 95, c: 8.4, state: 'healthy' as const },
+    { id: 'PV6', health: 97, c: 8.6, state: 'healthy' as const },
+    { id: 'PV7', health: 23, c: 2.1, state: 'critical' as const },
+    { id: 'PV8', health: 91, c: 8.1, state: 'healthy' as const },
+    { id: 'PV9', health: 88, c: 7.9, state: 'healthy' as const },
+    { id: 'PV10', health: 72, c: 6.4, state: 'warning' as const },
+    { id: 'PV11', health: 93, c: 8.3, state: 'healthy' as const },
+    { id: 'PV12', health: 96, c: 8.5, state: 'healthy' as const },
+  ]
+
+  const stateColor = {
+    healthy: { bar: 'bg-emerald-500', text: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+    warning: { bar: 'bg-amber-500', text: 'text-amber-400', bg: 'bg-amber-500/10' },
+    critical: { bar: 'bg-red-500', text: 'text-red-400', bg: 'bg-red-500/10' },
+  }
+
+  return (
+    <div className="rounded-lg border border-slate-700/50 bg-slate-800/40 backdrop-blur-sm shadow-2xl overflow-hidden">
+      {/* Dashboard header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-5 py-3 bg-slate-900/80 border-b border-slate-700/50">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-7 h-7 rounded-sm bg-gradient-to-br from-solar-gold-400 to-solar-gold-600 flex items-center justify-center flex-shrink-0">
+            <Sun className="w-3.5 h-3.5 text-white" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-white truncate">Mall of Multan · Rooftop Solar</p>
+            <p className="text-[10px] text-slate-400 font-mono truncate">12.8 MW · 1,847 strings · 4 brands</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 px-2.5 py-1 bg-emerald-500/20 border border-emerald-500/30 rounded-sm self-start sm:self-auto flex-shrink-0">
+          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+          <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-wider">Live · 5 min</span>
+        </div>
+      </div>
+
+      {/* Top KPI strip — 2x2 on mobile, 4 across on desktop */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-slate-700/50 border-b border-slate-700/50">
+        {[
+          { label: 'Fleet Health', value: '96%', trend: '+2.1%', color: 'text-emerald-400' },
+          { label: 'Energy Today', value: '47,283 kWh', trend: '+12% vs yest.', color: 'text-emerald-400' },
+          { label: 'Inverters Online', value: '44 / 44', trend: 'All online', color: 'text-emerald-400' },
+          { label: 'Active Alerts', value: '3', trend: '1 critical', color: 'text-red-400' },
+        ].map((kpi) => (
+          <div key={kpi.label} className="bg-slate-800/80 px-3 sm:px-4 py-3">
+            <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-1">{kpi.label}</p>
+            <p className="text-base sm:text-lg font-bold text-white font-mono tracking-tight truncate">{kpi.value}</p>
+            <p className={`text-[9px] font-bold ${kpi.color} uppercase tracking-wider`}>{kpi.trend}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Sparkline row */}
+      <div className="px-4 sm:px-5 py-4 border-b border-slate-700/50">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-2">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">24h Fleet Power</p>
+          <p className="text-[10px] font-mono text-slate-500">Peak: <span className="text-solar-gold-400">11.2 MW @ 12:15 PKT</span></p>
+        </div>
+        <Sparkline />
+      </div>
+
+      {/* Active alert */}
+      <div className="flex items-start gap-2.5 sm:gap-3 px-4 sm:px-5 py-3 bg-red-950/40 border-b border-red-900/30">
+        <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-bold text-red-300">Inverter 6 · PV7 — Critical underperformance</p>
+          <p className="text-[10px] text-red-400/80 mt-0.5 leading-relaxed">32% below peers · pattern matches <strong>tree shadow</strong> · 12 min ago</p>
+        </div>
+        <button className="text-[10px] font-bold text-red-200 uppercase tracking-wider hover:text-white hidden sm:block flex-shrink-0">Diagnose →</button>
+      </div>
+
+      {/* String grid — 4 on mobile, 6 on tablet, 12 on desktop */}
+      <div className="p-4 sm:p-5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-3">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Inverter 6 · 12 strings · Live</p>
+          <p className="text-[10px] font-mono text-slate-500">Avg 8.3 A · Max 8.7 A · Fault 1</p>
+        </div>
+        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-12 gap-1.5">
+          {strings.map((s) => {
+            const c = stateColor[s.state]
+            return (
+              <div key={s.id} className={`${c.bg} rounded-sm p-2 border border-white/5`}>
+                <p className="text-[9px] font-mono font-bold text-slate-300 mb-1">{s.id}</p>
+                <p className={`text-xs font-bold ${c.text} font-mono`}>{s.health}%</p>
+                <div className="mt-1.5 h-1 bg-slate-700/50 rounded-full overflow-hidden">
+                  <div className={`h-full ${c.bar}`} style={{ width: `${s.health}%` }} />
+                </div>
+                <p className="text-[8px] font-mono text-slate-400 mt-1">{s.c.toFixed(1)} A</p>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Sparkline() {
+  // Exaggerated solar curve — morning ramp, noon peak, afternoon taper
+  const points = [
+    0, 0.02, 0.05, 0.12, 0.28, 0.48, 0.68, 0.82, 0.91, 0.96,
+    0.99, 1.00, 0.98, 0.94, 0.87, 0.76, 0.61, 0.43, 0.25, 0.11,
+    0.04, 0.01, 0, 0,
+  ]
+  const W = 800
+  const H = 70
+  const max = 1
+  const stepX = W / (points.length - 1)
+  const path = points
+    .map((v, i) => `${i === 0 ? 'M' : 'L'} ${i * stepX} ${H - (v / max) * (H - 8) - 4}`)
+    .join(' ')
+  const area = `${path} L ${W} ${H} L 0 ${H} Z`
+
+  // Peak at index 11 (noon)
+  const peakX = 11 * stepX
+  const peakY = H - (points[11] / max) * (H - 8) - 4
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-16" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="spk-fill" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.45" />
+          <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill="url(#spk-fill)" />
+      <path d={path} fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={peakX} cy={peakY} r="3.5" fill="#f59e0b" stroke="#0f172a" strokeWidth="1.5" />
+    </svg>
   )
 }
