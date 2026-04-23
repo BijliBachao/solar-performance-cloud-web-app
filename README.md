@@ -26,6 +26,7 @@ Full product context: [SPC-KNOWLEDGE-BOOK.md](./SPC-KNOWLEDGE-BOOK.md).
 | **See the risk register + known open items** | [`AUDIT.md`](./AUDIT.md) |
 | **Understand the 2026-04-22 incident** (502 outage, root cause, fix) | [`POST_MORTEM_2026-04-22.md`](./POST_MORTEM_2026-04-22.md) |
 | **Weigh the next technical priorities** (UptimeRobot / Monthly Report / CI/CD / Next 15) | [`NEXT-STEPS.md`](./NEXT-STEPS.md) |
+| **Track client feedback + work items** | [`CLIENT-FEEDBACK-2026-04-23.md`](./CLIENT-FEEDBACK-2026-04-23.md) |
 | **Read the full change log** (every infra + feature change) | [`CHANGELOG.md`](./CHANGELOG.md) |
 | **Use the audit toolkit** (pre-deploy + post-deploy + continuous audits) | [`AUDITS.md`](./AUDITS.md) |
 | **Set up UptimeRobot external monitoring** | [`UPTIMEROBOT_SETUP.md`](./UPTIMEROBOT_SETUP.md) |
