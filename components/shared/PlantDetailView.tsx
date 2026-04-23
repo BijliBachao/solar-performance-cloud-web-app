@@ -16,6 +16,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { PlantHeader } from '@/components/shared/PlantHeader'
 import { InverterDetailSection } from '@/components/shared/InverterDetailSection'
 import { AlertHistoryLog } from '@/components/shared/AlertHistoryLog'
+import { StringHealthDonut } from '@/components/shared/StringHealthDonut'
 import {
   AlertTriangle, RefreshCw, ArrowLeft, Activity, ClipboardList,
 } from 'lucide-react'
@@ -209,6 +210,14 @@ export function PlantDetailView({
     warning: allStrings.filter(s => s.status === 'WARNING').length,
     critical: allStrings.filter(s => s.status === 'CRITICAL').length,
   }
+  // Five-status breakdown for the donut (NORMAL, WARNING, CRITICAL, OPEN_CIRCUIT, OFFLINE)
+  const stringStatusCounts = {
+    healthy: allStrings.filter(s => s.status === 'NORMAL').length,
+    warning: allStrings.filter(s => s.status === 'WARNING').length,
+    critical: allStrings.filter(s => s.status === 'CRITICAL').length,
+    openCircuit: allStrings.filter(s => s.status === 'OPEN_CIRCUIT').length,
+    offline: allStrings.filter(s => s.status === 'OFFLINE').length,
+  }
 
   // ─── Plant-level KPIs (computed from live string data) ─────
   // Live power: sum of string power (in W) → kW, then apply standby floor
@@ -320,6 +329,14 @@ export function PlantDetailView({
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-5">
+            {/* String health donut — at-a-glance status breakdown for the whole plant */}
+            <StringHealthDonut
+              counts={stringStatusCounts}
+              title="String Health"
+              subtitle={`${allStrings.length.toLocaleString()} strings · ${plant.devices.length} inverter${plant.devices.length === 1 ? '' : 's'}`}
+              loading={loading}
+            />
+
             {/* Per-Inverter Sections */}
             {plant.devices.map((device, index) => {
               const deviceData = stringData.find(d => d.device_id === device.id)
