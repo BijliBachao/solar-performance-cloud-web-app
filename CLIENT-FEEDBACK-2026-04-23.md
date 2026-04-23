@@ -30,7 +30,7 @@ Sr    Description
 
 | # | Item (one-line) | Complexity | Risk | Current state | Status |
 |---|---|---|---|---|---|
-| 1 | Remove `kW/String` column | 🟢 Trivial (~1 h) | 🟢 Low | **Still present in 3 files** (code still emits + renders) | 🔴 TODO |
+| 1 | Remove `kW/String` column | 🟢 Trivial (~1 h) | 🟢 Low | ✅ Column already removed from the rendered table on both dashboard + admin `/analysis` pages. Dead code (unused field) remains — queued as tech-debt cleanup. | 🟢 **DONE** (column) / 🟡 TECH DEBT (field) |
 | 2 | Pull vendor-native inverter faults from APIs and display | 🟡 Medium (~1–2 days) | 🟡 Medium | Not implemented — we only compute our own 7 fault classes | 🔴 TODO |
 | 3 | Remove the UI label "Open Circuit" (keep status internally) | 🟢 Trivial (~2 h) | 🟢 Low | Label appears in 6+ files | 🔴 TODO |
 | 4 | Remove donut/pie chart (healthy / abnormal / critical) | 🟢 Trivial | 🟢 Low | **NOT FOUND — we may have never had one.** Needs client confirmation. | 🟡 BLOCKED — ask client |
@@ -117,7 +117,29 @@ None — client is unambiguous.
 
 ### Status
 
-🔴 **TODO.**
+🟢 **DONE (the column)** — verified 2026-04-23.
+
+**Findings from the code audit:**
+
+- `components/shared/StringLevelTable.tsx` renders 6 static columns + dynamic date columns. **No `kW/String` column is rendered.** Confirmed by reading the component's `<thead>` + `<tbody>` carefully.
+- The table columns today are: `Inverter · MPPT · String (PV#) · Perf % · Avail % · kWh · [date 1, date 2, ...]`
+- The `kWh` column (which stays) shows **actual measured energy per string over the selected date range** — this is the REAL per-string metric and replaces the old theoretical `kW/String`.
+
+**Client complaint is already addressed.** The client likely saw an older screenshot or an older build. No user-facing change required.
+
+### Follow-up — tech debt (non-urgent)
+
+Three dead references to `kw_per_string` remain in code, invisible to users but worth cleaning up for hygiene:
+
+| File | Line | What to do |
+|---|---|---|
+| `app/api/dashboard/analysis/string-level/route.ts` | 165, 190 | Remove `kwPerString` computation + field from response |
+| `app/api/admin/analysis/string-level/route.ts` | 201, 228 | Same |
+| `components/shared/StringLevelTable.tsx` | 14 | Remove `kw_per_string: number \| null` from the `StringRow` interface |
+
+**Not blocking.** Queued as tech-debt cleanup for the next cleanup pass. ~15 minutes of work when picked up.
+
+Recorded in decision log below + will add a `// TODO(cleanup)` comment when next we touch those files.
 
 ---
 
@@ -741,11 +763,12 @@ How to triage the 6 items:
 
 ## 6. Decision log
 
-As decisions get made, record them here with date and reasoning. Empty for now — fill in as we work through items.
+As decisions get made, record them here with date and reasoning.
 
 | Date | Decision | Who | For item |
 |---|---|---|---|
-| — | — | — | — |
+| 2026-04-23 | **Item 1 marked DONE.** Code audit confirmed the `kW/String` column is already removed from the `/analysis` table on both `/dashboard/analysis` and `/admin/analysis`. Table renders 6 static columns (Inverter · MPPT · String · Perf · Avail · kWh) + date columns. The `kWh` column shows *real* measured per-string energy over the selected date range — the meaningful replacement for the old theoretical `kW/String`. No user-facing change required. | Ali + Claude (audit-verified) | 1 |
+| 2026-04-23 | **Dead-code cleanup queued as tech debt** (not blocking). 3 references to `kw_per_string` remain in API routes + TypeScript interface — invisible to users. ~15 min cleanup when next we touch those files. | Ali | 1 |
 
 ---
 
@@ -753,13 +776,14 @@ As decisions get made, record them here with date and reasoning. Empty for now �
 
 Update this section as items are completed. Currently:
 
-- 🔴 **6 TODO**
+- 🔴 **5 TODO** (items 2, 3, 4, 5, 6)
 - 🟡 **0 IN PROGRESS**
-- 🟢 **0 DONE**
-- ⛔ **1 BLOCKED (Item 4 — client)**
-- ❓ **5 items awaiting client/Ali answers**
+- 🟢 **1 DONE** (item 1 — confirmed already removed)
+- 🟠 **1 TECH DEBT** (item 1 dead code — non-blocking, ~15 min cleanup later)
+- ⛔ **1 BLOCKED** (Item 4 — awaiting client screenshot)
+- ❓ **8 items awaiting client/Ali answers** (4 client + 4 Ali)
 
-**Next action:** Send client CQ1–CQ5 + get Ali's answers to AQ1–AQ4. Once answered, start Sprint 1 (Items 3, 1, 4).
+**Next action:** Send client CQ1–CQ5 + get Ali's answers to AQ1–AQ4. Once answered, start Sprint 1 (Items 3, 4).
 
 ---
 
@@ -768,6 +792,7 @@ Update this section as items are completed. Currently:
 | Date | Change |
 |---|---|
 | 2026-04-23 | Document created · verbatim client message captured · all 6 items interpreted · current-code state verified in each item · 9 open questions listed · execution order proposed |
+| 2026-04-23 | **Item 1 closed as DONE** — audit verified the column is already removed from rendering on both `/dashboard/analysis` and `/admin/analysis` tables. Dead field (`kw_per_string` in API routes + `StringRow` interface) logged as tech debt for future cleanup. Decision log entry added. |
 
 ---
 
