@@ -116,7 +116,7 @@ export default function DashboardOverviewPage() {
               value={formatEnergy(data.kpis?.energyToday?.value ?? 0)}
               icon={Zap}
               accent="gold"
-              subtitle="Fleet energy produced today"
+              subtitle="Energy produced today"
               sparkline={data.kpis?.energyToday?.sparkline}
               deltaPercent={data.kpis?.energyToday?.deltaPercent ?? null}
               deltaContext={data.kpis?.energyToday?.deltaContext ?? null}
@@ -133,7 +133,7 @@ export default function DashboardOverviewPage() {
               }
             />
             <KpiCard
-              title="Fleet Health"
+              title="Overall Health"
               value={
                 data.kpis?.fleetHealth?.percent !== null &&
                 data.kpis?.fleetHealth?.percent !== undefined

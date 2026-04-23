@@ -17,7 +17,7 @@ interface HeroCardProps {
 }
 
 /**
- * SPC HeroCard — the featured "Live Fleet Power" widget.
+ * SPC HeroCard — the featured "Live Power" widget.
  * Stripe-style multi-layer shadow, solar-gold gradient top accent,
  * inline sparkline, delta indicator, and fleet context stats.
  */
@@ -49,7 +49,7 @@ export function HeroCard({
             <div className="flex items-center gap-2 mb-2">
               <Sun className="h-3.5 w-3.5 text-solar-gold-600" strokeWidth={2} />
               <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                Live Fleet Power
+                Live Power
               </span>
               {isLive && (
                 <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-700">
