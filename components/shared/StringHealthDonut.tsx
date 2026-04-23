@@ -95,7 +95,14 @@ function DonutTooltip({ active, payload }: { active?: boolean; payload?: Array<{
   const total = p.total ?? 1
   const pct = total > 0 ? ((p.value / total) * 100).toFixed(1) : '0'
   return (
-    <div className="bg-white border border-slate-200 rounded-sm shadow-md px-3 py-2 text-xs pointer-events-none">
+    <div
+      className="rounded-md border border-slate-200 px-3 py-2 text-xs pointer-events-none"
+      style={{
+        backgroundColor: '#FFFFFF',
+        opacity: 1,
+        boxShadow: '0 10px 24px -8px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.08)',
+      }}
+    >
       <div className="flex items-center gap-2 mb-0.5">
         <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
         <span className="font-bold text-slate-900">{p.label}</span>
@@ -221,7 +228,13 @@ export function StringHealthDonut({
                   />
                 ))}
               </Pie>
-              <Tooltip content={<DonutTooltip />} cursor={false} />
+              <Tooltip
+                content={<DonutTooltip />}
+                cursor={false}
+                wrapperStyle={{ zIndex: 50, outline: 'none', opacity: 1 }}
+                allowEscapeViewBox={{ x: true, y: true }}
+                isAnimationActive={false}
+              />
             </PieChart>
           </ResponsiveContainer>
           {/* Centre metric — placed absolutely inside the donut hole */}
