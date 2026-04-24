@@ -207,12 +207,25 @@ export class SolisClient {
   }
 
   async getAlarmList(params?: { beginDate?: string; endDate?: string }): Promise<any[]> {
-    const data = await this.request<any>('/v1/api/alarmList', {
-      pageNo: '1',
-      pageSize: '100',
+    const allAlarms: any[] = []
+    const pageSize = 100
+    const maxPages = 20
+    const filters = {
       ...(params?.beginDate ? { alarmBeginTime: params.beginDate } : {}),
       ...(params?.endDate ? { alarmEndTime: params.endDate } : {}),
-    })
-    return data?.records || []
+    }
+
+    for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
+      const data = await this.request<any>('/v1/api/alarmList', {
+        pageNo: String(pageNo),
+        pageSize: String(pageSize),
+        ...filters,
+      })
+      const records: any[] = data?.records || []
+      allAlarms.push(...records)
+      if (records.length < pageSize) break
+    }
+
+    return allAlarms
   }
 }
