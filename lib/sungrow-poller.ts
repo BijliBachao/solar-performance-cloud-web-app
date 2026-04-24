@@ -306,6 +306,7 @@ async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
 
       // Save hardware daily counter — source of truth for "today's energy" display
       const dailyYieldRaw = dp[`p${SUNGROW_DAILY_YIELD_POINT}`]
+      console.log(`[Sungrow] Device ${device.id}: p83022=${JSON.stringify(dailyYieldRaw)}`)
       const nativeKwh = dailyYieldRaw !== undefined && dailyYieldRaw !== '--'
         ? Number(dailyYieldRaw)
         : null
