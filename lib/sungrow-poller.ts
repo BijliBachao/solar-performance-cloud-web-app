@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { SungrowClient } from '@/lib/sungrow-client'
 import { PROVIDERS, DEVICE_TYPE_IDS } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB } from '@/lib/poller-utils'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
@@ -36,10 +36,14 @@ for (let i = 0; i < 14; i++) {
   STRING_VOLTAGE_IDS[19 + i] = 7166 + i
 }
 
-// All point IDs we need (string current + voltage)
+// Daily yield point — p83022 is the standard "Daily Generation" point for Sungrow string inverters
+const SUNGROW_DAILY_YIELD_POINT = 83022
+
+// All point IDs we need (string current + voltage + daily yield)
 const ALL_POINT_IDS = [
   ...Object.values(STRING_CURRENT_IDS),
   ...Object.values(STRING_VOLTAGE_IDS),
+  SUNGROW_DAILY_YIELD_POINT,
 ]
 
 export async function pollSungrow(): Promise<void> {
@@ -298,6 +302,25 @@ async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
         await generateAlerts(device.id, device.plant_id, measurements)
         await updateHourlyAggregates(device.id, device.plant_id, maxStrings)
         await updateDailyAggregates(device.id, device.plant_id, maxStrings)
+      }
+
+      // Save hardware daily counter — source of truth for "today's energy" display
+      const dailyYieldRaw = dp[`p${SUNGROW_DAILY_YIELD_POINT}`]
+      const nativeKwh = dailyYieldRaw !== undefined && dailyYieldRaw !== '--'
+        ? Number(dailyYieldRaw)
+        : null
+      if (nativeKwh !== null && nativeKwh > 0) {
+        await prisma.device_daily.upsert({
+          where: { device_id_date: { device_id: device.id, date: getPKTDateForDB() } },
+          update: { native_kwh: new Decimal(nativeKwh) },
+          create: {
+            device_id: device.id,
+            plant_id: device.plant_id,
+            date: getPKTDateForDB(),
+            native_kwh: new Decimal(nativeKwh),
+            provider: PROVIDERS.SUNGROW,
+          },
+        })
       }
     } catch (error) {
       console.error(`[Sungrow] Failed to fetch string data for device ${device.id}:`, error)

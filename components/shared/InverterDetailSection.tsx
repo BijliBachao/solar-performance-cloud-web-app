@@ -82,6 +82,8 @@ interface InverterDetailSectionProps {
   apiAvgCurrent?: number
   /** Plant provider code (for the header pill). Optional. */
   provider?: string
+  /** Hardware counter daily kWh — preferred over trapezoidal string sum when available. */
+  nativeKwhToday?: number | null
 }
 
 // Format a Date into "HH:00 PKT" (assumes PKT offset = +5)
@@ -183,6 +185,7 @@ export function InverterDetailSection({
   colorIndex = 0,
   apiAvgCurrent,
   provider,
+  nativeKwhToday,
 }: InverterDetailSectionProps) {
   const color = INVERTER_COLORS[colorIndex % INVERTER_COLORS.length]
   const providerMeta = providerBadge(provider)
@@ -443,7 +446,12 @@ export function InverterDetailSection({
         <div className="flex items-center gap-2 flex-wrap text-[13px] font-mono font-semibold text-slate-900">
           <span>{formatPower(totalPower)}</span>
           <span className="text-slate-300">·</span>
-          {strings.some(s => s.energy_kwh != null) ? (
+          {nativeKwhToday != null && nativeKwhToday > 0 ? (
+            <span>
+              {nativeKwhToday.toFixed(1)}
+              <span className="text-[11px] font-semibold text-slate-500 ml-0.5">kWh today</span>
+            </span>
+          ) : strings.some(s => s.energy_kwh != null) ? (
             <span>
               {strings.reduce((sum, s) => sum + (s.energy_kwh || 0), 0).toFixed(1)}
               <span className="text-[11px] font-semibold text-slate-500 ml-0.5">kWh today</span>

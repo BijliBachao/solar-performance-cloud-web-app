@@ -96,6 +96,7 @@ export async function GET() {
       onlineDevicesResult,
       totalDevicesCount,
       hourlyTodayPerPlant,
+      nativeDailyToday,
     ] = await Promise.all([
       // Latest measurements per string in last 15 min (for live power + per-plant live).
       // Reject CT sensor faults on BOTH axes — impossibly-high current OR
@@ -192,6 +193,12 @@ export async function GET() {
       // Total devices in assigned plants
       prisma.devices.count({ where: { plant_id: { in: plantIds } } }),
 
+      // Native daily kWh from hardware counters (per device, summed to plant in COMPUTE section)
+      prisma.device_daily.findMany({
+        where: { plant_id: { in: plantIds }, date: todayPKT },
+        select: { plant_id: true, native_kwh: true },
+      }),
+
       // Per-plant hourly today (for production bars — 24 buckets per plant).
       // Same two-axis fault filter.
       prisma.$queryRaw<Array<{ plant_id: string; hour: Date; power: number }>>`
@@ -206,6 +213,15 @@ export async function GET() {
     ])
 
     // ═══════════════ COMPUTE METRICS ═══════════════
+
+    // Native daily kWh per plant — sum of hardware counters across all inverters in the plant
+    const nativeEnergyByPlant = new Map<string, number>()
+    for (const row of nativeDailyToday) {
+      nativeEnergyByPlant.set(
+        row.plant_id,
+        (nativeEnergyByPlant.get(row.plant_id) || 0) + Number(row.native_kwh || 0),
+      )
+    }
 
     // Per-plant: sum current power from the last-measurement set.
     // We sum fleet power from these *after* applying the standby floor
@@ -313,7 +329,10 @@ export async function GET() {
       d.setUTCDate(d.getUTCDate() - i)
       energySparkline.push(dailyEnergyByDate.get(isoDateKey(d)) || 0)
     }
-    const energyTodayKwh = energySparkline[DASHBOARD_HISTORY_DAYS - 1] || 0
+    const energyTodayKwhTrap = energySparkline[DASHBOARD_HISTORY_DAYS - 1] || 0
+    // Prefer native hardware counter (sum across all plants with data); fall back to trapezoidal
+    const nativeFleetTotal = nativeDailyToday.reduce((s, r) => s + Number(r.native_kwh || 0), 0)
+    const energyTodayKwh = nativeFleetTotal > 0 ? nativeFleetTotal : energyTodayKwhTrap
 
     // Energy delta — FAIR apples-to-apples comparison.
     // DON'T compare today-partial to yesterday-full (always misleading before EOD).
@@ -458,8 +477,9 @@ export async function GET() {
         // Back-compat: isLive === PRODUCING (narrower than before — was "reporting")
         isLive: liveStatus === 'PRODUCING',
         currentPowerKw: displayPowerKw,
-        todayEnergyKwh:
-          Math.round((dailyEnergyByPlant.get(plantId) || 0) * 10) / 10,
+        todayEnergyKwh: nativeEnergyByPlant.has(plantId)
+          ? Math.round((nativeEnergyByPlant.get(plantId) || 0) * 10) / 10
+          : Math.round((dailyEnergyByPlant.get(plantId) || 0) * 10) / 10,
         healthPercent,
         productionBars: plantHourlyBars.get(plantId) || new Array(24).fill(0),
       }

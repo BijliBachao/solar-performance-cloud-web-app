@@ -144,6 +144,19 @@ model string_daily {
   @@index([plant_id, date(sort: Desc)])
 }
 
+model device_daily {
+  id          String   @id @default(uuid())
+  device_id   String   @db.VarChar(50)
+  plant_id    String   @db.VarChar(50)
+  date        DateTime @db.Date
+  native_kwh  Decimal? @db.Decimal(10, 3)
+  provider    String   @db.VarChar(20)
+
+  @@unique([device_id, date])
+  @@index([plant_id, date(sort: Desc)])
+  @@index([date])
+}
+
 model alerts {
   id             Int       @id @default(autoincrement())
   device_id      String    @db.VarChar(50)

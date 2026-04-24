@@ -51,6 +51,20 @@ export async function GET(
 
     const todayStart = getTodayStart()
 
+    // Native daily kWh per device from hardware counter
+    const todayDate = new Date(Date.UTC(
+      new Date(Date.now() + 5 * 60 * 60 * 1000).getUTCFullYear(),
+      new Date(Date.now() + 5 * 60 * 60 * 1000).getUTCMonth(),
+      new Date(Date.now() + 5 * 60 * 60 * 1000).getUTCDate(),
+    ))
+    const nativeDailyRows = await prisma.device_daily.findMany({
+      where: { device_id: { in: devices.map(d => d.id) }, date: todayDate },
+      select: { device_id: true, native_kwh: true },
+    })
+    const nativeByDevice = new Map(
+      nativeDailyRows.map(r => [r.device_id, Number(r.native_kwh || 0)])
+    )
+
     const deviceStrings = await Promise.all(
       devices.map(async (device) => {
         // Latest measurement per string (for real-time status)
@@ -121,6 +135,8 @@ export async function GET(
           ? Math.max(...strings.map(s => s.energy_kwh))
           : 0
 
+        const nativeKwhToday = nativeByDevice.get(device.id) ?? null
+
         return {
           device_id: device.id,
           device_name: device.device_name,
@@ -128,6 +144,7 @@ export async function GET(
           avg_current: Math.round(displayAvg * 1000) / 1000,
           active_avg_current: Math.round(displayAvg * 1000) / 1000,
           best_string_kwh: bestKwh,
+          native_kwh_today: nativeKwhToday && nativeKwhToday > 0 ? nativeKwhToday : null,
         }
       })
     )

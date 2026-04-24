@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { GrowattClient } from '@/lib/growatt-client'
 import { PROVIDERS, DEVICE_TYPE_IDS } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB } from '@/lib/poller-utils'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
@@ -352,6 +352,22 @@ async function processDeviceData(
     await generateAlerts(device.id, device.plant_id, measurements)
     await updateHourlyAggregates(device.id, device.plant_id, maxStrings || strings.length)
     await updateDailyAggregates(device.id, device.plant_id, maxStrings || strings.length)
+  }
+
+  // Save hardware daily counter — source of truth for "today's energy" display
+  const nativeKwh = deviceData.eacToday ?? deviceData.eToday ?? null
+  if (nativeKwh !== null && Number(nativeKwh) > 0) {
+    await prisma.device_daily.upsert({
+      where: { device_id_date: { device_id: device.id, date: getPKTDateForDB() } },
+      update: { native_kwh: new Decimal(nativeKwh) },
+      create: {
+        device_id: device.id,
+        plant_id: device.plant_id,
+        date: getPKTDateForDB(),
+        native_kwh: new Decimal(nativeKwh),
+        provider: PROVIDERS.GROWATT,
+      },
+    })
   }
 }
 

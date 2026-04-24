@@ -191,7 +191,7 @@ function getPKTDayStart(): Date {
 // getPKTDayStart() returns e.g. 2026-03-27T19:00:00Z (Mar 28 midnight PKT in UTC),
 // which PostgreSQL DATE truncates to 2026-03-27 (wrong). This function returns
 // 2026-03-28T00:00:00Z so DATE truncation gives the correct PKT date.
-function getPKTDateForDB(): Date {
+export function getPKTDateForDB(): Date {
   const nowPKT = new Date(Date.now() + PKT_OFFSET_MS)
   return new Date(Date.UTC(
     nowPKT.getUTCFullYear(),

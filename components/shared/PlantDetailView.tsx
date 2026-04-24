@@ -229,11 +229,15 @@ export function PlantDetailView({
   const displayPowerKw =
     liveStatus === 'PRODUCING' ? Math.round(rawLivePowerKw * 10) / 10 : 0
 
-  // Today's energy: sum of per-string energy_kwh where present
-  const todayEnergyKwh = allStrings.reduce(
-    (sum, s) => sum + (Number(s.energy_kwh) || 0),
+  // Today's energy: prefer hardware counter (native_kwh_today per inverter),
+  // fall back to trapezoidal string sum when native is unavailable
+  const nativeTotal = stringData.reduce(
+    (sum, d) => sum + ((d as any).native_kwh_today || 0),
     0,
   )
+  const todayEnergyKwh = nativeTotal > 0
+    ? nativeTotal
+    : allStrings.reduce((sum, s) => sum + (Number(s.energy_kwh) || 0), 0)
 
   // Utilization: live power vs nameplate capacity
   const capacityKw = Number(plant?.capacity_kw) || 0
@@ -358,6 +362,7 @@ export function PlantDetailView({
                   colorIndex={index}
                   apiAvgCurrent={deviceAvgCurrent}
                   provider={plant.provider}
+                  nativeKwhToday={(deviceData as any)?.native_kwh_today ?? null}
                 />
               )
             })}

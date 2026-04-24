@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { huaweiClient } from '@/lib/huawei-client'
 import { Decimal } from '@prisma/client/runtime/library'
 import { PROVIDERS } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB } from '@/lib/poller-utils'
 import { ACTIVE_CURRENT_THRESHOLD } from '@/lib/string-health'
 
 let lastPlantSync = 0
@@ -233,6 +233,22 @@ async function fetchStringData(): Promise<void> {
             await generateAlerts(device.id, device.plant_id, measurements)
             await updateHourlyAggregates(device.id, device.plant_id, maxStrings)
             await updateDailyAggregates(device.id, device.plant_id, maxStrings)
+          }
+
+          // Save hardware daily counter — source of truth for "today's energy" display
+          const nativeKwh = data.dataItemMap['day_cap'] ?? (data.dataItemMap as any)['e_day'] ?? null
+          if (nativeKwh !== null && Number(nativeKwh) > 0) {
+            await prisma.device_daily.upsert({
+              where: { device_id_date: { device_id: device.id, date: getPKTDateForDB() } },
+              update: { native_kwh: new Decimal(nativeKwh) },
+              create: {
+                device_id: device.id,
+                plant_id: device.plant_id,
+                date: getPKTDateForDB(),
+                native_kwh: new Decimal(nativeKwh),
+                provider: PROVIDERS.HUAWEI,
+              },
+            })
           }
         } catch (error) {
           console.error(`[Huawei] Failed to process device ${device.id}:`, error)

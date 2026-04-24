@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { SolisClient } from '@/lib/solis-client'
 import { PROVIDERS, DEVICE_TYPE_IDS } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB } from '@/lib/poller-utils'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
@@ -237,6 +237,22 @@ async function fetchSolisStringData(client: SolisClient): Promise<void> {
         await generateAlerts(device.id, device.plant_id, measurements)
         await updateHourlyAggregates(device.id, device.plant_id, maxStrings)
         await updateDailyAggregates(device.id, device.plant_id, maxStrings)
+      }
+
+      // Save hardware daily counter — source of truth for "today's energy" display
+      const eToday = Number(detail.eToday ?? 0)
+      if (eToday > 0) {
+        await prisma.device_daily.upsert({
+          where: { device_id_date: { device_id: device.id, date: getPKTDateForDB() } },
+          update: { native_kwh: new Decimal(eToday) },
+          create: {
+            device_id: device.id,
+            plant_id: device.plant_id,
+            date: getPKTDateForDB(),
+            native_kwh: new Decimal(eToday),
+            provider: PROVIDERS.SOLIS,
+          },
+        })
       }
     } catch (error) {
       console.error(`[Solis] Failed to fetch string data for device ${device.id}:`, error)
