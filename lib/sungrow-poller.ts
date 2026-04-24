@@ -230,6 +230,12 @@ async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
       if (results.length === 0) continue
       const dp = results[0]
 
+      // DIAGNOSTIC: log all available point keys on first device to find daily yield point
+      if (device.id === devices[0].id) {
+        const keys = Object.keys(dp).sort()
+        console.log(`[Sungrow] Available points for device ${device.id}: ${keys.join(', ')}`)
+      }
+
       // Detect active strings from data — only count strings with current
       // (Sungrow reports voltage on MPPT pairs but current only on primary string)
       let detectedStrings = 0
