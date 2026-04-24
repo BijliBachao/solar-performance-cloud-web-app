@@ -36,9 +36,9 @@ for (let i = 0; i < 14; i++) {
   STRING_VOLTAGE_IDS[19 + i] = 7166 + i
 }
 
-// All point IDs we need (string current + voltage only)
-// p83022 (daily generation) is a station-level virtual point, not available via getDeviceRealTimeData.
-// Daily yield is fetched separately via getPowerStationRealKpi after the device loop.
+// All point IDs we need (string current + voltage only).
+// Daily yield (p83022) is a station-level virtual point, not returned by getDeviceRealTimeData.
+// It is read from getPowerStationList()'s today_energy field and stored in device_daily.
 const ALL_POINT_IDS = [
   ...Object.values(STRING_CURRENT_IDS),
   ...Object.values(STRING_VOLTAGE_IDS),
@@ -60,10 +60,18 @@ export async function pollSungrow(): Promise<void> {
   const now = Date.now()
 
   try {
+    // Fetch station list once — used for health sync AND today_energy for device_daily
+    const stations = await client.getPowerStationList()
+    const stationEnergyByPlant = new Map<string, number>(
+      stations
+        .filter(s => s.today_energy_kwh !== null && s.today_energy_kwh! > 0)
+        .map(s => [s.ps_id, s.today_energy_kwh!])
+    )
+
     let plantsSyncedThisCycle = false
 
     if (now - lastPlantSync > HOUR_MS) {
-      await syncSungrowPlants(client)
+      await syncSungrowPlants(stations)
       lastPlantSync = now
       plantsSyncedThisCycle = true
     }
@@ -74,10 +82,10 @@ export async function pollSungrow(): Promise<void> {
     }
 
     if (!plantsSyncedThisCycle) {
-      await syncSungrowPlantHealth(client)
+      await syncSungrowPlantHealth(stations)
     }
 
-    await fetchSungrowStringData(client)
+    await fetchSungrowStringData(client, stationEnergyByPlant)
 
     console.log('[Sungrow] Poll cycle complete.')
   } catch (error) {
@@ -85,9 +93,8 @@ export async function pollSungrow(): Promise<void> {
   }
 }
 
-async function syncSungrowPlants(client: SungrowClient): Promise<void> {
+async function syncSungrowPlants(stations: Awaited<ReturnType<SungrowClient['getPowerStationList']>>): Promise<void> {
   console.log('[Sungrow] Syncing plants...')
-  const stations = await client.getPowerStationList()
 
   await prisma.$transaction(
     stations.map((station) =>
@@ -125,26 +132,17 @@ async function syncSungrowPlants(client: SungrowClient): Promise<void> {
   console.log(`[Sungrow] Synced ${stations.length} plants`)
 }
 
-async function syncSungrowPlantHealth(client: SungrowClient): Promise<void> {
-  const plants = await prisma.plants.findMany({
-    where: { provider: PROVIDERS.SUNGROW },
-    select: { id: true },
-  })
-
-  if (plants.length === 0) return
-
+async function syncSungrowPlantHealth(stations: Awaited<ReturnType<SungrowClient['getPowerStationList']>>): Promise<void> {
+  if (stations.length === 0) return
   try {
-    const stations = await client.getPowerStationList()
-    if (stations.length > 0) {
-      await prisma.$transaction(
-        stations.map((station) =>
-          prisma.plants.update({
-            where: { id: station.ps_id },
-            data: { health_state: mapSungrowHealthState(station.ps_status) },
-          })
-        )
+    await prisma.$transaction(
+      stations.map((station) =>
+        prisma.plants.update({
+          where: { id: station.ps_id },
+          data: { health_state: mapSungrowHealthState(station.ps_status) },
+        })
       )
-    }
+    )
   } catch (error) {
     console.error('[Sungrow] Failed to sync plant health:', error)
   }
@@ -199,7 +197,7 @@ async function syncSungrowDevices(client: SungrowClient): Promise<void> {
   console.log(`[Sungrow] Synced ${totalInverters} inverters`)
 }
 
-async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
+async function fetchSungrowStringData(client: SungrowClient, stationEnergyByPlant: Map<string, number>): Promise<void> {
   console.log('[Sungrow] Fetching string data...')
   const devices = await prisma.devices.findMany({
     where: {
@@ -310,12 +308,12 @@ async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
     }
   }
 
-  // Fetch plant-level daily yield via getPowerStationRealKpi and distribute to devices.
+  // Distribute station-level daily yield (from getPowerStationList today_energy field) to devices.
   // p83022 is a station-level virtual point — not available per device via real-time API.
   const plantIds = [...new Set(devices.map(d => d.plant_id))]
   for (const plantId of plantIds) {
     try {
-      const { daily_kwh } = await client.getPowerStationRealKpi(plantId)
+      const daily_kwh = stationEnergyByPlant.get(plantId) ?? null
       if (!daily_kwh || daily_kwh <= 0) continue
 
       const plantDevices = devices.filter(d => d.plant_id === plantId)

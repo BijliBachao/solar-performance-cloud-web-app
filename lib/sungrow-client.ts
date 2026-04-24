@@ -271,19 +271,6 @@ export class SungrowClient {
     })
 
     const records = data?.pageList || []
-    if (records.length > 0) {
-      console.log('[SungrowClient] Raw station fields (first record):', Object.keys(records[0]).join(', '))
-      const first = records[0]
-      // Log any energy-related fields
-      const energyKeys = Object.keys(first).filter(k =>
-        k.toLowerCase().includes('energy') || k.toLowerCase().includes('kwh') ||
-        k.toLowerCase().includes('yield') || k.toLowerCase().includes('today') ||
-        k.toLowerCase().includes('day') || k.toLowerCase().includes('gen')
-      )
-      if (energyKeys.length > 0) {
-        console.log('[SungrowClient] Energy fields:', JSON.stringify(Object.fromEntries(energyKeys.map(k => [k, first[k]]))))
-      }
-    }
     return records.map((p: any) => ({
       ps_id: String(p.ps_id),
       ps_name: p.ps_name || '',
