@@ -61,11 +61,18 @@ export async function GET() {
 
     const permissions = getPermissionsForRole(dbUser.role)
 
+    const plantCount = dbUser.role === 'SUPER_ADMIN'
+      ? await prisma.plants.count()
+      : dbUser.organization_id
+        ? await prisma.plant_assignments.count({ where: { organization_id: dbUser.organization_id } })
+        : 0
+
     return NextResponse.json({
       id: dbUser.id,
       email: dbUser.email,
       first_name: dbUser.first_name,
       last_name: dbUser.last_name,
+      plantCount,
       profile: {
         role: dbUser.role,
         organizationId: dbUser.organization_id,

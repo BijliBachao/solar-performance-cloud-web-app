@@ -4,18 +4,27 @@ import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { TopBar } from '@/components/layout/TopBar'
 
+interface UserData {
+  first_name: string | null
+  last_name: string | null
+  plantCount: number
+  profile: { role: string; organizationId: string | null; organizationName: string | null }
+}
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const [authorized, setAuthorized] = useState(false)
+  const [user, setUser] = useState<UserData | null>(null)
 
   useEffect(() => {
     async function checkAuth() {
       try {
         const res = await fetch('/api/auth/user', { credentials: 'include' })
         if (!res.ok) { router.push('/sign-in'); return }
-        const data = await res.json()
+        const data: UserData = await res.json()
         if (data.profile.role === 'SUPER_ADMIN') { router.push('/admin'); return }
         if (!data.profile.organizationId) { router.push('/pending-assignment'); return }
+        setUser(data)
         setAuthorized(true)
       } catch { router.push('/sign-in') }
     }
@@ -33,11 +42,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     )
   }
 
+  const fullName = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || undefined
+
   return (
     <div className="min-h-screen bg-white">
-      <Sidebar role="user" />
+      <Sidebar
+        role="user"
+        userFullName={fullName}
+        userRole={user?.profile.role}
+        orgName={user?.profile.organizationName ?? undefined}
+        plantCount={user?.plantCount}
+      />
       <div className="ml-60">
-        <TopBar />
+        <TopBar
+          userFullName={fullName}
+          userRole={user?.profile.role}
+          orgName={user?.profile.organizationName ?? undefined}
+          showAlertBell
+        />
         <main>{children}</main>
       </div>
     </div>
