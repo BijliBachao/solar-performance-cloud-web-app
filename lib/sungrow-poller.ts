@@ -293,8 +293,8 @@ async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
         await updateDailyAggregates(device.id, device.plant_id, maxStrings)
       }
 
-      // Save hardware daily counter — p1 = Today's Energy (当日发电), per-device
-      const nativeKwh = safeFloat(dp['p1'])
+      // Save hardware daily counter — p1 = Today's Energy (当日发电), per-device, unit = Wh
+      const nativeKwh = safeFloat(dp['p1']) / 1000 // convert Wh → kWh
       if (nativeKwh > 0) {
         await prisma.device_daily.upsert({
           where: { device_id_date: { device_id: device.id, date: getPKTDateForDB() } },
