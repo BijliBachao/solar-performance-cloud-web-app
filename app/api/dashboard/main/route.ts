@@ -95,8 +95,8 @@ export async function GET() {
       recentAlertsForDisplay,
       onlineDevicesResult,
       totalDevicesCount,
-      hourlyTodayPerPlant,
       nativeDailyToday,
+      hourlyTodayPerPlant,
     ] = await Promise.all([
       // Latest measurements per string in last 15 min (for live power + per-plant live).
       // Reject CT sensor faults on BOTH axes — impossibly-high current OR
