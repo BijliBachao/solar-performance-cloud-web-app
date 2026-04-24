@@ -113,6 +113,75 @@ Hardening confirmed: `fail2ban` active, `ufw` active.
 
 Logs under `/home/ubuntu/.pm2/logs/` — daily rotation observed (files dated per day), retention policy not explicitly enforced.
 
+### 1.9 Wattey coordination & boundaries — shared EC2 rules
+
+This EC2 hosts **two apps side by side**: SPC (ours) and Wattey (another BijliBachao product). Everything in this section exists so a Wattey developer can work on their app without breaking SPC — and vice versa. Share this section with the Wattey team; it is the authoritative coordination doc.
+
+**Ownership map — never cross these lines:**
+
+| Resource | SPC (ours) | Wattey (theirs) |
+|---|---|---|
+| App dir on EC2 | `~/solar-web-app` | `~/reyy` |
+| Port (internal) | 3001 | 3000 |
+| Nginx site file | `/etc/nginx/sites-available/spc.bijlibachao.pk` | `/etc/nginx/sites-available/wattey` |
+| Domain | `spc.bijlibachao.pk` | `wattey.bijlibachao.pk` |
+| PM2 processes | `solar-web`, `solar-poller` | `nextjs-app`, `mqtt-service`, `reconcile-service` |
+| Database (on shared RDS) | `solar_dashboard` | separate DB on the same RDS instance |
+
+**SPC-owned tables inside `solar_dashboard` — Wattey must not write to any of these:**
+`alerts`, `device_daily`, `devices`, `organizations`, `plant_assignments`, `plants`, `string_daily`, `string_hourly`, `string_measurements`, `users`, `vendor_alarms`.
+
+**Dangerous commands — do NOT run on this shared host under any circumstance:**
+
+| Command | Why it's banned |
+|---|---|
+| `pm2 delete all` / `pm2 restart all` / `pm2 kill` / `pm2 stop all` | Hits both apps — will kill SPC silently |
+| `sudo systemctl restart nginx` | Hard restart drops in-flight requests on both domains; use `sudo nginx -t && sudo systemctl reload nginx` |
+| `DROP DATABASE solar_dashboard` / any write on SPC tables | Destroys SPC data |
+| `CREATE TABLE` in `solar_dashboard` | SPC uses Prisma `db push`; a hand-made table will break the next deploy |
+| Node.js / PM2 upgrade without coordination | SPC is locked to Node 18.20.8 + PM2 6.0.13; upgrading breaks SPC |
+| Opening port 3000 or 3001 in the AWS Security Group | Both apps proxy through Nginx; direct exposure breaks TLS and rate limiting |
+
+**Safe PM2 patterns (target by name — always):**
+```bash
+# Wattey side
+pm2 restart nextjs-app mqtt-service reconcile-service
+pm2 logs nextjs-app
+pm2 stop nextjs-app
+
+# SPC side (for SPC team only)
+pm2 restart solar-web solar-poller
+pm2 logs solar-poller
+```
+
+**What to do if something goes wrong:**
+
+| Symptom | Interpretation | Action |
+|---|---|---|
+| Wattey down, SPC up | Wattey-side issue | Wattey team handles |
+| SPC down, Wattey up | SPC-side issue | SPC team handles |
+| **Both down** | Shared infra (disk, Nginx, Node, PM2 daemon, RDS) | Contact both teams before any destructive recovery (no reboots, no `pm2 kill`) |
+
+**Sanity-check commands — run these after any change to shared config:**
+```bash
+pm2 list                                    # expect 5 processes: 3 Wattey + 2 SPC
+sudo netstat -tlnp | grep -E ':300[01]'     # expect both 3000 and 3001 LISTEN
+ls /etc/nginx/sites-enabled/                # expect: spc.bijlibachao.pk  wattey
+curl -o /dev/null -s -w "%{http_code}\n" https://spc.bijlibachao.pk  # expect 200
+```
+If any of those numbers change, something that belongs to the other app was touched — revert before walking away.
+
+**SPC deploy footprint (so Wattey knows what to expect during SPC pushes):**
+1. `cd ~/solar-web-app && git pull`
+2. `npm ci --legacy-peer-deps` inside `~/solar-web-app`
+3. `npx prisma db push` against `solar_dashboard` only
+4. `rm -rf .next && npm run build`
+5. `pm2 restart solar-web solar-poller`
+
+Wattey sees **zero impact** during SPC deploys. If Wattey notices disruption, contact SPC team immediately.
+
+**SPC contact:** ai@right2fix.com
+
 ---
 
 ## 2. What This Session Delivered (what's solid)

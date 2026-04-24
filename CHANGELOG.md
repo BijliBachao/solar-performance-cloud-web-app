@@ -1,5 +1,38 @@
 # SPC Infrastructure & Feature Change Log
 
+## 2026-04-24 — Vendor alarms, UI polish, Wattey boundaries doc
+
+### `[FEAT-1]` · Vendor hardware alarms pipeline (Solis, Huawei, Growatt)
+
+- **What:** New `vendor_alarms` table + per-provider poller logic to pull inverter-reported faults directly from vendor APIs (what the client sees in iSolarCloud / FusionSolar / ShinePhone apps). Exposed via `/api/vendor-alarms` and a "Hardware Faults" tab on `/dashboard/alerts`. Hourly sync for Solis/Huawei, inline with 5-min poll for Growatt (via `faultcode`/`warningcode` fields — no separate call, avoids the account-lock-risk fault log endpoint).
+- **Why:** Clients were checking vendor apps separately for fault notifications. Consolidating both our string-performance alerts and vendor hardware faults into one dashboard removes that friction.
+- **When:** 2026-04-24
+- **Known quirks codified here so future changes don't regress:**
+  - Solis API returns `id: "-1"` for every alarm (not a real unique ID). We build a composite vendor_alarm_id from `alarmDeviceSn + alarmCode + alarmBeginTime`.
+  - Solis alarm list is paginated. Single-page fetch caps at 100 records — we now loop through up to 20 pages.
+  - Growatt has no alarm history API. We derive open/close state from the real-time `faultcode`/`warningcode` fields; dedup key prefix is `${deviceId}_${kind}_` so `findFirst` locates the open row.
+  - Huawei returns only active alarms. Resolution is derived by diffing the latest active list against our open rows.
+
+### `[UX-1]` · `/dashboard/alerts` redesign + professional TopBar/Sidebar
+
+- **What:** Full rewrite of `/dashboard/alerts` (labeled filter toolbar, 4 KPI cards, String/Hardware tabs). Shared `TopBar` gained live PKT clock, alert bell with CRITICAL+WARNING badge, user name/org/role pill. Shared `Sidebar` gained section labels (`MONITORING` / `ACCOUNT`), plant count stat, user card at bottom.
+- **Why:** Client feedback: filters were confusing ("can't tell what they do") and the chrome felt bare. Both layouts now carry user context everywhere.
+- **When:** 2026-04-24
+
+### `[OBS-1]` · Microsoft Clarity analytics (`wgrk8i6lmn`)
+
+- **What:** Clarity tag added to root `app/layout.tsx` via `next/script` with `strategy="afterInteractive"` — non-blocking, loads after page is interactive.
+- **Why:** Session recordings + heatmaps for UX insight with zero perf cost.
+- **When:** 2026-04-24
+
+### `[DOC-1]` · AUDIT.md §1.9 — Wattey coordination & boundaries
+
+- **What:** Consolidated all Wattey-vs-SPC boundary rules into AUDIT.md §1.9 as the single authoritative coordination doc: ownership map (dirs, ports, nginx, PM2 names, DB), list of banned commands (`pm2 restart all`, `systemctl restart nginx`, writes to SPC tables), safe PM2 patterns, sanity-check commands, SPC deploy footprint, shared-resource versions locked (Node 18.20.8, PM2 6.0.13).
+- **Why:** EC2 is shared with the Wattey app. Boundary info was scattered across AUDIT.md §1.1, §1.3, §1.6, §1.8 — easy to miss. Now one section to share with the Wattey team.
+- **When:** 2026-04-24
+
+---
+
 ## 2026-04-22 — Security patch
 
 ### `[SEC-1]` · Clerk CRITICAL bypass CVE patched (GHSA-vqx2-fgx2-5wq9)
