@@ -301,9 +301,13 @@ async function fetchSolisAlarms(client: SolisClient): Promise<void> {
         ? new Date(Number(alarm.alarmEndTime))
         : null
 
+      // Solis always returns id="-1" — not a real unique ID.
+      // Use composite key: SN + code + begin-time (unique per alarm event).
+      const vendorAlarmId = `${alarm.alarmDeviceSn}_${alarm.alarmCode}_${alarm.alarmBeginTime}`
+
       try {
         await prisma.vendor_alarms.upsert({
-          where: { provider_vendor_alarm_id: { provider: PROVIDERS.SOLIS, vendor_alarm_id: String(alarm.id) } },
+          where: { provider_vendor_alarm_id: { provider: PROVIDERS.SOLIS, vendor_alarm_id: vendorAlarmId } },
           update: {
             ...(resolvedAt ? { resolved_at: resolvedAt } : {}),
           },
@@ -311,7 +315,7 @@ async function fetchSolisAlarms(client: SolisClient): Promise<void> {
             device_id: device.id,
             plant_id: device.plant_id,
             provider: PROVIDERS.SOLIS,
-            vendor_alarm_id: String(alarm.id),
+            vendor_alarm_id: vendorAlarmId,
             alarm_code: alarm.alarmCode ? String(alarm.alarmCode) : null,
             severity,
             message: alarm.alarmMsg || 'Unknown alarm',
