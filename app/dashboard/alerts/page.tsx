@@ -134,7 +134,7 @@ export default function AlertsPage() {
         <div className="flex items-center gap-0 border-b border-slate-200 -mx-6 px-6">
           {([
             { id: 'string',   label: 'String Alerts',   icon: Bell,  available: true  },
-            { id: 'hardware', label: 'Hardware Faults',  icon: Clock, available: false },
+            { id: 'hardware', label: 'Hardware Faults',  icon: Clock, available: true  },
           ] as const).map(tab => {
             const Icon = tab.icon
             const isActive = activeTab === tab.id
