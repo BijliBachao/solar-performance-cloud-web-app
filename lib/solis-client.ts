@@ -206,11 +206,12 @@ export class SolisClient {
     return this.request('/v1/api/stationDetail', { id })
   }
 
-  async getAlarmList(stationId: string): Promise<any[]> {
+  async getAlarmList(params?: { beginDate?: string; endDate?: string }): Promise<any[]> {
     const data = await this.request<any>('/v1/api/alarmList', {
       pageNo: '1',
-      pageSize: 100,
-      stationId,
+      pageSize: '100',
+      ...(params?.beginDate ? { alarmBeginTime: params.beginDate } : {}),
+      ...(params?.endDate ? { alarmEndTime: params.endDate } : {}),
     })
     return data?.records || []
   }

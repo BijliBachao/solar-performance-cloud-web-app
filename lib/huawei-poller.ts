@@ -7,6 +7,7 @@ import { ACTIVE_CURRENT_THRESHOLD } from '@/lib/string-health'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
+let lastAlarmSync = 0
 const HOUR_MS = 60 * 60 * 1000
 
 export async function pollHuawei(): Promise<void> {
@@ -26,6 +27,11 @@ export async function pollHuawei(): Promise<void> {
 
     await syncPlantHealth()
     await fetchStringData()
+
+    if (now - lastAlarmSync > HOUR_MS) {
+      await fetchHuaweiAlarms()
+      lastAlarmSync = now
+    }
 
     console.log('[Huawei] Poll cycle complete.')
   } catch (error) {
@@ -275,4 +281,80 @@ function detectMaxStrings(dataItemMap: Record<string, number | null>): number {
     }
   }
   return max
+}
+
+async function fetchHuaweiAlarms(): Promise<void> {
+  console.log('[Huawei] Fetching vendor alarms...')
+  try {
+    // Get all Huawei plant codes
+    const plants = await prisma.plants.findMany({
+      where: { provider: PROVIDERS.HUAWEI },
+      select: { id: true },
+    })
+    if (plants.length === 0) return
+
+    // Build devName → {device_id, plant_id} map
+    const huaweiDevices = await prisma.devices.findMany({
+      where: { provider: PROVIDERS.HUAWEI },
+      select: { id: true, plant_id: true, device_name: true },
+    })
+    const deviceByName = new Map(huaweiDevices.map(d => [d.device_name, d]))
+
+    const plantCodes = plants.map(p => p.id)
+    const activeAlarms = await huaweiClient.getActiveAlarms(plantCodes)
+
+    // Huawei severity: 1=Critical, 2=Major, 3=Minor, 4=Warning
+    const mapSeverity = (sev: number): string => {
+      if (sev <= 2) return 'CRITICAL'
+      if (sev === 3) return 'WARNING'
+      return 'INFO'
+    }
+
+    const activeIds = new Set<string>()
+
+    for (const alarm of activeAlarms) {
+      const device = deviceByName.get(alarm.devName)
+      if (!device) continue
+
+      const vid = String(alarm.alarmId)
+      activeIds.add(vid)
+
+      try {
+        await prisma.vendor_alarms.upsert({
+          where: { provider_vendor_alarm_id: { provider: PROVIDERS.HUAWEI, vendor_alarm_id: vid } },
+          update: {},
+          create: {
+            device_id: device.id,
+            plant_id: device.plant_id,
+            provider: PROVIDERS.HUAWEI,
+            vendor_alarm_id: vid,
+            alarm_code: alarm.causeId ? String(alarm.causeId) : null,
+            severity: mapSeverity(alarm.severity),
+            message: alarm.alarmName || 'Unknown alarm',
+            started_at: new Date(Number(alarm.raiseTime)),
+            raw_data: alarm as any,
+          },
+        })
+      } catch {
+        // unique constraint race — safe to skip
+      }
+    }
+
+    // Resolve any open Huawei alarms no longer in the active list
+    const openHuaweiAlarms = await prisma.vendor_alarms.findMany({
+      where: { provider: PROVIDERS.HUAWEI, resolved_at: null },
+      select: { id: true, vendor_alarm_id: true },
+    })
+    const toResolve = openHuaweiAlarms.filter(a => !activeIds.has(a.vendor_alarm_id))
+    if (toResolve.length > 0) {
+      await prisma.vendor_alarms.updateMany({
+        where: { id: { in: toResolve.map(a => a.id) } },
+        data: { resolved_at: new Date() },
+      })
+    }
+
+    console.log(`[Huawei] ${activeAlarms.length} active alarms, resolved ${toResolve.length}`)
+  } catch (error) {
+    console.error('[Huawei] Failed to fetch vendor alarms:', error)
+  }
 }

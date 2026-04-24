@@ -176,3 +176,24 @@ model alerts {
   @@index([resolved_at])
   @@index([device_id, string_number, severity, resolved_at])
 }
+
+model vendor_alarms {
+  id              String    @id @default(uuid())
+  device_id       String    @db.VarChar(50)
+  plant_id        String    @db.VarChar(50)
+  provider        String    @db.VarChar(20)
+  vendor_alarm_id String    @db.VarChar(150)
+  alarm_code      String?   @db.VarChar(50)
+  severity        String    @db.VarChar(20)
+  message         String    @db.Text
+  advice          String?   @db.Text
+  started_at      DateTime
+  resolved_at     DateTime?
+  raw_data        Json?
+  created_at      DateTime  @default(now())
+
+  @@unique([provider, vendor_alarm_id])
+  @@index([plant_id, resolved_at])
+  @@index([device_id, started_at(sort: Desc)])
+  @@index([provider, resolved_at])
+}

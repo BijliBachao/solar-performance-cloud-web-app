@@ -6,6 +6,7 @@ import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloa
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
+let lastAlarmSync = 0
 const HOUR_MS = 60 * 60 * 1000
 
 // Solis health state → our DB health_state
@@ -51,6 +52,11 @@ export async function pollSolis(): Promise<void> {
     }
 
     await fetchSolisStringData(client)
+
+    if (now - lastAlarmSync > HOUR_MS) {
+      await fetchSolisAlarms(client)
+      lastAlarmSync = now
+    }
 
     console.log('[Solis] Poll cycle complete.')
   } catch (error) {
@@ -260,4 +266,69 @@ async function fetchSolisStringData(client: SolisClient): Promise<void> {
   }
 
   console.log('[Solis] String data fetch complete')
+}
+
+async function fetchSolisAlarms(client: SolisClient): Promise<void> {
+  console.log('[Solis] Fetching vendor alarms...')
+  try {
+    // Build device_name → {id, plant_id} map for Solis devices
+    // Solis stores: devices.id = Solis internal ID, devices.device_name = SN
+    // Alarm response: alarmDeviceSn = SN → match device_name
+    const solisDevices = await prisma.devices.findMany({
+      where: { provider: PROVIDERS.SOLIS },
+      select: { id: true, plant_id: true, device_name: true },
+    })
+    const deviceBySn = new Map(solisDevices.map(d => [d.device_name, d]))
+
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    const today = new Date()
+    const fmt = (d: Date) => d.toISOString().split('T')[0] // yyyy-MM-dd
+
+    const alarms = await client.getAlarmList({
+      beginDate: fmt(sevenDaysAgo),
+      endDate: fmt(today),
+    })
+
+    let stored = 0
+    for (const alarm of alarms) {
+      const device = deviceBySn.get(alarm.alarmDeviceSn)
+      if (!device) continue // unknown device — skip
+
+      const level = String(alarm.alarmLevel)
+      const severity = level === '3' ? 'CRITICAL' : level === '2' ? 'WARNING' : 'INFO'
+      const isRestored = String(alarm.state) === '2'
+      const resolvedAt = isRestored && alarm.alarmEndTime
+        ? new Date(Number(alarm.alarmEndTime))
+        : null
+
+      try {
+        await prisma.vendor_alarms.upsert({
+          where: { provider_vendor_alarm_id: { provider: PROVIDERS.SOLIS, vendor_alarm_id: String(alarm.id) } },
+          update: {
+            ...(resolvedAt ? { resolved_at: resolvedAt } : {}),
+          },
+          create: {
+            device_id: device.id,
+            plant_id: device.plant_id,
+            provider: PROVIDERS.SOLIS,
+            vendor_alarm_id: String(alarm.id),
+            alarm_code: alarm.alarmCode ? String(alarm.alarmCode) : null,
+            severity,
+            message: alarm.alarmMsg || 'Unknown alarm',
+            advice: alarm.advice || null,
+            started_at: new Date(Number(alarm.alarmBeginTime)),
+            resolved_at: resolvedAt,
+            raw_data: alarm,
+          },
+        })
+        stored++
+      } catch {
+        // unique constraint race — safe to skip
+      }
+    }
+
+    console.log(`[Solis] Stored/updated ${stored} vendor alarms`)
+  } catch (error) {
+    console.error('[Solis] Failed to fetch vendor alarms:', error)
+  }
 }

@@ -354,6 +354,12 @@ async function processDeviceData(
     await updateDailyAggregates(device.id, device.plant_id, maxStrings || strings.length)
   }
 
+  // Process fault/warning codes → vendor_alarms
+  const faultcode = Number(deviceData.faultcode ?? 0)
+  const warningcode = Number(deviceData.warningcode ?? 0)
+  await processGrowattFaultCode(device.id, device.plant_id, faultcode, 'fault')
+  await processGrowattFaultCode(device.id, device.plant_id, warningcode, 'warn')
+
   // Save hardware daily counter — source of truth for "today's energy" display
   const nativeKwh = deviceData.eacToday ?? deviceData.eToday ?? null
   if (nativeKwh !== null && Number(nativeKwh) > 0) {
@@ -416,4 +422,43 @@ function extractStrings(deviceData: any, deviceType: string): StringReading[] {
   }
 
   return strings
+}
+
+// Track active Growatt fault/warning codes per device.
+// No history API available — we derive open/resolved from real-time faultcode.
+async function processGrowattFaultCode(
+  deviceId: string,
+  plantId: string,
+  code: number,
+  kind: 'fault' | 'warn',
+): Promise<void> {
+  const openAlarm = await prisma.vendor_alarms.findFirst({
+    where: { device_id: deviceId, provider: PROVIDERS.GROWATT, resolved_at: null,
+      vendor_alarm_id: { startsWith: `${deviceId}_${kind}_` } },
+    select: { id: true, alarm_code: true },
+  })
+
+  if (code > 0) {
+    if (openAlarm && openAlarm.alarm_code === String(code)) return // unchanged, no-op
+
+    // Different code or no open alarm — resolve old, open new
+    if (openAlarm) {
+      await prisma.vendor_alarms.update({ where: { id: openAlarm.id }, data: { resolved_at: new Date() } })
+    }
+
+    await prisma.vendor_alarms.create({
+      data: {
+        device_id: deviceId,
+        plant_id: plantId,
+        provider: PROVIDERS.GROWATT,
+        vendor_alarm_id: `${deviceId}_${kind}_${Date.now()}`,
+        alarm_code: String(code),
+        severity: kind === 'fault' ? 'CRITICAL' : 'WARNING',
+        message: kind === 'fault' ? `Inverter fault code ${code}` : `Inverter warning code ${code}`,
+        started_at: new Date(),
+      },
+    })
+  } else if (openAlarm) {
+    await prisma.vendor_alarms.update({ where: { id: openAlarm.id }, data: { resolved_at: new Date() } })
+  }
 }

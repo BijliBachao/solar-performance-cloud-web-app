@@ -29,7 +29,7 @@ import {
 } from '@/lib/design-tokens'
 
 interface AlertHistoryLogProps {
-  plantId: string
+  plantId?: string
   deviceId?: string
   showResolveButton?: boolean
   className?: string
@@ -93,12 +93,11 @@ export function AlertHistoryLog({
       if (!append) setLoading(true)
       setError(null)
 
-      const decodedPlantId = decodeURIComponent(plantId)
       const params = new URLSearchParams({
-        plant_id: decodedPlantId,
         page: String(page),
         limit: '50',
       })
+      if (plantId) params.set('plant_id', decodeURIComponent(plantId))
 
       if (filters.severity !== 'ALL') params.set('severity', filters.severity)
       if (filters.status === 'ACTIVE') params.set('resolved', 'false')
