@@ -36,10 +36,11 @@ for (let i = 0; i < 14; i++) {
   STRING_VOLTAGE_IDS[19 + i] = 7166 + i
 }
 
-// All point IDs we need (string current + voltage only).
-// Daily yield (p83022) is a station-level virtual point, not returned by getDeviceRealTimeData.
-// It is read from getPowerStationList()'s today_energy field and stored in device_daily.
+// p1 = Today's Energy (当日发电) — per-device hardware counter, documented in SUNGROW-API-KNOWLEDGE.md
+const SUNGROW_DAILY_YIELD_POINT = 1
+
 const ALL_POINT_IDS = [
+  SUNGROW_DAILY_YIELD_POINT,
   ...Object.values(STRING_CURRENT_IDS),
   ...Object.values(STRING_VOLTAGE_IDS),
 ]
@@ -60,13 +61,8 @@ export async function pollSungrow(): Promise<void> {
   const now = Date.now()
 
   try {
-    // Fetch station list once — used for health sync AND today_energy for device_daily
+    // Fetch station list once per cycle — reused for both health sync and plant upsert
     const stations = await client.getPowerStationList()
-    const stationEnergyByPlant = new Map<string, number>(
-      stations
-        .filter(s => s.today_energy_kwh !== null && s.today_energy_kwh! > 0)
-        .map(s => [s.ps_id, s.today_energy_kwh!])
-    )
 
     let plantsSyncedThisCycle = false
 
@@ -85,7 +81,7 @@ export async function pollSungrow(): Promise<void> {
       await syncSungrowPlantHealth(stations)
     }
 
-    await fetchSungrowStringData(client, stationEnergyByPlant)
+    await fetchSungrowStringData(client)
 
     console.log('[Sungrow] Poll cycle complete.')
   } catch (error) {
@@ -197,7 +193,7 @@ async function syncSungrowDevices(client: SungrowClient): Promise<void> {
   console.log(`[Sungrow] Synced ${totalInverters} inverters`)
 }
 
-async function fetchSungrowStringData(client: SungrowClient, stationEnergyByPlant: Map<string, number>): Promise<void> {
+async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
   console.log('[Sungrow] Fetching string data...')
   const devices = await prisma.devices.findMany({
     where: {
@@ -215,9 +211,6 @@ async function fetchSungrowStringData(client: SungrowClient, stationEnergyByPlan
     console.log('[Sungrow] No inverters found, skipping string data fetch')
     return
   }
-
-  // Track per-device measured power (W) for proportional daily yield distribution
-  const devicePowerW = new Map<string, number>()
 
   for (const device of devices) {
     try {
@@ -300,53 +293,23 @@ async function fetchSungrowStringData(client: SungrowClient, stationEnergyByPlan
         await updateDailyAggregates(device.id, device.plant_id, maxStrings)
       }
 
-      // Track power for proportional daily yield distribution
-      const totalPowerW = measurements.reduce((sum, m) => sum + Number(m.power), 0)
-      devicePowerW.set(device.id, totalPowerW)
-    } catch (error) {
-      console.error(`[Sungrow] Failed to fetch string data for device ${device.id}:`, error)
-    }
-  }
-
-  // Distribute station-level daily yield (from getPowerStationList today_energy field) to devices.
-  // p83022 is a station-level virtual point — not available per device via real-time API.
-  const plantIds = [...new Set(devices.map(d => d.plant_id))]
-  for (const plantId of plantIds) {
-    try {
-      const daily_kwh = stationEnergyByPlant.get(plantId) ?? null
-      if (!daily_kwh || daily_kwh <= 0) continue
-
-      const plantDevices = devices.filter(d => d.plant_id === plantId)
-      const date = getPKTDateForDB()
-
-      if (plantDevices.length === 1) {
-        // Single inverter — direct attribution
+      // Save hardware daily counter — p1 = Today's Energy (当日发电), per-device
+      const nativeKwh = safeFloat(dp['p1'])
+      if (nativeKwh > 0) {
         await prisma.device_daily.upsert({
-          where: { device_id_date: { device_id: plantDevices[0].id, date } },
-          update: { native_kwh: new Decimal(daily_kwh) },
-          create: { device_id: plantDevices[0].id, plant_id: plantId, date, native_kwh: new Decimal(daily_kwh), provider: PROVIDERS.SUNGROW },
+          where: { device_id_date: { device_id: device.id, date: getPKTDateForDB() } },
+          update: { native_kwh: new Decimal(nativeKwh) },
+          create: {
+            device_id: device.id,
+            plant_id: device.plant_id,
+            date: getPKTDateForDB(),
+            native_kwh: new Decimal(nativeKwh),
+            provider: PROVIDERS.SUNGROW,
+          },
         })
-        console.log(`[Sungrow] Plant ${plantId}: ${daily_kwh} kWh → device ${plantDevices[0].id}`)
-      } else {
-        // Multi-inverter — distribute proportionally by measured string power
-        const totalPower = plantDevices.reduce((sum, d) => sum + (devicePowerW.get(d.id) || 0), 0)
-        for (const d of plantDevices) {
-          const fraction = totalPower > 0
-            ? (devicePowerW.get(d.id) || 0) / totalPower
-            : 1 / plantDevices.length
-          const deviceKwh = Math.round(daily_kwh * fraction * 1000) / 1000
-          if (deviceKwh > 0) {
-            await prisma.device_daily.upsert({
-              where: { device_id_date: { device_id: d.id, date } },
-              update: { native_kwh: new Decimal(deviceKwh) },
-              create: { device_id: d.id, plant_id: plantId, date, native_kwh: new Decimal(deviceKwh), provider: PROVIDERS.SUNGROW },
-            })
-          }
-        }
-        console.log(`[Sungrow] Plant ${plantId}: ${daily_kwh} kWh distributed across ${plantDevices.length} inverters`)
       }
     } catch (error) {
-      console.error(`[Sungrow] Failed to fetch/store daily yield for plant ${plantId}:`, error)
+      console.error(`[Sungrow] Failed to fetch string data for device ${device.id}:`, error)
     }
   }
 

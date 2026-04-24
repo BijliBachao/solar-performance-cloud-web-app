@@ -19,7 +19,6 @@ export interface SungrowPlant {
   ps_type: number
   total_capacity_kw: number
   ps_status: number // 1=normal, 2=fault
-  today_energy_kwh: number | null
   latitude: number | null
   longitude: number | null
   ps_location: string | null
@@ -277,24 +276,10 @@ export class SungrowClient {
       ps_type: p.ps_type || 0,
       total_capacity_kw: p.total_capcity ? Number(p.total_capcity.value) || 0 : 0,
       ps_status: p.ps_status ?? 1,
-      today_energy_kwh: p.today_energy?.value ? Number(p.today_energy.value) || null :
-                        p.day_energy?.value ? Number(p.day_energy.value) || null :
-                        p.cur_day_energy?.value ? Number(p.cur_day_energy.value) || null : null,
       latitude: p.latitude || null,
       longitude: p.longitude || null,
       ps_location: p.ps_location || null,
     }))
-  }
-
-  async getPowerStationRealKpi(psId: string): Promise<{ daily_kwh: number | null }> {
-    try {
-      const data = await this.request<any>('/openapi/getPowerStationRealKpi', { ps_id: psId })
-      const kpi = data?.stationKpiMap?.[psId] || data?.station_kpi_map?.[psId] || {}
-      const raw = kpi?.p83022?.value ?? kpi?.today_energy?.value ?? kpi?.day_energy?.value ?? null
-      return { daily_kwh: raw !== null ? Number(raw) || null : null }
-    } catch {
-      return { daily_kwh: null }
-    }
   }
 
   async getDeviceList(psId: string): Promise<SungrowDevice[]> {
