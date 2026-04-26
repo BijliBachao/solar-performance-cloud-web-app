@@ -15,6 +15,12 @@ interface StringData {
   gap_percent: number
   status: StringStatus
   energy_kwh?: number
+  config?: {
+    panel_count: number
+    panel_make: string | null
+    panel_rating_w: number | null
+    nameplate_w: number | null
+  } | null
 }
 
 interface StringComparisonTableProps {
@@ -62,6 +68,10 @@ export function StringComparisonTable({ strings }: StringComparisonTableProps) {
             <th className="px-3 py-2 text-left">
               <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">String</div>
             </th>
+            <th className="px-3 py-2 text-left">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Panels</div>
+              <div className="text-[9px] font-mono text-slate-400 leading-none mt-0.5">count × W</div>
+            </th>
             <th className="px-3 py-2 text-right">
               <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Voltage</div>
               <div className="text-[9px] font-mono text-slate-400 leading-none mt-0.5">V</div>
@@ -105,6 +115,26 @@ export function StringComparisonTable({ strings }: StringComparisonTableProps) {
                 {/* String identifier */}
                 <td className="px-3 py-2 font-mono font-bold text-slate-900">
                   PV{s.string_number}
+                </td>
+
+                {/* Panel config (read-only) */}
+                <td className="px-3 py-2">
+                  {s.config?.panel_count ? (
+                    <div className="flex flex-col leading-tight">
+                      <span className="text-[11px] font-mono font-semibold text-slate-700">
+                        {s.config.panel_count}
+                        {s.config.panel_rating_w ? ` × ${s.config.panel_rating_w}W` : ''}
+                        {s.config.nameplate_w
+                          ? ` · ${(s.config.nameplate_w / 1000).toFixed(2)} kWp`
+                          : ''}
+                      </span>
+                      {s.config.panel_make && (
+                        <span className="text-[9px] text-slate-400">{s.config.panel_make}</span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-slate-300 italic">Not configured</span>
+                  )}
                 </td>
 
                 {/* Numeric columns — right-aligned, tabular mono */}

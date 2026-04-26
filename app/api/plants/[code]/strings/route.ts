@@ -49,6 +49,24 @@ export async function GET(
       select: { id: true, device_name: true, max_strings: true },
     })
 
+    // Fetch all string configs for these devices in one query (LEFT JOIN equivalent)
+    const deviceIds = devices.map(d => d.id)
+    const stringConfigs = deviceIds.length > 0
+      ? await prisma.string_configs.findMany({
+          where: { device_id: { in: deviceIds } },
+          select: {
+            device_id: true,
+            string_number: true,
+            panel_count: true,
+            panel_make: true,
+            panel_rating_w: true,
+          },
+        })
+      : []
+    const configByKey = new Map(
+      stringConfigs.map(c => [`${c.device_id}:${c.string_number}`, c]),
+    )
+
     const todayStart = getTodayStart()
 
     // Native daily kWh per device from hardware counter
@@ -117,6 +135,11 @@ export async function GET(
           const stringTodayData = todayByString.get(m.string_number) || []
           const kwh = trapezoidalKwh(stringTodayData)
 
+          const cfg = configByKey.get(`${device.id}:${m.string_number}`)
+          const nameplate_w = cfg?.panel_count && cfg?.panel_rating_w
+            ? cfg.panel_count * cfg.panel_rating_w
+            : null
+
           return {
             string_number: m.string_number,
             voltage,
@@ -125,6 +148,14 @@ export async function GET(
             gap_percent: Math.round(gapPercent * 10) / 10,
             status,
             energy_kwh: Math.round(kwh * 1000) / 1000,
+            config: cfg
+              ? {
+                  panel_count: cfg.panel_count,
+                  panel_make: cfg.panel_make,
+                  panel_rating_w: cfg.panel_rating_w,
+                  nameplate_w,
+                }
+              : null,
           }
         })
 
