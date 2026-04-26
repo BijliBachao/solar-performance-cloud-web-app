@@ -262,7 +262,11 @@ export default function AdminStringsConfigPage() {
         return
       }
       const result = await res.json()
-      setSuccessMsg(result.message || `Applied to ${result.updated} strings`)
+      if (result.failed && result.failed > 0) {
+        setErrorMsg(`${result.failed} string${result.failed === 1 ? '' : 's'} failed to save — see logs`)
+      } else {
+        setSuccessMsg(result.message || `Applied to ${result.updated} strings`)
+      }
       setBulkOpen(false)
       // Reload to reflect changes
       await fetchData()

@@ -159,31 +159,50 @@ export async function POST(request: NextRequest, { params }: Params) {
       targets.push({ device_id: devId, string_number: Number(snStr) })
     }
 
+    // Per-row try/catch so one DB error doesn't lose the partial-success count.
     let updated = 0
+    const failures: Array<{ device_id: string; string_number: number; error: string }> = []
     for (const t of targets) {
-      await prisma.string_configs.upsert({
-        where: { device_id_string_number: { device_id: t.device_id, string_number: t.string_number } },
-        create: {
+      try {
+        await prisma.string_configs.upsert({
+          where: { device_id_string_number: { device_id: t.device_id, string_number: t.string_number } },
+          create: {
+            device_id: t.device_id,
+            string_number: t.string_number,
+            panel_count,
+            panel_make: panel_make ?? null,
+            panel_rating_w: panel_rating_w ?? null,
+            notes: notes ?? null,
+            updated_by: userContext.userId,
+          },
+          update: {
+            panel_count,
+            panel_make: panel_make ?? null,
+            panel_rating_w: panel_rating_w ?? null,
+            notes: notes ?? null,
+            updated_by: userContext.userId,
+          },
+        })
+        updated++
+      } catch (err: any) {
+        failures.push({
           device_id: t.device_id,
           string_number: t.string_number,
-          panel_count,
-          panel_make: panel_make ?? null,
-          panel_rating_w: panel_rating_w ?? null,
-          notes: notes ?? null,
-          updated_by: userContext.userId,
-        },
-        update: {
-          panel_count,
-          panel_make: panel_make ?? null,
-          panel_rating_w: panel_rating_w ?? null,
-          notes: notes ?? null,
-          updated_by: userContext.userId,
-        },
-      })
-      updated++
+          error: err?.message?.slice(0, 200) || 'unknown',
+        })
+      }
     }
 
-    return NextResponse.json({ updated, message: `Applied to ${updated} strings` })
+    const message = failures.length === 0
+      ? `Applied to ${updated} strings`
+      : `Applied to ${updated} strings, ${failures.length} failed`
+
+    return NextResponse.json({
+      updated,
+      failed: failures.length,
+      failures: failures.length > 0 ? failures : undefined,
+      message,
+    })
   } catch (error) {
     if (error instanceof ApiAuthError) return createErrorResponse(error)
     console.error('[Admin Strings-Config BULK]', error)
