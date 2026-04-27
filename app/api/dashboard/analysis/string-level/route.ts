@@ -102,6 +102,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // ── String panel configs (admin-entered, additive — does NOT change kw_per_string math)
+    const stringConfigs = await prisma.string_configs.findMany({
+      where: { device_id: { in: deviceIds } },
+      select: { device_id: true, string_number: true, panel_count: true, panel_make: true, panel_rating_w: true },
+    })
+    const configByKey = new Map(stringConfigs.map(c => [`${c.device_id}:${c.string_number}`, c]))
+
     // ── kW per string ───────────────────────────────────────────────
     const plantCapacities = new Map<string, number>()
     for (const d of devices) plantCapacities.set(d.plant_id, Number(d.plants?.capacity_kw) || 0)
@@ -180,6 +187,8 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      const cfg = configByKey.get(key)
+
       rows.push({
         plant_id: device.plant_id,
         plant_name: device.plants?.plant_name || 'Unknown',
@@ -188,6 +197,9 @@ export async function GET(request: NextRequest) {
         string_number: Number(strNum),
         mppt: Math.ceil(Number(strNum) / 2),
         kw_per_string: kwPerString,
+        panel_count: cfg?.panel_count ?? null,
+        panel_make: cfg?.panel_make ?? null,
+        panel_rating_w: cfg?.panel_rating_w ?? null,
         perf_avg: perfCount > 0 ? Math.round(perfSum / perfCount) : null,
         avail_avg: availCount > 0 ? Math.round(availSum / availCount) : null,
         energy_kwh: energySum > 0 ? Math.round(energySum * 10) / 10 : null,

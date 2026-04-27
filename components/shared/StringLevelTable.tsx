@@ -12,11 +12,28 @@ interface StringRow {
   string_number: number
   mppt: number
   kw_per_string: number | null
+  panel_count?: number | null
+  panel_make?: string | null
+  panel_rating_w?: number | null
   perf_avg: number | null
   avail_avg: number | null
   energy_kwh: number | null
   scores: Record<string, number | null>
   type?: 'active' | 'inactive' | 'unused'
+}
+
+// Compact single-line panel summary for the String cell.
+// Returns "8 × 550W · Longi", "8 × 550W", "8 panels · Longi", etc.
+function panelSummary(row: StringRow): string | null {
+  if (!row.panel_count) return null
+  const parts: string[] = []
+  parts.push(
+    row.panel_rating_w
+      ? `${row.panel_count} × ${row.panel_rating_w}W`
+      : `${row.panel_count} panel${row.panel_count !== 1 ? 's' : ''}`,
+  )
+  if (row.panel_make) parts.push(row.panel_make)
+  return parts.join(' · ')
 }
 
 interface StringLevelTableProps {
@@ -74,8 +91,8 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
             <th className="sticky left-[140px] z-20 bg-gray-50 px-2 py-2 text-left text-xs font-semibold text-gray-600 border-r border-gray-200 min-w-[64px]">
               MPPT
             </th>
-            <th className="sticky left-[204px] z-20 bg-gray-50 px-2 py-2 text-left text-xs font-semibold text-gray-600 border-r border-gray-200 min-w-[60px]">
-              String
+            <th className="sticky left-[204px] z-20 bg-gray-50 px-2 py-2 text-left text-xs font-semibold text-gray-600 border-r border-gray-200 min-w-[200px]">
+              String · Panels
             </th>
             <th className="px-2 py-2 text-center text-xs font-semibold text-blue-700 border-r border-gray-200 min-w-[52px] bg-blue-50/50">
               Perf
@@ -119,8 +136,13 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
                 <td className="sticky left-[140px] z-10 bg-white group-hover:bg-blue-50/50 px-2 py-1.5 text-xs text-gray-600 border-r border-gray-200 transition-colors">
                   MPPT{row.mppt}
                 </td>
-                <td className="sticky left-[204px] z-10 bg-white group-hover:bg-blue-50/50 px-2 py-1.5 text-xs font-medium text-gray-900 border-r border-gray-200 transition-colors">
-                  PV{row.string_number}
+                <td className="sticky left-[204px] z-10 bg-white group-hover:bg-blue-50/50 px-2 py-1.5 text-xs border-r border-gray-200 transition-colors whitespace-nowrap">
+                  <span className="font-medium text-gray-900">PV{row.string_number}</span>
+                  {panelSummary(row) ? (
+                    <span className="ml-1.5 text-gray-500"> · {panelSummary(row)}</span>
+                  ) : (
+                    <span className="ml-1.5 text-[10px] text-gray-300 italic">not configured</span>
+                  )}
                 </td>
                 <td className={cn('px-2 py-1.5 text-center text-xs font-mono border-r border-gray-200 bg-blue-50/30', metricCell(row.perf_avg, 'perf'))}>
                   {row.perf_avg !== null ? `${row.perf_avg}%` : '—'}
@@ -163,8 +185,11 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
                   <td className="sticky left-[140px] z-10 bg-amber-50/50 px-2 py-1 text-xs text-amber-600 border-r border-gray-200">
                     MPPT{row.mppt}
                   </td>
-                  <td className="sticky left-[204px] z-10 bg-amber-50/50 px-2 py-1 text-xs font-medium text-amber-700 border-r border-gray-200">
-                    PV{row.string_number}
+                  <td className="sticky left-[204px] z-10 bg-amber-50/50 px-2 py-1 text-xs border-r border-gray-200 whitespace-nowrap">
+                    <span className="font-medium text-amber-700">PV{row.string_number}</span>
+                    {panelSummary(row) && (
+                      <span className="ml-1.5 text-amber-600/70"> · {panelSummary(row)}</span>
+                    )}
                   </td>
                   <td className="px-2 py-1 text-center text-xs text-amber-400 border-r border-gray-200 bg-amber-50/30">—</td>
                   <td className="px-2 py-1 text-center text-xs text-amber-400 border-r border-gray-200 bg-amber-50/30">—</td>
@@ -204,8 +229,11 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
                   <td className="sticky left-[140px] z-10 bg-gray-50 px-2 py-1 text-xs text-gray-400 border-r border-gray-200">
                     MPPT{row.mppt}
                   </td>
-                  <td className="sticky left-[204px] z-10 bg-gray-50 px-2 py-1 text-xs text-gray-400 border-r border-gray-200">
-                    PV{row.string_number}
+                  <td className="sticky left-[204px] z-10 bg-gray-50 px-2 py-1 text-xs text-gray-400 border-r border-gray-200 whitespace-nowrap">
+                    <span>PV{row.string_number}</span>
+                    {panelSummary(row) && (
+                      <span className="ml-1.5 text-gray-500"> · {panelSummary(row)}</span>
+                    )}
                   </td>
                   <td className="px-2 py-1 text-center text-xs text-gray-300 border-r border-gray-200 bg-gray-50/50">—</td>
                   <td className="px-2 py-1 text-center text-xs text-gray-300 border-r border-gray-200 bg-gray-50/50">—</td>
