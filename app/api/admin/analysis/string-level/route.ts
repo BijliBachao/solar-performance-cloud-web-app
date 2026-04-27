@@ -108,6 +108,18 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // ── String panel configs (admin-entered) ────────────────────────
+    const stringConfigs = await prisma.string_configs.findMany({
+      where: { device_id: { in: deviceIds } },
+      select: {
+        device_id: true, string_number: true,
+        panel_count: true, panel_make: true, panel_rating_w: true,
+      },
+    })
+    const configByKey = new Map(
+      stringConfigs.map(c => [`${c.device_id}:${c.string_number}`, c]),
+    )
+
     // ── kW per string (active count only) ───────────────────────────
     const plantCapacities = new Map<string, number>()
     for (const d of devices) {
@@ -198,9 +210,17 @@ export async function GET(request: NextRequest) {
 
       const plantCap = plantCapacities.get(device.plant_id) || 0
       const plantStrings = plantActiveStringCounts.get(device.plant_id) || 0
-      const kwPerString = type === 'active' && plantStrings > 0 && plantCap > 0
+      const fallbackKwPerString = type === 'active' && plantStrings > 0 && plantCap > 0
         ? Math.round((plantCap / plantStrings) * 100) / 100
         : null
+
+      // Prefer real nameplate from string_configs.
+      const cfg = configByKey.get(key)
+      const nameplateKwp = cfg?.panel_count && cfg?.panel_rating_w
+        ? Math.round((cfg.panel_count * cfg.panel_rating_w) / 10) / 100
+        : null
+      const kwPerString = nameplateKwp ?? fallbackKwPerString
+      const kwIsEstimated = nameplateKwp === null && fallbackKwPerString !== null
 
       const scores: Record<string, number | null> = {}
       let perfSum = 0, perfCount = 0, availSum = 0, availCount = 0, energySum = 0
@@ -226,6 +246,10 @@ export async function GET(request: NextRequest) {
         string_number: Number(strNum),
         mppt: Math.ceil(Number(strNum) / 2),
         kw_per_string: kwPerString,
+        kw_is_estimated: kwIsEstimated,
+        panel_count: cfg?.panel_count ?? null,
+        panel_make: cfg?.panel_make ?? null,
+        panel_rating_w: cfg?.panel_rating_w ?? null,
         perf_avg: perfCount > 0 ? Math.round(perfSum / perfCount) : null,
         avail_avg: availCount > 0 ? Math.round(availSum / availCount) : null,
         energy_kwh: energySum > 0 ? Math.round(energySum * 10) / 10 : null,
