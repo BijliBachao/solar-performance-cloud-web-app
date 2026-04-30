@@ -55,16 +55,26 @@ export async function generateAlerts(
 ): Promise<void> {
   if (rawMeasurements.length === 0) return
 
-  // Exclude admin-flagged unused strings BEFORE peer comparison.
-  // Empty PV ports show induction-leak noise (~0.05–0.5 A) that the
-  // peer-comparison logic would otherwise treat as a 96%-below-peers
-  // CRITICAL alert. Admin marks them unused → they disappear from the
-  // peer pool AND from alert generation entirely.
-  const adminUnused = await prisma.string_configs.findMany({
-    where: { device_id: deviceId, is_used: false },
-    select: { string_number: true },
+  // Two admin flags affect alert generation differently:
+  //
+  //   is_used=false (Phase A) — empty PV port. Induction-leak noise (~0.05–0.5 A)
+  //     would trigger 96%-below-peers CRITICAL alerts. Removed from peer pool
+  //     AND from all alert generation.
+  //
+  //   exclude_from_peer_comparison=true (Phase B) — non-standard orientation
+  //     (wall, east/west, shaded). Lower output is expected, not a fault. Removed
+  //     from the PEER POOL only — still gets dead-string detection (Part 2) so a
+  //     real 0 A fault on a wall-mounted string is still flagged.
+  const adminConfigs = await prisma.string_configs.findMany({
+    where: { device_id: deviceId },
+    select: { string_number: true, is_used: true, exclude_from_peer_comparison: true },
   })
-  const unusedSet = new Set(adminUnused.map(c => c.string_number))
+  const unusedSet = new Set(
+    adminConfigs.filter(c => c.is_used === false).map(c => c.string_number),
+  )
+  const peerExcludedSet = new Set(
+    adminConfigs.filter(c => c.exclude_from_peer_comparison === true).map(c => c.string_number),
+  )
   const usedRaw = unusedSet.size > 0
     ? rawMeasurements.filter(m => !unusedSet.has(m.string_number))
     : rawMeasurements
@@ -76,21 +86,30 @@ export async function generateAlerts(
   const measurements = dropSensorFaults(usedRaw)
   if (measurements.length === 0) return
 
-  const activeStrings = measurements.filter(m => isActive(Number(m.current)))
-  const totalCurrent = activeStrings.reduce((sum, m) => sum + Number(m.current), 0)
-  const avgCurrentAll = activeStrings.length > 0 ? totalCurrent / activeStrings.length : 0
+  // Peer pool = all non-unused, non-peer-excluded active strings.
+  const peerPool = measurements.filter(m => !peerExcludedSet.has(m.string_number))
+  const peerActive = peerPool.filter(m => isActive(Number(m.current)))
+  const peerTotalCurrent = peerActive.reduce((sum, m) => sum + Number(m.current), 0)
+  const peerAvgCurrent = peerActive.length > 0 ? peerTotalCurrent / peerActive.length : 0
 
-  // Build severity map
-  const currentSeverities = new Map<number, { severity: string; gapPercent: number }>()
+  // Build severity map. gapPercent is null for non-peer-comparable alerts
+  // (Part 2 fires on peer-excluded strings, OR when the peer pool is too thin
+  // to compute a meaningful "% below peers" — a real dead string is still a
+  // dead string regardless of whether we have healthy peers to compare to).
+  const currentSeverities = new Map<
+    number,
+    { severity: string; gapPercent: number | null }
+  >()
 
-  const canDoComparison = activeStrings.length >= MIN_PEERS_FOR_COMPARISON && avgCurrentAll >= MIN_AVG_FOR_COMPARISON
+  const canDoComparison = peerActive.length >= MIN_PEERS_FOR_COMPARISON && peerAvgCurrent >= MIN_AVG_FOR_COMPARISON
 
-  // ── Part 1: Compare active strings against each other (leave-one-out) ──
+  // ── Part 1: Compare peer-pool strings against each other (leave-one-out) ──
+  // Peer-excluded strings are not in peerActive, so they're skipped.
   if (canDoComparison) {
-    for (const measurement of activeStrings) {
+    for (const measurement of peerActive) {
       const current = Number(measurement.current)
-      const othersTotal = totalCurrent - current
-      const othersCount = activeStrings.length - 1
+      const othersTotal = peerTotalCurrent - current
+      const othersCount = peerActive.length - 1
       if (othersCount <= 0) continue
       const othersAvg = othersTotal / othersCount
       if (othersAvg <= 0) continue
@@ -104,15 +123,24 @@ export async function generateAlerts(
   }
 
   // ── Part 2: Dead/near-dead strings (current ≤ threshold) ──────
-  if (canDoComparison) {
-    const deadStrings = measurements.filter(m => !isActive(Number(m.current)))
-    for (const measurement of deadStrings) {
+  // Fires for ALL non-unused strings — independent of peer pool size and
+  // independent of the peer-excluded flag. A 0 A string is dead whether or
+  // not we have peers to compare against, and even an inverter with all
+  // strings flagged peer-excluded should still surface a real cable break.
+  //
+  // gapPercent is set ONLY when the string is in the peer pool AND the pool
+  // is viable. Otherwise it's null — the alert message says "near-zero
+  // current"; we don't claim a peer ratio when there isn't one.
+  const deadStrings = measurements.filter(m => !isActive(Number(m.current)))
+  for (const measurement of deadStrings) {
+    const sn = measurement.string_number
+    const inPeerPool = !peerExcludedSet.has(sn)
+    if (canDoComparison && inPeerPool) {
       const current = Number(measurement.current)
-      const gapPercent = Math.min(computeGap(current, avgCurrentAll), 100)
-      currentSeverities.set(measurement.string_number, {
-        severity: 'CRITICAL',
-        gapPercent,
-      })
+      const gapPercent = Math.min(computeGap(current, peerAvgCurrent), 100)
+      currentSeverities.set(sn, { severity: 'CRITICAL', gapPercent })
+    } else {
+      currentSeverities.set(sn, { severity: 'CRITICAL', gapPercent: null })
     }
   }
 
@@ -153,8 +181,11 @@ export async function generateAlerts(
     const current = Number(measurement.current)
     const message = !isActive(current)
       ? `String ${stringNumber} producing near-zero current (${current.toFixed(3)}A)`
-      : `String ${stringNumber} is ${state.gapPercent.toFixed(1)}% below average`
+      : `String ${stringNumber} is ${(state.gapPercent ?? 0).toFixed(1)}% below average`
 
+    // gap_percent NULL on the alert row also serves as the discriminator for
+    // peer-comparison vs dead-string alerts — used by the admin auto-resolve
+    // logic to scope which alerts get cleared on flag toggles.
     await prisma.alerts.create({
       data: {
         device_id: deviceId,
@@ -162,9 +193,9 @@ export async function generateAlerts(
         string_number: stringNumber,
         severity: state.severity,
         message,
-        expected_value: new Decimal(avgCurrentAll.toFixed(3)),
+        expected_value: state.gapPercent !== null ? new Decimal(peerAvgCurrent.toFixed(3)) : null,
         actual_value: measurement.current,
-        gap_percent: new Decimal(state.gapPercent.toFixed(1)),
+        gap_percent: state.gapPercent !== null ? new Decimal(state.gapPercent.toFixed(1)) : null,
       },
     })
   }

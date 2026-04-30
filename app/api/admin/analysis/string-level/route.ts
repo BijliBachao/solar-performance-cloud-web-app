@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (devices.length === 0) {
-      return NextResponse.json({ dates: [], rows: [], summary: { active_strings: 0, healthy: 0, warning: 0, critical: 0, no_data: 0, inactive_strings: 0, unused_strings: 0 } })
+      return NextResponse.json({ dates: [], rows: [], summary: { active_strings: 0, healthy: 0, warning: 0, critical: 0, no_data: 0, inactive_strings: 0, unused_strings: 0, peer_excluded_strings: 0 } })
     }
 
     const deviceIds = devices.map(d => d.id)
@@ -86,11 +86,21 @@ export async function GET(request: NextRequest) {
     // Forced into unusedStringSet regardless of data state. The unused_source
     // ('admin' | 'auto') is exposed in the row output below for the
     // distinguishing chip on the admin UI.
-    const adminUnused = await prisma.string_configs.findMany({
-      where: { device_id: { in: deviceIds }, is_used: false },
-      select: { device_id: true, string_number: true },
+    //
+    // Admin-flagged peer-excluded — separate concept from unused. The string
+    // IS used and producing energy but has non-standard orientation/tilt or is
+    // shaded, so peer comparison would be unfair. Stays in active bucket;
+    // peer_excluded:true tag exposed for admin UI to render a distinct chip.
+    const adminConfigs = await prisma.string_configs.findMany({
+      where: { device_id: { in: deviceIds } },
+      select: { device_id: true, string_number: true, is_used: true, exclude_from_peer_comparison: true },
     })
-    const adminUnusedSet = new Set(adminUnused.map(c => `${c.device_id}:${c.string_number}`))
+    const adminUnusedSet = new Set(
+      adminConfigs.filter(c => c.is_used === false).map(c => `${c.device_id}:${c.string_number}`),
+    )
+    const adminPeerExcludedSet = new Set(
+      adminConfigs.filter(c => c.exclude_from_peer_comparison === true).map(c => `${c.device_id}:${c.string_number}`),
+    )
 
     // Classify: active / inactive / unused
     const activeStringSet = new Set<string>() // recent data
@@ -257,6 +267,7 @@ export async function GET(request: NextRequest) {
         scores,
         type,
         unused_source,
+        peer_excluded: adminPeerExcludedSet.has(key),
       })
     }
 
@@ -301,6 +312,11 @@ export async function GET(request: NextRequest) {
         no_data: noData,
         inactive_strings: rows.filter(r => r.type === 'inactive').length,
         unused_strings: rows.filter(r => r.type === 'unused').length,
+        // Subset of active — count of peer-excluded strings. Their stored
+        // health_score is currently peer-derived and stays in healthy/warning/
+        // critical buckets; UI tags them so admins know the score is provisional
+        // until Phase 2 PR-based scoring lands.
+        peer_excluded_strings: rows.filter(r => r.peer_excluded).length,
       },
     })
   } catch (error) {

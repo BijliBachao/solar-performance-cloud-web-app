@@ -35,6 +35,7 @@ export type StatusKey =
   | 'offline'
   | 'open-circuit'
   | 'info'
+  | 'peer-excluded'
 
 export interface StatusStyle {
   fg: string // text + icon color
@@ -115,6 +116,21 @@ export const STATUS_STYLES: Record<StatusKey, StatusStyle> = {
     shortDesc: 'Informational — monitor the trend.',
     fullDesc: 'An informational signal, typically mild underperformance (less than 10-25 percent below peer average) that may resolve on its own.',
     whatToCheck: 'Monitor trend. If persistent, schedule a routine cleaning or inspection.',
+  },
+  // Indigo — distinct from healthy/warning/critical (status) and from offline
+  // (no data). Conveys "intentionally out of peer pool" — admin flagged this
+  // string as non-standard install (wall, east/west, shaded). Producing real
+  // energy; just not peer-comparable.
+  'peer-excluded': {
+    fg: 'text-indigo-700',
+    bg: 'bg-indigo-50',
+    border: 'border-indigo-200',
+    solid: 'bg-indigo-600 text-white',
+    dot: 'bg-indigo-500',
+    label: 'Non-standard',
+    shortDesc: 'Excluded from peer comparison — non-standard orientation or shaded.',
+    fullDesc: 'Admin has flagged this string as a non-standard install (wall mount, east/west tilt, partial shade). Lower output is expected by design, so it is removed from the peer-comparison pool. Hardware alarms, dead-string detection, and stale-data detection remain active. Peer-relative scoring resumes when Performance Ratio (Phase 2) lands.',
+    whatToCheck: 'No action needed for the peer flag. Verify any underlying alarms (vendor codes, OPEN_CIRCUIT, OFFLINE) separately.',
   },
 }
 

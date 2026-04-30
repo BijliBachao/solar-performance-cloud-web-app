@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     const allowedPlantIds = assignments.map(a => a.plant_id)
 
     if (allowedPlantIds.length === 0) {
-      return NextResponse.json({ dates: [], rows: [], summary: { active_strings: 0, healthy: 0, warning: 0, critical: 0, no_data: 0, inactive_strings: 0, unused_strings: 0 } })
+      return NextResponse.json({ dates: [], rows: [], summary: { active_strings: 0, healthy: 0, warning: 0, critical: 0, no_data: 0, inactive_strings: 0, unused_strings: 0, peer_excluded_strings: 0 } })
     }
 
     const searchParams = request.nextUrl.searchParams
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (devices.length === 0) {
-      return NextResponse.json({ dates: [], rows: [], summary: { active_strings: 0, healthy: 0, warning: 0, critical: 0, no_data: 0, inactive_strings: 0, unused_strings: 0 } })
+      return NextResponse.json({ dates: [], rows: [], summary: { active_strings: 0, healthy: 0, warning: 0, critical: 0, no_data: 0, inactive_strings: 0, unused_strings: 0, peer_excluded_strings: 0 } })
     }
 
     const deviceIds = devices.map(d => d.id)
@@ -89,11 +89,22 @@ export async function GET(request: NextRequest) {
     // they show induction-leak data. Org users will see them in the bottom
     // "Unused / Spare Ports" section like other unused (no distinguishing
     // chip — that's admin-side only).
-    const adminUnused = await prisma.string_configs.findMany({
-      where: { device_id: { in: deviceIds }, is_used: false },
-      select: { device_id: true, string_number: true },
+    //
+    // Admin-flagged peer-excluded (exclude_from_peer_comparison=true) is a
+    // separate concept — the string IS used and producing energy, just at a
+    // non-standard orientation/tilt or under shade, so peer-comparison would
+    // be unfair. We tag the row with peer_excluded:true so the UI can render
+    // a distinct chip; the row stays in the active bucket.
+    const adminConfigs = await prisma.string_configs.findMany({
+      where: { device_id: { in: deviceIds } },
+      select: { device_id: true, string_number: true, is_used: true, exclude_from_peer_comparison: true },
     })
-    const adminUnusedSet = new Set(adminUnused.map(c => `${c.device_id}:${c.string_number}`))
+    const adminUnusedSet = new Set(
+      adminConfigs.filter(c => c.is_used === false).map(c => `${c.device_id}:${c.string_number}`),
+    )
+    const adminPeerExcludedSet = new Set(
+      adminConfigs.filter(c => c.exclude_from_peer_comparison === true).map(c => `${c.device_id}:${c.string_number}`),
+    )
 
     const activeStringSet = new Set<string>()
     const inactiveStringSet = new Set<string>()
@@ -216,6 +227,7 @@ export async function GET(request: NextRequest) {
         energy_kwh: energySum > 0 ? Math.round(energySum * 10) / 10 : null,
         scores,
         type,
+        peer_excluded: adminPeerExcludedSet.has(key),
       })
     }
 
@@ -243,6 +255,11 @@ export async function GET(request: NextRequest) {
         active_strings: activeRows.length, healthy, warning, critical, no_data: noData,
         inactive_strings: rows.filter(r => r.type === 'inactive').length,
         unused_strings: rows.filter(r => r.type === 'unused').length,
+        // Subset of active_strings — these still appear in healthy/warning/critical
+        // counts (their stored health_score is currently peer-derived), but the UI
+        // can tag them so users understand the score is provisional until Phase 2
+        // PR-based scoring lands.
+        peer_excluded_strings: rows.filter(r => r.peer_excluded).length,
       },
     })
   } catch (error) {

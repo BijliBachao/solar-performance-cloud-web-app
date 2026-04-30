@@ -32,9 +32,10 @@ interface StringInfo {
   voltage: number
   current: number
   power: number
-  gap_percent: number
+  gap_percent: number | null
   status: StringStatus
   energy_kwh?: number
+  peer_excluded?: boolean
   config?: {
     panel_count: number | null
     panel_make: string | null
@@ -212,6 +213,10 @@ export function InverterDetailSection({
   const deadStrings = strings.filter(
     s => s.status === 'OPEN_CIRCUIT' || s.status === 'OFFLINE',
   )
+  // Header banner trigger: every visible string is admin-flagged peer-excluded.
+  // Inverter still produces real energy; we just can't run peer comparison.
+  // Customers should know this without inferring it from per-row pills.
+  const allPeerExcluded = strings.length > 0 && strings.every(s => s.peer_excluded === true)
   const summary = {
     normal: strings.filter(s => s.status === 'NORMAL').length,
     warning: strings.filter(s => s.status === 'WARNING').length,
@@ -447,6 +452,33 @@ export function InverterDetailSection({
             </div>
           )}
         </div>
+
+        {/* All-peer-excluded banner — appears when every string on this
+            inverter has been admin-flagged exclude_from_peer_comparison.
+            Surfaces the "we know what we don't know" message from Plan §10
+            so customers understand peer-relative fault detection is off
+            (until Phase 2 PR scoring lands). Hardware alarms, dead-string
+            detection, and stale-data detection are still active.
+            Colors from STATUS_STYLES['peer-excluded'] (single source). */}
+        {allPeerExcluded && (
+          <div className={cn(
+            'flex items-start gap-2 px-3 py-2 rounded-sm border',
+            STATUS_STYLES['peer-excluded'].bg,
+            STATUS_STYLES['peer-excluded'].border,
+            STATUS_STYLES['peer-excluded'].fg,
+          )}>
+            <span className={cn(
+              'w-1.5 h-1.5 rounded-full mt-1.5 shrink-0',
+              STATUS_STYLES['peer-excluded'].dot,
+            )} />
+            <div className="text-[11px] leading-snug">
+              <div className="font-bold">All strings on non-standard install · peer comparison disabled</div>
+              <div className="opacity-80 mt-0.5">
+                Hardware alarms, dead-string and stale-data detection remain active. Peer-relative scoring resumes when Performance Ratio (Phase 2) lands.
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ZONE 2 — Inline KPI one-liner (compact, no cell borders) */}
         <div className="flex items-center gap-2 flex-wrap text-[13px] font-mono font-semibold text-slate-900">

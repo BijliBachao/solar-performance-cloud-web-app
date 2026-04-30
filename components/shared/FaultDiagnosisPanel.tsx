@@ -15,8 +15,9 @@ interface StringData {
   voltage: number
   current: number
   power: number
-  gap_percent: number
+  gap_percent: number | null
   status: StringStatus
+  peer_excluded?: boolean
 }
 
 interface FaultDiagnosisPanelProps {
@@ -68,8 +69,13 @@ function diagnoseStrings(strings: StringData[], _avgCurrent: number): DiagnosisW
     })
   }
 
-  const critical = strings.filter(s => s.status === 'CRITICAL')
-  if (critical.length > 0) {
+  // Skip peer-excluded strings entirely — they're not in the peer pool, so a
+  // "below peers" diagnosis doesn't apply. Real DISCONNECTED / OPEN_CIRCUIT
+  // statuses (which still fire for them) are handled in the blocks above.
+  const peerComparable = strings.filter(s => !s.peer_excluded)
+
+  const critical = peerComparable.filter(s => s.status === 'CRITICAL')
+  if (critical.length > 0 && critical[0].gap_percent != null) {
     diagnoses.push({
       stringNumbers: critical.map(s => s.string_number),
       severity: 'critical',
@@ -81,7 +87,7 @@ function diagnoseStrings(strings: StringData[], _avgCurrent: number): DiagnosisW
     })
   }
 
-  const warning = strings.filter(s => s.status === 'WARNING' && s.gap_percent >= GAP_WARNING)
+  const warning = peerComparable.filter(s => s.status === 'WARNING' && (s.gap_percent ?? 0) >= GAP_WARNING)
   if (warning.length > 0) {
     diagnoses.push({
       stringNumbers: warning.map(s => s.string_number),
@@ -94,7 +100,7 @@ function diagnoseStrings(strings: StringData[], _avgCurrent: number): DiagnosisW
     })
   }
 
-  const mild = strings.filter(s => s.status === 'WARNING' && s.gap_percent > GAP_INFO && s.gap_percent < GAP_WARNING)
+  const mild = peerComparable.filter(s => s.status === 'WARNING' && (s.gap_percent ?? 0) > GAP_INFO && (s.gap_percent ?? 0) < GAP_WARNING)
   if (mild.length > 0) {
     diagnoses.push({
       stringNumbers: mild.map(s => s.string_number),
@@ -128,6 +134,8 @@ const SEVERITY_TO_STATUS: Record<DiagSeverity, StatusKey> = {
   info: 'info',
 }
 
+// 'peer-excluded' is unreachable here — diagnoses are driven by DiagSeverity,
+// not StatusKey. Included for type-completeness.
 const LEFT_BORDER_BY_KEY: Record<StatusKey, string> = {
   critical: 'border-l-red-600',
   warning: 'border-l-amber-600',
@@ -135,6 +143,7 @@ const LEFT_BORDER_BY_KEY: Record<StatusKey, string> = {
   healthy: 'border-l-emerald-600',
   offline: 'border-l-slate-500',
   'open-circuit': 'border-l-rose-600',
+  'peer-excluded': 'border-l-indigo-600',
 }
 
 const SEVERITY_LABEL: Record<DiagSeverity, string> = {

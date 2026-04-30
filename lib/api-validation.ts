@@ -51,6 +51,7 @@ export const StringConfigUpsertSchema = z.object({
   panel_rating_w: z.number().int().min(50, 'Min 50 W').max(1000, 'Max 1000 W').nullable().optional(),
   notes: z.string().max(500).nullable().optional(),
   is_used: z.boolean().optional(),
+  exclude_from_peer_comparison: z.boolean().optional(),
 })
 
 export const StringConfigBulkSchema = z.object({
@@ -62,6 +63,7 @@ export const StringConfigBulkSchema = z.object({
   // If false, overwrite every string under the plant.
   only_unconfigured: z.boolean().default(false),
   is_used: z.boolean().optional(),
+  exclude_from_peer_comparison: z.boolean().optional(),
 })
 
 // ─── Analysis Date Range Schema ───────────────────────────────────────

@@ -47,9 +47,10 @@ interface StringInfo {
   voltage: number
   current: number
   power: number
-  gap_percent: number
+  gap_percent: number | null
   status: StringStatus
   energy_kwh?: number
+  peer_excluded?: boolean
   config?: {
     panel_count: number | null
     panel_make: string | null

@@ -89,6 +89,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
                 panel_rating_w: cfg.panel_rating_w,
                 notes: cfg.notes,
                 is_used: cfg.is_used,
+                exclude_from_peer_comparison: cfg.exclude_from_peer_comparison,
                 updated_at: cfg.updated_at,
                 updated_by: cfg.updated_by,
               }
@@ -132,7 +133,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         { status: 400 },
       )
     }
-    const { panel_count, panel_make, panel_rating_w, notes, only_unconfigured, is_used } = parsed.data
+    const { panel_count, panel_make, panel_rating_w, notes, only_unconfigured, is_used, exclude_from_peer_comparison } = parsed.data
 
     const devices = await prisma.devices.findMany({
       where: { plant_id: plantId, device_type_id: { in: INVERTER_DEVICE_TYPE_IDS } },
@@ -173,13 +174,15 @@ export async function POST(request: NextRequest, { params }: Params) {
     }
 
     // Build update payload — only include fields that were sent. Lets bulk
-    // toggle is_used without overwriting panel info, and vice versa.
+    // toggle is_used or exclude_from_peer_comparison without overwriting
+    // panel info, and vice versa.
     const updateData: Record<string, unknown> = { updated_by: userContext.userId }
     if (panel_count !== undefined) updateData.panel_count = panel_count
     if (panel_make !== undefined) updateData.panel_make = panel_make ?? null
     if (panel_rating_w !== undefined) updateData.panel_rating_w = panel_rating_w ?? null
     if (notes !== undefined) updateData.notes = notes ?? null
     if (is_used !== undefined) updateData.is_used = is_used
+    if (exclude_from_peer_comparison !== undefined) updateData.exclude_from_peer_comparison = exclude_from_peer_comparison
 
     // Per-row try/catch so one DB error doesn't lose the partial-success count.
     // Track successful targets separately so the auto-resolve below only fires
@@ -199,6 +202,7 @@ export async function POST(request: NextRequest, { params }: Params) {
             panel_rating_w: panel_rating_w ?? null,
             notes: notes ?? null,
             is_used: is_used ?? true,
+            exclude_from_peer_comparison: exclude_from_peer_comparison ?? false,
             updated_by: userContext.userId,
           },
           update: updateData,
@@ -214,10 +218,15 @@ export async function POST(request: NextRequest, { params }: Params) {
       }
     }
 
-    // When bulk-marking strings unused, auto-resolve their open alerts so
-    // the customer dashboard stops showing red on ports just declared empty.
-    // Only resolves alerts for strings whose upsert SUCCEEDED — failed rows
-    // are left untouched so the next retry can still resolve them.
+    // Auto-resolve open alerts on strings whose upsert SUCCEEDED. Failed
+    // rows are left untouched so the next retry can still resolve them.
+    //
+    // Scope mirrors the per-row PUT handler:
+    //   is_used=false      → resolve every open alert (string is gone)
+    //   exclude_from_peer_comparison=true → resolve ONLY peer-comp alerts
+    //                        (gap_percent IS NOT NULL — non-peer-comp Part 2
+    //                        dead-string alerts have null gap_percent and
+    //                        survive a peer-excl flag flip).
     if (is_used === false && succeeded.length > 0) {
       await prisma.alerts.updateMany({
         where: {
@@ -226,6 +235,21 @@ export async function POST(request: NextRequest, { params }: Params) {
             string_number: t.string_number,
           })),
           resolved_at: null,
+        },
+        data: {
+          resolved_at: new Date(),
+          resolved_by: userContext.userId,
+        },
+      })
+    } else if (exclude_from_peer_comparison === true && succeeded.length > 0) {
+      await prisma.alerts.updateMany({
+        where: {
+          OR: succeeded.map(t => ({
+            device_id: t.device_id,
+            string_number: t.string_number,
+          })),
+          resolved_at: null,
+          gap_percent: { not: null },
         },
         data: {
           resolved_at: new Date(),

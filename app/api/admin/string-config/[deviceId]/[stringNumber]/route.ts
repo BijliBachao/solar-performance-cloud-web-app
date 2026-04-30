@@ -34,17 +34,19 @@ export async function PUT(request: NextRequest, { params }: Params) {
         { status: 400 },
       )
     }
-    const { panel_count, panel_make, panel_rating_w, notes, is_used } = parsed.data
+    const { panel_count, panel_make, panel_rating_w, notes, is_used, exclude_from_peer_comparison } = parsed.data
 
     // Build update payload — only include fields that were sent.
-    // This lets the admin toggle is_used without overwriting panel info, and
-    // vice versa. Missing fields are preserved on existing rows.
+    // This lets the admin toggle is_used or exclude_from_peer_comparison
+    // without overwriting panel info, and vice versa. Missing fields are
+    // preserved on existing rows.
     const updateData: Record<string, unknown> = { updated_by: userContext.userId }
     if (panel_count !== undefined) updateData.panel_count = panel_count
     if (panel_make !== undefined) updateData.panel_make = panel_make ?? null
     if (panel_rating_w !== undefined) updateData.panel_rating_w = panel_rating_w ?? null
     if (notes !== undefined) updateData.notes = notes ?? null
     if (is_used !== undefined) updateData.is_used = is_used
+    if (exclude_from_peer_comparison !== undefined) updateData.exclude_from_peer_comparison = exclude_from_peer_comparison
 
     const saved = await prisma.string_configs.upsert({
       where: { device_id_string_number: { device_id: deviceId, string_number: sn } },
@@ -55,20 +57,41 @@ export async function PUT(request: NextRequest, { params }: Params) {
         panel_make: panel_make ?? null,
         panel_rating_w: panel_rating_w ?? null,
         notes: notes ?? null,
-        is_used: is_used ?? true,  // default to used on create — preserves current behavior
+        is_used: is_used ?? true,  // default to used — preserves current behavior
+        exclude_from_peer_comparison: exclude_from_peer_comparison ?? false,  // default to standard — preserves current behavior
         updated_by: userContext.userId,
       },
       update: updateData,
     })
 
-    // When admin marks a string unused, auto-resolve its open alerts so the
-    // org user stops seeing red on a port they just declared empty.
+    // Auto-resolve open alerts when admin flips a flag.
+    //   is_used=false      → string is gone (empty PV port). Resolve every
+    //                        open alert on that string — peer-comp + future
+    //                        non-peer-comp fault types alike.
+    //   exclude_from_peer_comparison=true → only peer-comparison applicability
+    //                        changes. Resolve ONLY peer-comparison alerts
+    //                        (gap_percent IS NOT NULL — see poller-utils.ts
+    //                        generateAlerts where gap_percent=null is the
+    //                        discriminator for non-peer-comp Part 2 alerts).
     if (is_used === false) {
       await prisma.alerts.updateMany({
         where: {
           device_id: deviceId,
           string_number: sn,
           resolved_at: null,
+        },
+        data: {
+          resolved_at: new Date(),
+          resolved_by: userContext.userId,
+        },
+      })
+    } else if (exclude_from_peer_comparison === true) {
+      await prisma.alerts.updateMany({
+        where: {
+          device_id: deviceId,
+          string_number: sn,
+          resolved_at: null,
+          gap_percent: { not: null },
         },
         data: {
           resolved_at: new Date(),
@@ -89,6 +112,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
       panel_rating_w: saved.panel_rating_w,
       notes: saved.notes,
       is_used: saved.is_used,
+      exclude_from_peer_comparison: saved.exclude_from_peer_comparison,
       updated_at: saved.updated_at,
       updated_by: saved.updated_by,
       nameplate_w,

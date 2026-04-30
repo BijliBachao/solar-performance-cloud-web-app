@@ -61,6 +61,7 @@ export async function GET(
             panel_make: true,
             panel_rating_w: true,
             is_used: true,
+            exclude_from_peer_comparison: true,
           },
         })
       : []
@@ -114,18 +115,24 @@ export async function GET(
           ? Math.max(...latestMeasurements.map(m => m.timestamp.getTime()))
           : 0
 
-        // Build fresh readings for average calculation (exclude stale + admin-flagged unused)
-        // Unused strings show induction-leak noise that pollutes peer averages.
+        // Build fresh readings for peer-comparison average (exclude stale, admin-flagged
+        // unused, AND admin-flagged peer-excluded). Unused strings show induction-leak
+        // noise; peer-excluded strings are non-standard orientation/shaded — both would
+        // pollute the peer pool that healthy peers are compared against.
         const freshReadings: StringReading[] = latestMeasurements
           .filter(m => !isStale(m.timestamp.getTime(), freshestTs))
-          .filter(m => configByKey.get(`${device.id}:${m.string_number}`)?.is_used !== false)
+          .filter(m => {
+            const c = configByKey.get(`${device.id}:${m.string_number}`)
+            return c?.is_used !== false && c?.exclude_from_peer_comparison !== true
+          })
           .map(m => ({ string_number: m.string_number, current: Number(m.current), voltage: Number(m.voltage) }))
 
-        // Display average (active strings, self-inclusive — for KPI pill)
+        // Display average (active peer-pool strings, self-inclusive — for KPI pill)
         const displayAvg = activeAvg(freshReadings)
 
-        // Build string data with kWh — but exclude admin-flagged unused from output
-        // (org user shouldn't see them; admin sees them on the config page).
+        // Build string data with kWh — exclude admin-flagged unused (those are empty
+        // ports, no real energy). Peer-excluded strings DO appear in the response with
+        // their real V/A/P/kWh — they're producing energy, just not peer-comparable.
         const strings = latestMeasurements
           .filter(m => configByKey.get(`${device.id}:${m.string_number}`)?.is_used !== false)
           .map((m) => {
@@ -133,15 +140,21 @@ export async function GET(
           const voltage = Number(m.voltage)
           const stale = isStale(m.timestamp.getTime(), freshestTs)
 
-          // Leave-one-out peer average for fair comparison
-          const peerAvg = stale ? null : leaveOneOutAvg(freshReadings, m.string_number)
+          const cfg = configByKey.get(`${device.id}:${m.string_number}`)
+          const peerExcluded = cfg?.exclude_from_peer_comparison === true
+
+          // Peer-excluded strings skip peer comparison entirely (peerAvg = null).
+          // classifyRealtime still catches DISCONNECTED / OPEN_CIRCUIT — only the
+          // gap-vs-peers path is silenced. Stale also forces null peerAvg.
+          const peerAvg = (stale || peerExcluded)
+            ? null
+            : leaveOneOutAvg(freshReadings, m.string_number)
           const { status, gapPercent } = classifyRealtime(current, voltage, peerAvg, stale)
 
           // Trapezoidal kWh for this string today
           const stringTodayData = todayByString.get(m.string_number) || []
           const kwh = trapezoidalKwh(stringTodayData)
 
-          const cfg = configByKey.get(`${device.id}:${m.string_number}`)
           const nameplate_w = cfg?.panel_count && cfg?.panel_rating_w
             ? cfg.panel_count * cfg.panel_rating_w
             : null
@@ -151,8 +164,9 @@ export async function GET(
             voltage,
             current,
             power: Number(m.power),
-            gap_percent: Math.round(gapPercent * 10) / 10,
+            gap_percent: peerExcluded ? null : Math.round(gapPercent * 10) / 10,
             status,
+            peer_excluded: peerExcluded,
             energy_kwh: Math.round(kwh * 1000) / 1000,
             config: cfg
               ? {

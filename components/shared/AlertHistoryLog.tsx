@@ -51,6 +51,8 @@ interface PaginationInfo {
   totalPages: number
 }
 
+// 'peer-excluded' entries are unreachable in practice — peer-excluded strings
+// never produce alert rows. Included for type-completeness only.
 const ICONS_BY_KEY: Record<StatusKey, any> = {
   critical: XCircle,
   warning: AlertTriangle,
@@ -58,6 +60,7 @@ const ICONS_BY_KEY: Record<StatusKey, any> = {
   healthy: CheckCircle,
   offline: Info,
   'open-circuit': XCircle,
+  'peer-excluded': Info,
 }
 
 const LEFT_BORDER_BY_KEY: Record<StatusKey, string> = {
@@ -67,6 +70,7 @@ const LEFT_BORDER_BY_KEY: Record<StatusKey, string> = {
   healthy: 'border-l-emerald-600',
   offline: 'border-l-slate-500',
   'open-circuit': 'border-l-rose-600',
+  'peer-excluded': 'border-l-indigo-600',
 }
 
 export function AlertHistoryLog({

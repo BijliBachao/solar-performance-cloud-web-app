@@ -203,16 +203,17 @@ model vendor_alarms {
 // so we can compute nameplate kWp and IEC 61724 performance ratio downstream.
 // Nameplate is never stored; always computed as panel_count * panel_rating_w.
 model string_configs {
-  device_id      String   @db.VarChar(50)
-  string_number  Int
-  panel_count    Int?
-  panel_make     String?  @db.VarChar(100)
-  panel_rating_w Int?
-  notes          String?  @db.Text
-  is_used        Boolean  @default(true)
-  created_at     DateTime @default(now())
-  updated_at     DateTime @updatedAt
-  updated_by     String?  @db.VarChar(50)
+  device_id                    String   @db.VarChar(50)
+  string_number                Int
+  panel_count                  Int?
+  panel_make                   String?  @db.VarChar(100)
+  panel_rating_w               Int?
+  notes                        String?  @db.Text
+  is_used                      Boolean  @default(true)
+  exclude_from_peer_comparison Boolean  @default(false)
+  created_at                   DateTime @default(now())
+  updated_at                   DateTime @updatedAt
+  updated_by                   String?  @db.VarChar(50)
 
   @@id([device_id, string_number])
   @@index([device_id])

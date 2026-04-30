@@ -18,9 +18,10 @@ interface StringData {
   voltage: number
   current: number
   power: number
-  gap_percent: number
+  gap_percent: number | null
   status: StringStatus
   energy_kwh?: number
+  peer_excluded?: boolean
 }
 
 interface StringHealthMatrixProps {
@@ -57,16 +58,30 @@ export function StringHealthMatrix({ strings, avgCurrent }: StringHealthMatrixPr
                 <div
                   className={cn(
                     'relative border rounded-sm px-2 py-2 cursor-default transition-all hover:shadow-card hover:border-slate-300',
-                    style.bg,
-                    style.border,
+                    // Peer-excluded cells use an indigo tint to distinguish them
+                    // from healthy/warning/critical (status-based) cells. The
+                    // string is producing energy, just not peer-comparable.
+                    // Colors come from STATUS_STYLES['peer-excluded'] (single source).
+                    s.peer_excluded ? STATUS_STYLES['peer-excluded'].bg : style.bg,
+                    s.peer_excluded ? STATUS_STYLES['peer-excluded'].border : style.border,
                   )}
                 >
-                  {/* Row 1 — String number + status dot */}
+                  {/* Row 1 — String number + status dot.
+                      Peer-excluded shows an indigo dot regardless of underlying
+                      status (unless DISCONNECTED/OPEN_CIRCUIT, in which case
+                      that fault still wins so the cell stays urgent). */}
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
                       PV{s.string_number}
                     </span>
-                    <span className={cn('w-1.5 h-1.5 rounded-full', style.dot)} />
+                    <span
+                      className={cn(
+                        'w-1.5 h-1.5 rounded-full',
+                        s.peer_excluded && s.status === 'NORMAL'
+                          ? STATUS_STYLES['peer-excluded'].dot
+                          : style.dot,
+                      )}
+                    />
                   </div>
 
                   {/* Row 2 — Primary reading (current) */}
@@ -102,9 +117,18 @@ export function StringHealthMatrix({ strings, avgCurrent }: StringHealthMatrixPr
                 <div className="space-y-1 font-mono min-w-[160px]">
                   <p className="font-bold text-sm flex items-center justify-between border-b border-slate-100 pb-1 mb-1">
                     <span>PV{s.string_number}</span>
-                    <span className={cn('text-[10px] font-bold uppercase tracking-wider', style.fg)}>
-                      {statusLabel(s.status)}
-                    </span>
+                    {s.peer_excluded && s.status === 'NORMAL' ? (
+                      <span className={cn(
+                        'text-[10px] font-bold uppercase tracking-wider',
+                        STATUS_STYLES['peer-excluded'].fg,
+                      )}>
+                        {STATUS_STYLES['peer-excluded'].label}
+                      </span>
+                    ) : (
+                      <span className={cn('text-[10px] font-bold uppercase tracking-wider', style.fg)}>
+                        {statusLabel(s.status)}
+                      </span>
+                    )}
                   </p>
                   <div className="flex justify-between">
                     <span className="text-slate-500">V (operating)</span>
@@ -126,7 +150,11 @@ export function StringHealthMatrix({ strings, avgCurrent }: StringHealthMatrixPr
                   )}
                   <div className="flex justify-between">
                     <span className="text-slate-500">Gap</span>
-                    <span>{s.gap_percent.toFixed(1)}%</span>
+                    <span>
+                      {s.peer_excluded || s.gap_percent == null
+                        ? '— (peer-excluded)'
+                        : `${s.gap_percent.toFixed(1)}%`}
+                    </span>
                   </div>
                 </div>
               </TooltipContent>

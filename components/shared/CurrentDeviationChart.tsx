@@ -19,9 +19,10 @@ import { STATUS_STYLES } from '@/lib/design-tokens'
 interface StringData {
   string_number: number
   current: number
-  gap_percent: number
+  gap_percent: number | null
   status: StringStatus
   energy_kwh?: number
+  peer_excluded?: boolean
 }
 
 interface CurrentDeviationChartProps {
@@ -40,6 +41,12 @@ const BAR_COLOR_BY_STATUS: Record<StringStatus, string> = {
   OFFLINE: '#94A3B8', // slate-400
 }
 
+// Peer-excluded bar — indigo, mirrors STATUS_STYLES['peer-excluded'].dot.
+// A peer-excluded NORMAL string at low current shouldn't render as healthy
+// green next to south-facing peers — that visually contradicts the matrix
+// and table tints. Indigo signals "intentionally out of peer pool".
+const BAR_COLOR_PEER_EXCLUDED = '#6366F1' // indigo-500
+
 const STATUS_LABELS: Record<StringStatus, string> = {
   NORMAL: 'Healthy',
   WARNING: 'Underperforming',
@@ -54,7 +61,9 @@ export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationC
     current: s.current,
     status: s.status,
     kwh: s.energy_kwh || 0,
+    peer_excluded: s.peer_excluded === true,
   }))
+  const peerExcludedCount = data.filter(d => d.peer_excluded).length
 
   // Per-status count — drives the inline legend
   const counts = strings.reduce(
@@ -92,6 +101,16 @@ export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationC
               <span>{STATUS_LABELS[k]}</span>
             </span>
           ))}
+          {peerExcludedCount > 0 && (
+            <span className="flex items-center gap-1">
+              <span
+                className="w-1.5 h-1.5 rounded-full"
+                style={{ backgroundColor: BAR_COLOR_PEER_EXCLUDED }}
+              />
+              <span className="font-mono font-semibold">{peerExcludedCount}</span>
+              <span>Non-standard</span>
+            </span>
+          )}
         </div>
         {avgCurrent > 0 && (
           <div className="text-[10px] font-mono text-slate-500 shrink-0">
@@ -149,11 +168,14 @@ export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationC
               labelStyle={{ color: '#0F172A', fontWeight: 700, fontSize: 11 }}
               formatter={(value: number, _name: string, props: any) => {
                 const entry = props.payload
+                const label = entry.peer_excluded
+                  ? 'Non-standard'
+                  : (STATUS_LABELS[entry.status as StringStatus] || entry.status)
                 return [
                   <span key="val" style={{ color: '#0F172A', fontFamily: 'monospace' }}>
                     <strong>{value.toFixed(2)} A</strong>
                     {' — '}
-                    {STATUS_LABELS[entry.status as StringStatus] || entry.status}
+                    {label}
                     {entry.kwh > 0 ? ` · ${entry.kwh.toFixed(1)} kWh` : ''}
                   </span>,
                   'Current',
@@ -175,7 +197,11 @@ export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationC
               {data.map((entry, index) => (
                 <Cell
                   key={`cell-${index}`}
-                  fill={BAR_COLOR_BY_STATUS[entry.status] ?? '#94A3B8'}
+                  fill={
+                    entry.peer_excluded
+                      ? BAR_COLOR_PEER_EXCLUDED
+                      : BAR_COLOR_BY_STATUS[entry.status] ?? '#94A3B8'
+                  }
                 />
               ))}
             </Bar>

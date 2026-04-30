@@ -12,9 +12,10 @@ interface StringData {
   voltage: number
   current: number
   power: number
-  gap_percent: number
+  gap_percent: number | null
   status: StringStatus
   energy_kwh?: number
+  peer_excluded?: boolean
   config?: {
     panel_count: number | null
     panel_make: string | null
@@ -103,13 +104,20 @@ export function StringComparisonTable({ strings }: StringComparisonTableProps) {
           {strings.map((s) => {
             const key = statusKeyFromStringStatus(s.status)
             const style = STATUS_STYLES[key]
-            const gap = Math.max(0, Math.min(100, Math.abs(s.gap_percent)))
+            // Peer-excluded strings are not gap-comparable — gap_percent is null
+            // from the API. Treat as 0 for the bar (which we hide anyway) so the
+            // numeric path stays type-safe.
+            const gapNum = s.gap_percent ?? 0
+            const gap = Math.max(0, Math.min(100, Math.abs(gapNum)))
             return (
               <tr
                 key={s.string_number}
                 className={cn(
                   'transition-colors hover:bg-slate-50',
-                  ROW_TINT[s.status],
+                  // Peer-excluded rows skip the red/amber tint — they're not
+                  // peer-comparable, so a "below peers" tint would be misleading.
+                  // Tint comes from STATUS_STYLES['peer-excluded'] (single source).
+                  s.peer_excluded ? STATUS_STYLES['peer-excluded'].bg : ROW_TINT[s.status],
                 )}
               >
                 {/* String identifier */}
@@ -151,32 +159,52 @@ export function StringComparisonTable({ strings }: StringComparisonTableProps) {
                   {s.energy_kwh != null ? s.energy_kwh.toFixed(1) : '—'}
                 </td>
 
-                {/* Gap % — number + inline deviation bar */}
+                {/* Gap % — number + inline deviation bar.
+                    Peer-excluded strings show "—" since they're not in the peer
+                    pool (non-standard orientation/shaded — comparison is unfair). */}
                 <td className="px-3 py-2 text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <div className="w-14 h-1 bg-slate-100 rounded-full overflow-hidden">
-                      <div
-                        className={cn('h-full transition-all', gapBarColor(s.gap_percent))}
-                        style={{ width: `${gap}%` }}
-                      />
+                  {s.peer_excluded ? (
+                    <span className="font-mono text-slate-300">—</span>
+                  ) : (
+                    <div className="flex items-center justify-end gap-2">
+                      <div className="w-14 h-1 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className={cn('h-full transition-all', gapBarColor(gapNum))}
+                          style={{ width: `${gap}%` }}
+                        />
+                      </div>
+                      <span className={cn('font-mono font-semibold w-12 text-right', gapColorClass(gapNum))}>
+                        {gapNum.toFixed(1)}%
+                      </span>
                     </div>
-                    <span className={cn('font-mono font-semibold w-12 text-right', gapColorClass(s.gap_percent))}>
-                      {s.gap_percent.toFixed(1)}%
-                    </span>
-                  </div>
+                  )}
                 </td>
 
-                {/* Status pill — dot + label from STATUS_STYLES */}
+                {/* Status pill — dot + label. Peer-excluded shows a distinct
+                    "non-standard" pill so users know the row is intentionally
+                    out of the peer pool (not a fault). The classifyRealtime
+                    status is still respected for DISCONNECTED/OPEN_CIRCUIT.
+                    Pill colors come from STATUS_STYLES['peer-excluded']. */}
                 <td className="px-3 py-2">
-                  <span
-                    className={cn(
+                  {s.peer_excluded && s.status === 'NORMAL' ? (
+                    <span className={cn(
                       'inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider',
-                      style.fg,
-                    )}
-                  >
-                    <span className={cn('w-1.5 h-1.5 rounded-full', style.dot)} />
-                    {style.label}
-                  </span>
+                      STATUS_STYLES['peer-excluded'].fg,
+                    )}>
+                      <span className={cn('w-1.5 h-1.5 rounded-full', STATUS_STYLES['peer-excluded'].dot)} />
+                      {STATUS_STYLES['peer-excluded'].label.toLowerCase()}
+                    </span>
+                  ) : (
+                    <span
+                      className={cn(
+                        'inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider',
+                        style.fg,
+                      )}
+                    >
+                      <span className={cn('w-1.5 h-1.5 rounded-full', style.dot)} />
+                      {style.label}
+                    </span>
+                  )}
                 </td>
               </tr>
             )
