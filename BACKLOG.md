@@ -13,7 +13,7 @@
 | ID | Task | Couples with | Status | Effort |
 |---|---|---|---|---|
 | **#76** | Page: `/admin/analysis` | — | Pending — discuss separately with user | TBD |
-| **#96** | Performance Ratio (Phase 2) | #105 | Pending — full plan doc, waits on Phase 1 panel configs being filled | 1–2 h |
+| **#96** | Performance Ratio (Phase 2) | #105, #107 | Pending — full plan doc, waits on Phase 1 panel configs being filled | 1–2 h |
 | **#97** | DB query performance — parallelise transactions | #98 | Pending | 4–6 h |
 | **#98** | Connection-budget compliance | #97, #104 | **Pending — user is upgrading RDS, may resolve when done** | 30 min |
 | **#99** | Server Action log noise | — | Pending — pre-existing, unknown cause | 1–3 h |
@@ -22,9 +22,11 @@
 | **#102** | Data retention audit | — | Pending — M4 from `AUDIT.md` | 2–3 h |
 | **#103** | CI/CD (GitHub Actions) | #101 | Pending — replaces manual deploy script | 4–8 h |
 | **#104** | Rate limiting `/api/admin/*` | #98 | Pending — important pre-RDS-upgrade | 2–4 h |
-| **#105** | Tighten sensor-fault filter | #96 | Pending | 2–3 h |
+| **#105** | Tighten sensor-fault filter | #96, #107 | Pending | 2–3 h |
+| **#106** | **Phase A: Used / Unused string flag (Problem 01)** | #107 | **Pending — full plan doc · HIGHEST CUSTOMER-TRUST IMPACT** | **3–4 h** |
+| **#107** | **Phase B: Non-standard orientation flag (Problem 02)** | #96, #105, #106 | **Pending — builds on Phase A** | **2–3 h** |
 
-**Total backlog:** 11 open items.
+**Total backlog:** 13 open items.
 
 ---
 
@@ -33,6 +35,7 @@
 ```
 #96 (Perf Ratio) ──── needs ───→ Phase 1 admin must fill panel configs
 #96 ──── enables ───→ #105 (per-nameplate sensor-fault filter)
+#96 ──── provides scoring fallback for ───→ #107 (peer-excluded strings)
 
 #97 (parallel transactions) ──── blocked by ───→ #98 (RDS upgrade)
 #98 (connection budget) ──── may resolve via ───→ user RDS upgrade
@@ -41,7 +44,21 @@
 #100 (defensive parsing) ──── needs ───→ #101 (test infrastructure)
 #101 (tests) ──── feeds ───→ #103 (CI/CD as a deploy gate)
 #103 (CI/CD) ──── replaces ───→ Working/deploy-to-ec2.sh
+
+#106 (Phase A used/unused) ──── builds scaffolding for ───→ #107 (Phase B orientation)
+#106 ──── solves ───→ problems/01-unused-strings-electrical-noise.md
+#107 ──── solves ───→ problems/02-non-standard-orientation-peer-comparison.md
+#107 ──── needs ───→ #96 (PR for fault scoring on excluded strings)
 ```
+
+## Recommended sequence
+
+1. **#106 — Phase A** (used/unused, ~3-4 h) — biggest customer-trust win, validates the access pattern
+2. **#107 — Phase B** (orientation flag, ~2-3 h) — builds on #106 scaffolding
+3. **#96 — Phase 2 PR** (~1-2 h) — provides absolute scoring for strings #107 excluded from peer-comparison
+4. **#105 — Sensor-fault filter** (~2-3 h) — uses #96's nameplate data for tighter per-string thresholds
+
+Total for the install-context series: ~10 hours of focused work, biggest customer-trust ROI on the backlog.
 
 ---
 
@@ -334,6 +351,85 @@ Original error: Cannot read properties of undefined (reading 'workers')
 - **#98** — rate limiting is the cheapest defence against connection exhaustion. Even more important until RDS upgrade lands.
 
 **DO NOT:** rate-limit org-user read APIs aggressively (e.g., `/api/plants/[code]/strings`) — they're hit per dashboard page load. Keep ample headroom there.
+
+---
+
+## #106 — Phase A: Used / Unused string flag (Problem 01)
+
+**Problem doc:** [`problems/01-unused-strings-electrical-noise.md`](./problems/01-unused-strings-electrical-noise.md)
+**Plan doc:** [`PLAN-string-used-unused.md`](./PLAN-string-used-unused.md)
+
+**TL;DR:** Add `is_used Boolean @default(true)` to `string_configs`. Admin can mark strings unused from `/admin/plants/[code]/strings`. Unused strings:
+- Excluded from alerts (no fault generation)
+- Excluded from peer-comparison averaging
+- Excluded from org-side API responses (and therefore org dashboards/analysis)
+- Excluded from daily/hourly aggregates
+- Still written to `string_measurements` (raw data sacred)
+
+**Why this is the highest-priority item on the backlog:** kills permanent false alerts on physically empty PV ports — the single biggest source of customer alert fatigue today. After this ships, customers can trust the dashboard again.
+
+**Files to touch (8 files, all already exist):**
+1. `prisma/schema.prisma` — add column
+2. `lib/api-validation.ts` — extend Zod schemas
+3. `app/api/admin/string-config/[deviceId]/[stringNumber]/route.ts` — extend PUT
+4. `app/api/admin/plants/[code]/strings-config/route.ts` — extend GET + bulk POST
+5. `app/admin/plants/[plantCode]/strings/page.tsx` — toggle column + bulk action
+6. `app/api/plants/[code]/strings/route.ts` — filter response
+7. `lib/poller-utils.ts` — `generateAlerts()` skip + peer-pool filter
+8. `lib/poller-utils.ts` — `updateDailyAggregates()` / `updateHourlyAggregates()` skip
+
+**Open questions (8 — see plan doc §14):** default state for new strings, bulk-mark UX, auto-resolve historical alerts, hide-empty-inverter behavior, ORG_ADMIN access, naming, reporting impact, migration.
+
+**Effort:** 3–4 hours including pre-deploy audit + EC2 deploy + verify.
+
+**DO NOT touch:**
+- Poller writes to `string_measurements` (filter at alert/aggregate/UI layer only)
+- `string_measurements` rows for unused strings (raw data sacred)
+- The `is_used` default (must stay `true` to preserve current behavior)
+- Peer-comparison thresholds (`GAP_CRITICAL` etc.) — fix is in peer-pool composition
+
+---
+
+## #107 — Phase B: Non-standard orientation flag (Problem 02)
+
+**Problem doc:** [`problems/02-non-standard-orientation-peer-comparison.md`](./problems/02-non-standard-orientation-peer-comparison.md)
+**Plan doc:** [`PLAN-string-orientation-flag.md`](./PLAN-string-orientation-flag.md)
+
+**TL;DR:** Add `exclude_from_peer_comparison Boolean @default(false)` to `string_configs`. Admin can flag strings on non-standard orientations (east/west roofs, walls, partial shade). Flagged strings:
+- Drop out of peer-comparison averaging
+- Get a "Non-standard install" chip on the org dashboard (visible, but not flagged as faulty)
+- Don't fire CRITICAL/WARNING alerts based on peer-relative output
+- Still produce real measurements (kWh, V, A) — they're producing useful energy
+- Will get proper fault scoring once #96 (Phase 2 PR) lands
+
+**Builds on #106** — shares schema table, admin page, API endpoints, access pattern. Don't ship before Phase A.
+
+**Files to touch (6 files):**
+1. `prisma/schema.prisma` — add column
+2. `lib/api-validation.ts` — extend Zod
+3. `app/api/admin/...` — extend PUT + bulk + GET (same files as #106)
+4. `app/admin/plants/[plantCode]/strings/page.tsx` — toggle column "Peer-comp" + bulk action
+5. `app/api/plants/[code]/strings/route.ts` — peer-pool filter + per-string output (excluded strings get `gap_percent: null`, `peer_excluded: true`)
+6. `lib/poller-utils.ts` — extend `generateAlerts()` skip set
+
+**Plus UI surfaces:**
+- `components/shared/StringComparisonTable.tsx` — chip rendering
+- `components/shared/StringHealthMatrix.tsx` — distinct cell pattern
+- `components/shared/InverterDetailSection.tsx` — header note when all strings excluded
+
+**Open questions (7 — see plan doc §15):** vocabulary, fault-scoring fallback, visibility, auto-resolve alerts, reporting impact, all-excluded inverter, future group-keys.
+
+**Effort:** 2–3 hours **after #106 is done**.
+
+**DO NOT touch:**
+- Don't filter peer-excluded strings out of API response (they produce real energy — show them)
+- Don't apply alternate fault heuristics — until #96 lands, they have no fault scoring (honest "—")
+- Don't grey-out flagged rows (they're producing — show them clearly with the chip)
+- Don't change `GAP_*` thresholds — fix is in peer pool composition
+
+**Couplings:**
+- #96 (Phase 2 PR) — provides absolute scoring fallback for excluded strings
+- #105 (sensor-fault filter) — orientation-aware filtering becomes possible after this
 
 ---
 
