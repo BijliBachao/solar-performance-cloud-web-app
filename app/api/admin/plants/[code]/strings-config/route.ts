@@ -182,7 +182,10 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (is_used !== undefined) updateData.is_used = is_used
 
     // Per-row try/catch so one DB error doesn't lose the partial-success count.
+    // Track successful targets separately so the auto-resolve below only fires
+    // for strings that were actually written.
     let updated = 0
+    const succeeded: Array<{ device_id: string; string_number: number }> = []
     const failures: Array<{ device_id: string; string_number: number; error: string }> = []
     for (const t of targets) {
       try {
@@ -201,6 +204,7 @@ export async function POST(request: NextRequest, { params }: Params) {
           update: updateData,
         })
         updated++
+        succeeded.push({ device_id: t.device_id, string_number: t.string_number })
       } catch (err: any) {
         failures.push({
           device_id: t.device_id,
@@ -212,15 +216,12 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     // When bulk-marking strings unused, auto-resolve their open alerts so
     // the customer dashboard stops showing red on ports just declared empty.
-    if (is_used === false && targets.length > 0) {
-      const targetPairs = targets.map(t => ({
-        device_id: t.device_id,
-        string_number: t.string_number,
-      }))
-      // Build OR clause (Prisma can't AND/OR per-pair in updateMany — use OR list)
+    // Only resolves alerts for strings whose upsert SUCCEEDED — failed rows
+    // are left untouched so the next retry can still resolve them.
+    if (is_used === false && succeeded.length > 0) {
       await prisma.alerts.updateMany({
         where: {
-          OR: targetPairs.map(t => ({
+          OR: succeeded.map(t => ({
             device_id: t.device_id,
             string_number: t.string_number,
           })),

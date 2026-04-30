@@ -177,10 +177,14 @@ export async function GET(request: NextRequest) {
       if (row.energy_kwh) energyMap.set(eKey, Number(row.energy_kwh))
     }
 
-    // Strings with data in query range + all active strings
+    // Strings with data in query range + all active strings.
+    // Exclude admin-flagged unused — they still have historical rows in
+    // string_daily (we never delete raw data) but must not appear in the
+    // 'active' section. They render via unusedStringSet → 'unused' below.
     const stringSet = new Set<string>()
     for (const row of dailyData) {
-      stringSet.add(`${row.device_id}:${row.string_number}`)
+      const key = `${row.device_id}:${row.string_number}`
+      if (!adminUnusedSet.has(key)) stringSet.add(key)
     }
     for (const key of activeStringSet) {
       stringSet.add(key)

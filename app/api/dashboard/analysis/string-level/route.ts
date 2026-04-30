@@ -153,8 +153,15 @@ export async function GET(request: NextRequest) {
       if (row.energy_kwh) energyMap.set(key, Number(row.energy_kwh))
     }
 
+    // Exclude admin-flagged unused from the 'active' bucket — they still
+    // have historical rows in string_daily (raw data preserved) but must
+    // appear only in the 'unused' section so the customer dashboard
+    // doesn't keep showing red on physically-empty PV ports.
     const stringSet = new Set<string>()
-    for (const row of dailyData) stringSet.add(`${row.device_id}:${row.string_number}`)
+    for (const row of dailyData) {
+      const key = `${row.device_id}:${row.string_number}`
+      if (!adminUnusedSet.has(key)) stringSet.add(key)
+    }
     for (const key of activeStringSet) stringSet.add(key)
 
     const sortByPlantDeviceString = (a: string, b: string) => {

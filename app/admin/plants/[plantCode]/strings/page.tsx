@@ -511,11 +511,13 @@ export default function AdminStringsConfigPage() {
                               />
                             </button>
                           </td>
-                          {/* Status pill — distinguishes admin-flagged vs auto-detected unused */}
+                          {/* Status pill — distinguishes admin-flagged vs auto-detected unused.
+                              Wording stays consistent across edit-state and saved-state so the
+                              pill doesn't change when admin saves the row. */}
                           <td className="px-3 py-2">
                             {isUnusedRow ? (
                               <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm bg-amber-50 text-amber-700 border border-amber-200">
-                                Hidden · admin
+                                unused · admin
                               </span>
                             ) : row.status === 'active' ? (
                               <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm bg-emerald-50 text-emerald-700 border border-emerald-200">

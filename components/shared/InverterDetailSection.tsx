@@ -36,7 +36,7 @@ interface StringInfo {
   status: StringStatus
   energy_kwh?: number
   config?: {
-    panel_count: number
+    panel_count: number | null
     panel_make: string | null
     panel_rating_w: number | null
     nameplate_w: number | null
