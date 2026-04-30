@@ -17,10 +17,11 @@ import {
 import { providerBadge } from '@/lib/design-tokens'
 
 interface StringConfig {
-  panel_count: number
+  panel_count: number | null
   panel_make: string | null
   panel_rating_w: number | null
   notes: string | null
+  is_used: boolean
   updated_at: string
   updated_by: string | null
 }
@@ -28,6 +29,7 @@ interface StringConfig {
 interface StringRow {
   string_number: number
   status: 'active' | 'unused'
+  unused_source: 'admin' | 'auto' | null
   config: StringConfig | null
   nameplate_w: number | null
 }
@@ -52,17 +54,19 @@ interface EditState {
   panel_make: string
   panel_rating_w: string
   notes: string
+  is_used: boolean
 }
 
-const emptyEdit: EditState = { panel_count: '', panel_make: '', panel_rating_w: '', notes: '' }
+const emptyEdit: EditState = { panel_count: '', panel_make: '', panel_rating_w: '', notes: '', is_used: true }
 
 const fromConfig = (c: StringConfig | null): EditState =>
   c
     ? {
-        panel_count: String(c.panel_count),
+        panel_count: c.panel_count != null ? String(c.panel_count) : '',
         panel_make: c.panel_make ?? '',
         panel_rating_w: c.panel_rating_w != null ? String(c.panel_rating_w) : '',
         notes: c.notes ?? '',
+        is_used: c.is_used,
       }
     : { ...emptyEdit }
 
@@ -132,17 +136,25 @@ export default function AdminStringsConfigPage() {
     return a.panel_count !== b.panel_count ||
       a.panel_make !== b.panel_make ||
       a.panel_rating_w !== b.panel_rating_w ||
-      a.notes !== b.notes
+      a.notes !== b.notes ||
+      a.is_used !== b.is_used
   }
 
   const handleSave = async (deviceId: string, sn: number) => {
     const key = `${deviceId}:${sn}`
     const e = edits[key]
     if (!e) return
-    const panel_count = Number(e.panel_count)
-    if (!Number.isInteger(panel_count) || panel_count < 1) {
-      setErrorMsg('Panel count must be a whole number ≥ 1')
-      return
+
+    // Panel count is OPTIONAL when the only change is is_used.
+    // Empty string = no panel info on this row (typical for empty PV ports).
+    let panel_count: number | null = null
+    if (e.panel_count !== '') {
+      const n = Number(e.panel_count)
+      if (!Number.isInteger(n) || n < 1 || n > 100) {
+        setErrorMsg('Panel count must be a whole number 1–100 (or leave blank)')
+        return
+      }
+      panel_count = n
     }
     const ratingNum = e.panel_rating_w === '' ? null : Number(e.panel_rating_w)
     if (ratingNum !== null && (!Number.isInteger(ratingNum) || ratingNum < 50 || ratingNum > 1000)) {
@@ -161,6 +173,7 @@ export default function AdminStringsConfigPage() {
           panel_make: e.panel_make.trim() || null,
           panel_rating_w: ratingNum,
           notes: e.notes.trim() || null,
+          is_used: e.is_used,
         }),
       })
       if (!res.ok) {
@@ -178,11 +191,14 @@ export default function AdminStringsConfigPage() {
             ...d,
             strings: d.strings.map(s => s.string_number === sn ? {
               ...s,
+              status: saved.is_used === false ? 'unused' : s.status,
+              unused_source: saved.is_used === false ? 'admin' : s.unused_source,
               config: {
                 panel_count: saved.panel_count,
                 panel_make: saved.panel_make,
                 panel_rating_w: saved.panel_rating_w,
                 notes: saved.notes,
+                is_used: saved.is_used,
                 updated_at: saved.updated_at,
                 updated_by: saved.updated_by,
               },
@@ -191,7 +207,7 @@ export default function AdminStringsConfigPage() {
           } : d),
         }
       })
-      setSuccessMsg(`Saved PV${sn} on ${deviceId}`)
+      setSuccessMsg(saved.is_used === false ? `PV${sn} marked unused` : `Saved PV${sn}`)
     } catch (e) {
       setErrorMsg('Network error during save')
     } finally {
@@ -395,7 +411,25 @@ export default function AdminStringsConfigPage() {
                         </span>
                       )}
                       <span className="text-slate-300">·</span>
-                      <span>{device.strings.length} string{device.strings.length !== 1 ? 's' : ''}</span>
+                      {(() => {
+                        const total = device.strings.length
+                        const usedCount = device.strings.filter(s => {
+                          const cfg = s.config
+                          return cfg?.is_used !== false
+                        }).length
+                        const unusedCount = total - usedCount
+                        return (
+                          <span>
+                            <span className="font-mono font-semibold text-slate-700">{usedCount}</span> used
+                            {unusedCount > 0 && (
+                              <>
+                                {' · '}
+                                <span className="font-mono font-semibold text-amber-700">{unusedCount}</span> unused
+                              </>
+                            )}
+                          </span>
+                        )
+                      })()}
                     </p>
                   </div>
                 </div>
@@ -408,6 +442,9 @@ export default function AdminStringsConfigPage() {
                     <tr>
                       <th className="px-3 py-2 text-left">
                         <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">String</div>
+                      </th>
+                      <th className="px-3 py-2 text-left">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Used</div>
                       </th>
                       <th className="px-3 py-2 text-left">
                         <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Status</div>
@@ -438,24 +475,58 @@ export default function AdminStringsConfigPage() {
                       const computedKwp = e.panel_count && e.panel_rating_w
                         ? (Number(e.panel_count) * Number(e.panel_rating_w)) / 1000
                         : null
+                      const isUnusedRow = e.is_used === false
 
                       return (
-                        <tr key={key} className={cn(dirty && 'bg-solar-gold/5')}>
-                          <td className="px-3 py-2 font-mono font-bold text-slate-900">
+                        <tr
+                          key={key}
+                          className={cn(
+                            dirty && 'bg-solar-gold/5',
+                            isUnusedRow && 'bg-slate-50/80',
+                          )}
+                        >
+                          <td className={cn(
+                            'px-3 py-2 font-mono font-bold',
+                            isUnusedRow ? 'text-slate-400' : 'text-slate-900',
+                          )}>
                             PV{row.string_number}
                           </td>
+                          {/* Used toggle — flips is_used boolean */}
                           <td className="px-3 py-2">
-                            <span
+                            <button
+                              type="button"
+                              onClick={() => setEdits(p => ({ ...p, [key]: { ...e, is_used: !e.is_used } }))}
                               className={cn(
-                                'inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm',
-                                row.status === 'active'
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                  : 'bg-slate-100 text-slate-500 border border-slate-200',
+                                'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors',
+                                e.is_used ? 'bg-emerald-500' : 'bg-slate-300',
                               )}
+                              aria-label={e.is_used ? 'Mark unused' : 'Mark used'}
+                              title={e.is_used ? 'Used (click to mark unused)' : 'Unused (click to mark used)'}
                             >
-                              {row.status === 'active' ? <Zap className="w-2.5 h-2.5" strokeWidth={2.5} /> : null}
-                              {row.status}
-                            </span>
+                              <span
+                                className={cn(
+                                  'inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform',
+                                  e.is_used ? 'translate-x-5' : 'translate-x-1',
+                                )}
+                              />
+                            </button>
+                          </td>
+                          {/* Status pill — distinguishes admin-flagged vs auto-detected unused */}
+                          <td className="px-3 py-2">
+                            {isUnusedRow ? (
+                              <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm bg-amber-50 text-amber-700 border border-amber-200">
+                                Hidden · admin
+                              </span>
+                            ) : row.status === 'active' ? (
+                              <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <Zap className="w-2.5 h-2.5" strokeWidth={2.5} />
+                                active
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm bg-slate-100 text-slate-500 border border-slate-200">
+                                {row.unused_source === 'admin' ? 'unused · admin' : 'unused · auto'}
+                              </span>
+                            )}
                           </td>
                           <td className="px-3 py-2">
                             <Input
@@ -464,8 +535,9 @@ export default function AdminStringsConfigPage() {
                               max={100}
                               value={e.panel_count}
                               onChange={ev => setEdits(p => ({ ...p, [key]: { ...e, panel_count: ev.target.value } }))}
-                              className="h-7 w-20 text-[12px]"
+                              className={cn('h-7 w-20 text-[12px]', isUnusedRow && 'opacity-50')}
                               placeholder="—"
+                              disabled={isUnusedRow}
                             />
                           </td>
                           <td className="px-3 py-2">
@@ -473,9 +545,10 @@ export default function AdminStringsConfigPage() {
                               type="text"
                               value={e.panel_make}
                               onChange={ev => setEdits(p => ({ ...p, [key]: { ...e, panel_make: ev.target.value } }))}
-                              className="h-7 w-32 text-[12px]"
+                              className={cn('h-7 w-32 text-[12px]', isUnusedRow && 'opacity-50')}
                               placeholder="optional"
                               maxLength={100}
+                              disabled={isUnusedRow}
                             />
                           </td>
                           <td className="px-3 py-2">
@@ -485,11 +558,15 @@ export default function AdminStringsConfigPage() {
                               max={1000}
                               value={e.panel_rating_w}
                               onChange={ev => setEdits(p => ({ ...p, [key]: { ...e, panel_rating_w: ev.target.value } }))}
-                              className="h-7 w-20 text-[12px]"
+                              className={cn('h-7 w-20 text-[12px]', isUnusedRow && 'opacity-50')}
                               placeholder="optional"
+                              disabled={isUnusedRow}
                             />
                           </td>
-                          <td className="px-3 py-2 text-right font-mono text-slate-700">
+                          <td className={cn(
+                            'px-3 py-2 text-right font-mono',
+                            isUnusedRow ? 'text-slate-400' : 'text-slate-700',
+                          )}>
                             {computedKwp != null ? `${computedKwp.toFixed(2)} kWp` : '—'}
                           </td>
                           <td className="px-3 py-2">

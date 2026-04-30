@@ -46,20 +46,22 @@ export const PlantAssignSchema = z.object({
 // Vendor APIs never expose installed panel info — admins enter it here.
 
 export const StringConfigUpsertSchema = z.object({
-  panel_count: z.number().int().min(1, 'At least 1 panel').max(100, 'Max 100 panels per string'),
+  panel_count: z.number().int().min(1, 'At least 1 panel').max(100, 'Max 100 panels per string').nullable().optional(),
   panel_make: z.string().max(100).nullable().optional(),
   panel_rating_w: z.number().int().min(50, 'Min 50 W').max(1000, 'Max 1000 W').nullable().optional(),
   notes: z.string().max(500).nullable().optional(),
+  is_used: z.boolean().optional(),
 })
 
 export const StringConfigBulkSchema = z.object({
-  panel_count: z.number().int().min(1).max(100),
+  panel_count: z.number().int().min(1).max(100).nullable().optional(),
   panel_make: z.string().max(100).nullable().optional(),
   panel_rating_w: z.number().int().min(50).max(1000).nullable().optional(),
   notes: z.string().max(500).nullable().optional(),
   // If true, only fill in strings that don't already have a config.
   // If false, overwrite every string under the plant.
   only_unconfigured: z.boolean().default(false),
+  is_used: z.boolean().optional(),
 })
 
 // ─── Analysis Date Range Schema ───────────────────────────────────────

@@ -82,14 +82,26 @@ export async function GET(request: NextRequest) {
       lifetimeSet.add(`${rec.device_id}:${rec.string_number}`)
     }
 
+    // Admin-flagged unused — overrides the data-history heuristic.
+    // Forced into unusedStringSet regardless of data state. The unused_source
+    // ('admin' | 'auto') is exposed in the row output below for the
+    // distinguishing chip on the admin UI.
+    const adminUnused = await prisma.string_configs.findMany({
+      where: { device_id: { in: deviceIds }, is_used: false },
+      select: { device_id: true, string_number: true },
+    })
+    const adminUnusedSet = new Set(adminUnused.map(c => `${c.device_id}:${c.string_number}`))
+
     // Classify: active / inactive / unused
     const activeStringSet = new Set<string>() // recent data
     const inactiveStringSet = new Set<string>() // had data, stopped
-    const unusedStringSet = new Set<string>() // never had data
+    const unusedStringSet = new Set<string>() // never had data OR admin-flagged
 
-    // All strings from lifetime data are either active or inactive
+    // All strings from lifetime data: admin-flagged → unused, else active or inactive
     for (const key of lifetimeSet) {
-      if (recentSet.has(key)) {
+      if (adminUnusedSet.has(key)) {
+        unusedStringSet.add(key)
+      } else if (recentSet.has(key)) {
         activeStringSet.add(key)
       } else {
         inactiveStringSet.add(key)
@@ -218,6 +230,15 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      // Distinguish admin-flagged unused from heuristic-detected unused
+      // ('admin' | 'auto'). Only meaningful on type='unused' rows.
+      // Org-side analysis endpoint does NOT include this field — admin-only.
+      const unused_source: 'admin' | 'auto' | null = type !== 'unused'
+        ? null
+        : adminUnusedSet.has(key)
+          ? 'admin'
+          : 'auto'
+
       rows.push({
         plant_id: device.plant_id,
         plant_name: device.plants?.plant_name || 'Unknown',
@@ -231,6 +252,7 @@ export async function GET(request: NextRequest) {
         energy_kwh: energySum > 0 ? Math.round(energySum * 10) / 10 : null,
         scores,
         type,
+        unused_source,
       })
     }
 

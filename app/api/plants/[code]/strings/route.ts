@@ -60,6 +60,7 @@ export async function GET(
             panel_count: true,
             panel_make: true,
             panel_rating_w: true,
+            is_used: true,
           },
         })
       : []
@@ -113,16 +114,21 @@ export async function GET(
           ? Math.max(...latestMeasurements.map(m => m.timestamp.getTime()))
           : 0
 
-        // Build fresh readings for average calculation (exclude stale)
+        // Build fresh readings for average calculation (exclude stale + admin-flagged unused)
+        // Unused strings show induction-leak noise that pollutes peer averages.
         const freshReadings: StringReading[] = latestMeasurements
           .filter(m => !isStale(m.timestamp.getTime(), freshestTs))
+          .filter(m => configByKey.get(`${device.id}:${m.string_number}`)?.is_used !== false)
           .map(m => ({ string_number: m.string_number, current: Number(m.current), voltage: Number(m.voltage) }))
 
         // Display average (active strings, self-inclusive — for KPI pill)
         const displayAvg = activeAvg(freshReadings)
 
-        // Build string data with kWh
-        const strings = latestMeasurements.map((m) => {
+        // Build string data with kWh — but exclude admin-flagged unused from output
+        // (org user shouldn't see them; admin sees them on the config page).
+        const strings = latestMeasurements
+          .filter(m => configByKey.get(`${device.id}:${m.string_number}`)?.is_used !== false)
+          .map((m) => {
           const current = Number(m.current)
           const voltage = Number(m.voltage)
           const stale = isStale(m.timestamp.getTime(), freshestTs)

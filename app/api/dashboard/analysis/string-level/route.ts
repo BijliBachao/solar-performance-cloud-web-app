@@ -84,13 +84,29 @@ export async function GET(request: NextRequest) {
     const lifetimeSet = new Set<string>()
     for (const rec of lifetimeRecords) lifetimeSet.add(`${rec.device_id}:${rec.string_number}`)
 
+    // Admin-flagged unused — overrides the data-history heuristic.
+    // These strings are forced into unusedStringSet regardless of whether
+    // they show induction-leak data. Org users will see them in the bottom
+    // "Unused / Spare Ports" section like other unused (no distinguishing
+    // chip — that's admin-side only).
+    const adminUnused = await prisma.string_configs.findMany({
+      where: { device_id: { in: deviceIds }, is_used: false },
+      select: { device_id: true, string_number: true },
+    })
+    const adminUnusedSet = new Set(adminUnused.map(c => `${c.device_id}:${c.string_number}`))
+
     const activeStringSet = new Set<string>()
     const inactiveStringSet = new Set<string>()
     const unusedStringSet = new Set<string>()
 
     for (const key of lifetimeSet) {
-      if (recentSet.has(key)) activeStringSet.add(key)
-      else inactiveStringSet.add(key)
+      if (adminUnusedSet.has(key)) {
+        unusedStringSet.add(key)
+      } else if (recentSet.has(key)) {
+        activeStringSet.add(key)
+      } else {
+        inactiveStringSet.add(key)
+      }
     }
 
     for (const d of devices) {

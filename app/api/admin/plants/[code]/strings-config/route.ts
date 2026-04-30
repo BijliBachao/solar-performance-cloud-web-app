@@ -62,20 +62,33 @@ export async function GET(_request: NextRequest, { params }: Params) {
       for (const s of sorted) {
         const key = `${d.id}:${s}`
         const cfg = configMap.get(key)
-        const status = lifetimeSet.has(key) ? 'active' : 'unused'
+        // Source of "unused" classification — admin-flagged overrides the
+        // data-history heuristic. Used by admin UI to show the distinguishing
+        // chip ('admin' vs 'auto'). Org-side endpoints don't expose this.
+        const adminFlaggedUnused = cfg?.is_used === false
+        const heuristicUnused = !lifetimeSet.has(key)
+        const status: 'active' | 'unused' =
+          adminFlaggedUnused || heuristicUnused ? 'unused' : 'active'
+        const unused_source: 'admin' | 'auto' | null = !status || status === 'active'
+          ? null
+          : adminFlaggedUnused
+            ? 'admin'
+            : 'auto'
         const nameplate_w = cfg?.panel_count && cfg?.panel_rating_w
           ? cfg.panel_count * cfg.panel_rating_w
           : null
 
         strings.push({
           string_number: s,
-          status, // 'active' = has produced data ever; 'unused' = port within max_strings but never produced
+          status, // 'active' = real producing string · 'unused' = empty port (admin-flagged or auto-detected)
+          unused_source, // 'admin' | 'auto' | null — only present on unused strings, only on admin endpoints
           config: cfg
             ? {
                 panel_count: cfg.panel_count,
                 panel_make: cfg.panel_make,
                 panel_rating_w: cfg.panel_rating_w,
                 notes: cfg.notes,
+                is_used: cfg.is_used,
                 updated_at: cfg.updated_at,
                 updated_by: cfg.updated_by,
               }
@@ -119,7 +132,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         { status: 400 },
       )
     }
-    const { panel_count, panel_make, panel_rating_w, notes, only_unconfigured } = parsed.data
+    const { panel_count, panel_make, panel_rating_w, notes, only_unconfigured, is_used } = parsed.data
 
     const devices = await prisma.devices.findMany({
       where: { plant_id: plantId, device_type_id: { in: INVERTER_DEVICE_TYPE_IDS } },
@@ -159,6 +172,15 @@ export async function POST(request: NextRequest, { params }: Params) {
       targets.push({ device_id: devId, string_number: Number(snStr) })
     }
 
+    // Build update payload — only include fields that were sent. Lets bulk
+    // toggle is_used without overwriting panel info, and vice versa.
+    const updateData: Record<string, unknown> = { updated_by: userContext.userId }
+    if (panel_count !== undefined) updateData.panel_count = panel_count
+    if (panel_make !== undefined) updateData.panel_make = panel_make ?? null
+    if (panel_rating_w !== undefined) updateData.panel_rating_w = panel_rating_w ?? null
+    if (notes !== undefined) updateData.notes = notes ?? null
+    if (is_used !== undefined) updateData.is_used = is_used
+
     // Per-row try/catch so one DB error doesn't lose the partial-success count.
     let updated = 0
     const failures: Array<{ device_id: string; string_number: number; error: string }> = []
@@ -169,19 +191,14 @@ export async function POST(request: NextRequest, { params }: Params) {
           create: {
             device_id: t.device_id,
             string_number: t.string_number,
-            panel_count,
+            panel_count: panel_count ?? null,
             panel_make: panel_make ?? null,
             panel_rating_w: panel_rating_w ?? null,
             notes: notes ?? null,
+            is_used: is_used ?? true,
             updated_by: userContext.userId,
           },
-          update: {
-            panel_count,
-            panel_make: panel_make ?? null,
-            panel_rating_w: panel_rating_w ?? null,
-            notes: notes ?? null,
-            updated_by: userContext.userId,
-          },
+          update: updateData,
         })
         updated++
       } catch (err: any) {
@@ -191,6 +208,29 @@ export async function POST(request: NextRequest, { params }: Params) {
           error: err?.message?.slice(0, 200) || 'unknown',
         })
       }
+    }
+
+    // When bulk-marking strings unused, auto-resolve their open alerts so
+    // the customer dashboard stops showing red on ports just declared empty.
+    if (is_used === false && targets.length > 0) {
+      const targetPairs = targets.map(t => ({
+        device_id: t.device_id,
+        string_number: t.string_number,
+      }))
+      // Build OR clause (Prisma can't AND/OR per-pair in updateMany — use OR list)
+      await prisma.alerts.updateMany({
+        where: {
+          OR: targetPairs.map(t => ({
+            device_id: t.device_id,
+            string_number: t.string_number,
+          })),
+          resolved_at: null,
+        },
+        data: {
+          resolved_at: new Date(),
+          resolved_by: userContext.userId,
+        },
+      })
     }
 
     const message = failures.length === 0

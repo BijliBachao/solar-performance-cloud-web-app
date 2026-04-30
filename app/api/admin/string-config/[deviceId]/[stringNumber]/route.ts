@@ -34,27 +34,48 @@ export async function PUT(request: NextRequest, { params }: Params) {
         { status: 400 },
       )
     }
-    const { panel_count, panel_make, panel_rating_w, notes } = parsed.data
+    const { panel_count, panel_make, panel_rating_w, notes, is_used } = parsed.data
+
+    // Build update payload — only include fields that were sent.
+    // This lets the admin toggle is_used without overwriting panel info, and
+    // vice versa. Missing fields are preserved on existing rows.
+    const updateData: Record<string, unknown> = { updated_by: userContext.userId }
+    if (panel_count !== undefined) updateData.panel_count = panel_count
+    if (panel_make !== undefined) updateData.panel_make = panel_make ?? null
+    if (panel_rating_w !== undefined) updateData.panel_rating_w = panel_rating_w ?? null
+    if (notes !== undefined) updateData.notes = notes ?? null
+    if (is_used !== undefined) updateData.is_used = is_used
 
     const saved = await prisma.string_configs.upsert({
       where: { device_id_string_number: { device_id: deviceId, string_number: sn } },
       create: {
         device_id: deviceId,
         string_number: sn,
-        panel_count,
+        panel_count: panel_count ?? null,
         panel_make: panel_make ?? null,
         panel_rating_w: panel_rating_w ?? null,
         notes: notes ?? null,
+        is_used: is_used ?? true,  // default to used on create — preserves current behavior
         updated_by: userContext.userId,
       },
-      update: {
-        panel_count,
-        panel_make: panel_make ?? null,
-        panel_rating_w: panel_rating_w ?? null,
-        notes: notes ?? null,
-        updated_by: userContext.userId,
-      },
+      update: updateData,
     })
+
+    // When admin marks a string unused, auto-resolve its open alerts so the
+    // org user stops seeing red on a port they just declared empty.
+    if (is_used === false) {
+      await prisma.alerts.updateMany({
+        where: {
+          device_id: deviceId,
+          string_number: sn,
+          resolved_at: null,
+        },
+        data: {
+          resolved_at: new Date(),
+          resolved_by: userContext.userId,
+        },
+      })
+    }
 
     const nameplate_w = saved.panel_count && saved.panel_rating_w
       ? saved.panel_count * saved.panel_rating_w
@@ -67,6 +88,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
       panel_make: saved.panel_make,
       panel_rating_w: saved.panel_rating_w,
       notes: saved.notes,
+      is_used: saved.is_used,
       updated_at: saved.updated_at,
       updated_by: saved.updated_by,
       nameplate_w,

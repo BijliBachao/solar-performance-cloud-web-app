@@ -55,10 +55,25 @@ export async function generateAlerts(
 ): Promise<void> {
   if (rawMeasurements.length === 0) return
 
+  // Exclude admin-flagged unused strings BEFORE peer comparison.
+  // Empty PV ports show induction-leak noise (~0.05–0.5 A) that the
+  // peer-comparison logic would otherwise treat as a 96%-below-peers
+  // CRITICAL alert. Admin marks them unused → they disappear from the
+  // peer pool AND from alert generation entirely.
+  const adminUnused = await prisma.string_configs.findMany({
+    where: { device_id: deviceId, is_used: false },
+    select: { string_number: true },
+  })
+  const unusedSet = new Set(adminUnused.map(c => c.string_number))
+  const usedRaw = unusedSet.size > 0
+    ? rawMeasurements.filter(m => !unusedSet.has(m.string_number))
+    : rawMeasurements
+  if (usedRaw.length === 0) return
+
   // Exclude sensor-fault rows before peer comparison — a single broken
   // CT at 998 A would otherwise dominate the inverter average and make
   // every healthy peer look "below average" (false CRITICAL alerts).
-  const measurements = dropSensorFaults(rawMeasurements)
+  const measurements = dropSensorFaults(usedRaw)
   if (measurements.length === 0) return
 
   const activeStrings = measurements.filter(m => isActive(Number(m.current)))
@@ -228,9 +243,21 @@ export async function updateHourlyAggregates(
 
   if (rawMeasurements.length === 0) return
 
+  // Skip admin-flagged unused strings — don't pollute string_hourly with
+  // induction-leak noise from physically-empty PV ports.
+  const adminUnused = await prisma.string_configs.findMany({
+    where: { device_id: deviceId, is_used: false },
+    select: { string_number: true },
+  })
+  const unusedSet = new Set(adminUnused.map(c => c.string_number))
+  const usedRaw = unusedSet.size > 0
+    ? rawMeasurements.filter(m => !unusedSet.has(m.string_number))
+    : rawMeasurements
+  if (usedRaw.length === 0) return
+
   // Drop physically-impossible sensor readings before aggregation so
   // string_hourly.avg_power / avg_current / max_current stay honest.
-  const allMeasurements = dropSensorFaults(rawMeasurements)
+  const allMeasurements = dropSensorFaults(usedRaw)
   if (allMeasurements.length === 0) return
 
   // Group by string_number
@@ -300,12 +327,24 @@ export async function updateDailyAggregates(
 
   if (rawMeasurements.length === 0) return
 
+  // Skip admin-flagged unused strings — keep string_daily clean of induction
+  // noise from empty PV ports.
+  const adminUnused = await prisma.string_configs.findMany({
+    where: { device_id: deviceId, is_used: false },
+    select: { string_number: true },
+  })
+  const unusedSet = new Set(adminUnused.map(c => c.string_number))
+  const usedRaw = unusedSet.size > 0
+    ? rawMeasurements.filter(m => !unusedSet.has(m.string_number))
+    : rawMeasurements
+  if (usedRaw.length === 0) return
+
   // Drop physically-impossible sensor readings before any daily math.
   // Without this, a single CT fault (108 A, 998 A, etc.) pushes the
   // string's computed Performance to the 100% cap and stores a
   // misleadingly-green row in string_daily. Also inflates avg_power
   // and the trapezoidal energy integral.
-  const allMeasurements = dropSensorFaults(rawMeasurements)
+  const allMeasurements = dropSensorFaults(usedRaw)
   if (allMeasurements.length === 0) return
 
   // Compute inverter-wide average current (for performance score)
