@@ -6,6 +6,16 @@
 
 ---
 
+## Research-validated approach
+
+This plan was validated against industry practice on 2026-04-30 — see [`RESEARCH-orientation-handling.md`](./RESEARCH-orientation-handling.md). Key findings:
+
+- **IEC 61724-1 (PV system performance monitoring) standardizes the PR formula**: `PR = Y_f / Y_r` where Y_f = actual kWh / nameplate kWp, Y_r = POA irradiance / 1 kW/m² STC. The reference yield depends on POA (Plane-of-Array), not GHI — which is the right way to score wall/east/west strings fairly.
+- **SPC's `nameplate_kwp = panel_count × panel_rating_w / 1000`** matches the standard. The formula in this plan is correct.
+- **Fixed PSH = 5.5 (Phase 2 Small)** is acceptable as a Class C / free-tier-baseline approximation. Combined with Phase B's `exclude_from_peer_comparison` flag, this puts SPC at parity with FusionSolar Lite and Sunny Portal free.
+- **Upgrade path to industry baseline** (Phase 2 Medium / Large): integrate **PVGIS TMY** (free, EU JRC, lat/lon-aware) for monthly expected yield, or **Open-Meteo** (free at SPC's volume) for live daily irradiance, or **Solcast** (paid, ~$50–200/mo) for warranty-grade. PVGIS TMY first when a client demands more than fixed PSH.
+- **Self-comparison** (string vs own 30-day history) is the industry-standard secondary metric (SolarEdge "Energy Profile Anomaly", SMA "Specific Yield Trend"). Optional Phase 2 v1.5 enhancement; lower priority once PR is live.
+
 ## TL;DR
 
 SPC's current fault detection has a **blind spot**: it compares each string only to its neighbors on the same inverter. If every string on an inverter is equally bad, SPC says they're all healthy. They look normal vs each other but they're all underperforming vs what the panel manufacturer promised.

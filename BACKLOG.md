@@ -53,12 +53,22 @@
 
 ## Recommended sequence
 
+Validated against industry practice in [`RESEARCH-orientation-handling.md`](./RESEARCH-orientation-handling.md) on 2026-04-30.
+
+The 3-step ladder takes SPC from **below the free-tier baseline of global incumbents** (SolarEdge, SMA, Tigo, Solar-Log, FusionSolar — all of which support sub-array tagging and orientation-aware analysis per IEC 61724-1) to **parity with the free tier of those incumbents**:
+
 1. **#106 — Phase A** (used/unused, ~3-4 h) — biggest customer-trust win, validates the access pattern
-2. **#107 — Phase B** (orientation flag, ~2-3 h) — builds on #106 scaffolding
-3. **#96 — Phase 2 PR** (~1-2 h) — provides absolute scoring for strings #107 excluded from peer-comparison
+2. **#107 — Phase B** (orientation flag, ~2-3 h) — silences false alerts on non-standard installs (matches SolarEdge's documented fix for the same bug)
+3. **#96 — Phase 2 PR Small** (~1-2 h) — fixed PSH = 5.5, provides IEC 61724-1 absolute scoring for strings excluded from peer comparison
 4. **#105 — Sensor-fault filter** (~2-3 h) — uses #96's nameplate data for tighter per-string thresholds
 
 Total for the install-context series: ~10 hours of focused work, biggest customer-trust ROI on the backlog.
+
+**Future ladder steps (not in current backlog — add when client demand surfaces):**
+
+- **Phase B v2: named sub-array groups + within-group peer comparison** — copy SMA / Tigo data model (`peer_group` + `azimuth` + `tilt` columns). Reaches industry baseline.
+- **Phase 2 Medium: PVGIS TMY expected yield** per plant lat/lon. Free, EU JRC. Combined with sub-array tags = same as SolarEdge / SMA free tier.
+- **Phase 2 Large: live irradiance API** (Open-Meteo free or Solcast paid). Warranty-grade. Defer until a client pays for it.
 
 ---
 

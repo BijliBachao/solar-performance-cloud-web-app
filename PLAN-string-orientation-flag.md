@@ -8,6 +8,16 @@
 
 ---
 
+## Research-validated approach
+
+This plan was validated against industry practice on 2026-04-30 — see [`RESEARCH-orientation-handling.md`](./RESEARCH-orientation-handling.md). Key findings:
+
+- **IEC 61724-1 explicitly defines "sub-array" as a separate analysis boundary** with its own PR computed against the POA irradiance at that sub-array's plane. SPC's current peer-only logic sits **below the free-tier baseline** of every global incumbent (SolarEdge, SMA, Tigo, Solar-Log, FusionSolar).
+- **Phase B Option A (this plan) is defensible as v1** — it matches what SolarEdge does when a customer mis-configures a logical string with mixed orientations: removes the false alert and labels the string "operating as designed".
+- **The honest UI label** for excluded strings is "Peer comparison disabled — no fault detection until Phase 2 PR." Customers prefer "we know what we don't know" over "we cry wolf."
+- **Phase 2 PR (#96, Small variant)** is the natural pair — provides absolute scoring against nameplate × peak-sun-hours so excluded strings get fault detection back, just from a different angle.
+- **Sub-array tagging with named groups + PVGIS TMY** is the industry baseline (SolarEdge / SMA / Tigo / Solar-Log standard). Defer to Phase B v2 when a serious client asks.
+
 ## TL;DR
 
 Add an `exclude_from_peer_comparison Boolean @default(false)` column to the existing `string_configs` table. Admin can flag strings on non-standard orientations (east/west roofs, walls, partial shade) so they:
