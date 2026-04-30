@@ -8,6 +8,49 @@
 
 ---
 
+## What stays active on excluded strings (CRITICAL clarification)
+
+Phase B disables **only ONE** of SPC's five fault detection layers — peer comparison. The other four keep working on excluded strings, so customers are NOT blind to faults on non-standard installs.
+
+| # | Fault signal | Catches | Affected by Phase B exclusion? |
+|---|---|---|---|
+| 1 | **Peer-comparison gap %** | Gradual underperformance vs neighbors | ✅ **YES — disabled** (this is the false-alert source) |
+| 2 | **Vendor hardware alarms** (`vendor_alarms` table) | Hardware faults the inverter itself reports (Solis/Huawei/Growatt alarm codes via API) | ❌ Still active |
+| 3 | **Dead-string detection** (`isActive(current)` ≤ 0.1A → OPEN_CIRCUIT) | Cable break, dead panel, blown fuse | ❌ Still active |
+| 4 | **Stale-data detection** (`isStale(timestamp)` > 15 min) | Communication failure, string offline | ❌ Still active |
+| 5 | **Sensor-fault filter** (`MAX_STRING_CURRENT_A`, `MAX_STRING_POWER_W`) | Broken CT reporting impossible values | ❌ Still active |
+
+**Implementation rule for `generateAlerts()` in `lib/poller-utils.ts`:**
+
+```
+if (peer-excluded string) {
+  SKIP Part 1: peer-comparison gap-percent alerts (CRITICAL/WARNING/INFO based on % below peers)
+  KEEP Part 2: dead-string detection (current ≤ 0.1A → CRITICAL OPEN_CIRCUIT)
+  // Other layers (#2, #4, #5) operate independently — no change needed
+}
+```
+
+**Concrete examples on a Phase-B-excluded wall string:**
+
+| Scenario | What happens |
+|---|---|
+| Real cable break → 0V/0A | ⛔ CRITICAL "OPEN_CIRCUIT — Connection broken" (signal #3 fires) |
+| Inverter reports vendor alarm code 1012 | Hardware fault appears in vendor_alarms (signal #2 fires) |
+| String stops sending data 20 min ago | ⛔ OFFLINE (signal #4 fires) |
+| Sensor reports 998 A | Row dropped silently (signal #5 fires before any alerting) |
+| Wall string at 3.3 A (working as designed) | ◯ Non-standard — no false alert (signal #1 was the false positive — correctly disabled) |
+
+**What we genuinely lose visibility on:**
+
+- Gradual decline (slow soiling buildup, slow panel aging, growing tree shade)
+- These need either peer comparison (which is now disabled for this string) OR Performance Ratio (Phase 2 PR — task #96)
+
+**Phase B + Phase 2 PR pair fully closes this gap.** Phase B alone is still ~90% of the value, because the hard faults (broken hardware, stuck data, vendor alarms) all still fire correctly.
+
+The chip on org dashboard reads: **"Non-standard install · peer comparison disabled"** — honest about what's off without lying about what's still on.
+
+---
+
 ## Research-validated approach
 
 This plan was validated against industry practice on 2026-04-30 — see [`RESEARCH-orientation-handling.md`](./RESEARCH-orientation-handling.md). Key findings:

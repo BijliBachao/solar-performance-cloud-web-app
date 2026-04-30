@@ -140,6 +140,30 @@ The reliable source is, again, **the human installer**. Whoever physically insta
 
 ---
 
+## What fault detection survives on flagged strings (important nuance)
+
+When admin flags a string as "non-standard" (Phase B), SPC disables **ONLY peer-comparison alerting** for that string. SPC has five fault detection layers — only the first one is affected:
+
+| # | Fault signal | What it catches | Active on flagged string? |
+|---|---|---|---|
+| 1 | Peer-comparison gap % | Gradual underperformance vs neighbors | **No — this is the layer with the false-positive problem** |
+| 2 | Vendor hardware alarms (Solis/Huawei/Growatt fault codes via API) | Hardware faults the inverter self-reports | Yes |
+| 3 | Dead-string detection (current ≤ 0.1A → OPEN_CIRCUIT) | Cable break, dead panel, blown fuse | Yes |
+| 4 | Stale-data detection (no measurements > 15 min → OFFLINE) | Communication failure | Yes |
+| 5 | Sensor-fault filter (MAX_STRING_CURRENT_A, MAX_STRING_POWER_W) | Broken CT reporting impossible values | Yes |
+
+**Customer is NOT blind to faults on flagged strings.** Hard faults (broken hardware, stuck data, vendor alarms) still fire alerts correctly. The only fault category we lose visibility on is **gradual decline** (soiling buildup, slow panel aging, tree growing into shade) — and Phase 2 PR (task #96, comparing actual kWh to nameplate × peak sun hours) brings that back.
+
+**The chip shown on org dashboard reads "Non-standard install · peer comparison disabled"** — honest about what's off without lying about what's still on. If the wall string actually fails tomorrow:
+
+- Cable break → 0A → "⛔ OPEN_CIRCUIT — Connection broken" (signal #3 fires)
+- Vendor reports alarm 1012 → "Hardware fault" appears in vendor_alarms (signal #2 fires)
+- String stops sending data → "⛔ OFFLINE" (signal #4 fires)
+
+The customer is alerted in all three cases. Phase B isn't "turn off all detection" — it's "turn off the one signal that doesn't apply when panels face different directions."
+
+---
+
 ## Customer impact
 
 | Effect | Severity |
