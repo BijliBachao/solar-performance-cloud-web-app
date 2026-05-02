@@ -327,8 +327,10 @@ export class SungrowClient {
           point_id_list: chunk.map(String),
         })
 
-        const dpList = data?.device_point_list || []
-        if (dpList.length > 0 && dpList[0].device_point) {
+        const dpList = safeArray<any>(data?.device_point_list)
+        // Defense in depth: poller already guards results[0], but a partial-
+        // outage response can put a null in the first slot here too.
+        if (dpList.length > 0 && dpList[0]?.device_point) {
           Object.assign(allPointData, dpList[0].device_point)
         }
       }
@@ -352,11 +354,13 @@ export class SungrowClient {
       size: 200,
     })
 
-    const records = data?.pageList || []
-    return records.map((p: any) => ({
-      point_id: Number(p.point_id),
-      point_name: p.point_name || '',
-    }))
+    const records = safeArray<any>(data?.pageList)
+    return records
+      .filter((p) => p)
+      .map((p: any) => ({
+        point_id: Number(p.point_id),
+        point_name: p.point_name || '',
+      }))
   }
 
   isTokenValid(): boolean {

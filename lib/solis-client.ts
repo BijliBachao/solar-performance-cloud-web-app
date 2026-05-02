@@ -169,8 +169,9 @@ export class SolisClient {
         pageSize,
         stationId,
       })
-      const records = data?.page?.records || []
+      const records = safeArray<any>(data?.page?.records)
       for (const inv of records) {
+        if (!inv) continue
         allInverters.push({
           id: String(inv.id),
           sn: inv.sn,

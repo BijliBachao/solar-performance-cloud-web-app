@@ -12,7 +12,9 @@
     "build": "bash scripts/validate-centralized.sh && next build",
     "start": "next start --port 3001",
     "lint": "next lint",
-    "poller": "tsx scripts/run-poller.ts"
+    "poller": "tsx scripts/run-poller.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.39.2",
@@ -55,6 +57,7 @@
     "eslint": "^8",
     "eslint-config-next": "14.2.33",
     "pm2": "^6.0.14",
-    "tsx": "^4.20.6"
+    "tsx": "^4.20.6",
+    "vitest": "^4.1.5"
   }
 }
