@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { SungrowClient } from '@/lib/sungrow-client'
 import { PROVIDERS, DEVICE_TYPE_IDS } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, safeObject, getPKTDateForDB } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, safeObject, getPKTDateForDB, loadStringConfigs } from '@/lib/poller-utils'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
@@ -291,9 +291,10 @@ async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
             timestamp: new Date(),
           })),
         })
-        await generateAlerts(device.id, device.plant_id, measurements)
-        await updateHourlyAggregates(device.id, device.plant_id, maxStrings)
-        await updateDailyAggregates(device.id, device.plant_id, maxStrings)
+        const stringConfigs = await loadStringConfigs(device.id)
+        await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
+        await updateHourlyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
+        await updateDailyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
       }
 
       // Save hardware daily counter — p1 = Today's Energy (当日发电), per-device, unit = Wh

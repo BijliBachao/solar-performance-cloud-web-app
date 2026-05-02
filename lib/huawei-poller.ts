@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { huaweiClient } from '@/lib/huawei-client'
 import { Decimal } from '@prisma/client/runtime/library'
 import { PROVIDERS } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, safeArray, safeObject, safeFloat } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, safeArray, safeObject, safeFloat } from '@/lib/poller-utils'
 import { ACTIVE_CURRENT_THRESHOLD } from '@/lib/string-health'
 
 let lastPlantSync = 0
@@ -242,9 +242,11 @@ async function fetchStringData(): Promise<void> {
           }
 
           if (measurements.length > 0) {
-            await generateAlerts(device.id, device.plant_id, measurements)
-            await updateHourlyAggregates(device.id, device.plant_id, maxStrings)
-            await updateDailyAggregates(device.id, device.plant_id, maxStrings)
+            // Fetch admin flags once and share across all three helpers
+            const stringConfigs = await loadStringConfigs(device.id)
+            await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
+            await updateHourlyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
+            await updateDailyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
           }
 
           // Save hardware daily counter — source of truth for "today's energy" display

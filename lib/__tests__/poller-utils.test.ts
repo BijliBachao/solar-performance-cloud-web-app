@@ -150,6 +150,72 @@ describe('safeInt', () => {
   })
 })
 
+describe('loadStringConfigs (hoist for Task #108 / unblocks #97)', () => {
+  let mockFindMany: any
+
+  beforeAll(async () => {
+    // No-op — helpers are loaded by the outer beforeAll already
+  })
+
+  it('returns empty sets when no configs exist for a device (default state for newly-discovered inverter)', async () => {
+    mockFindMany = vi.fn().mockResolvedValue([])
+    vi.doMock('@/lib/prisma', () => ({
+      prisma: { string_configs: { findMany: mockFindMany } },
+    }))
+    vi.resetModules()
+    const { loadStringConfigs } = await import('@/lib/poller-utils')
+    const result = await loadStringConfigs('device-1')
+    expect(result.unusedSet.size).toBe(0)
+    expect(result.peerExcludedSet.size).toBe(0)
+    expect(mockFindMany).toHaveBeenCalledOnce()
+  })
+
+  it('builds unusedSet from is_used:false rows (Phase A — empty PV ports)', async () => {
+    mockFindMany = vi.fn().mockResolvedValue([
+      { string_number: 13, is_used: false, exclude_from_peer_comparison: false },
+      { string_number: 14, is_used: false, exclude_from_peer_comparison: false },
+      { string_number: 1, is_used: true, exclude_from_peer_comparison: false },
+    ])
+    vi.doMock('@/lib/prisma', () => ({
+      prisma: { string_configs: { findMany: mockFindMany } },
+    }))
+    vi.resetModules()
+    const { loadStringConfigs } = await import('@/lib/poller-utils')
+    const result = await loadStringConfigs('device-2')
+    expect(result.unusedSet).toEqual(new Set([13, 14]))
+    expect(result.peerExcludedSet.size).toBe(0)
+  })
+
+  it('builds peerExcludedSet from exclude_from_peer_comparison:true rows (Phase B — non-standard orientation)', async () => {
+    mockFindMany = vi.fn().mockResolvedValue([
+      { string_number: 7, is_used: true, exclude_from_peer_comparison: true },
+      { string_number: 1, is_used: true, exclude_from_peer_comparison: false },
+    ])
+    vi.doMock('@/lib/prisma', () => ({
+      prisma: { string_configs: { findMany: mockFindMany } },
+    }))
+    vi.resetModules()
+    const { loadStringConfigs } = await import('@/lib/poller-utils')
+    const result = await loadStringConfigs('device-3')
+    expect(result.peerExcludedSet).toEqual(new Set([7]))
+    expect(result.unusedSet.size).toBe(0)
+  })
+
+  it('separates unused vs peer-excluded — a string can be both (e.g. wall-mounted port that is also disconnected)', async () => {
+    mockFindMany = vi.fn().mockResolvedValue([
+      { string_number: 5, is_used: false, exclude_from_peer_comparison: true },
+    ])
+    vi.doMock('@/lib/prisma', () => ({
+      prisma: { string_configs: { findMany: mockFindMany } },
+    }))
+    vi.resetModules()
+    const { loadStringConfigs } = await import('@/lib/poller-utils')
+    const result = await loadStringConfigs('device-4')
+    expect(result.unusedSet.has(5)).toBe(true)
+    expect(result.peerExcludedSet.has(5)).toBe(true)
+  })
+})
+
 describe('safeFloat', () => {
   it('returns parsed float for numeric input', () => {
     expect(safeFloat(42.5)).toBe(42.5)

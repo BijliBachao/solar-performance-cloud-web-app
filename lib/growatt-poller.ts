@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { GrowattClient } from '@/lib/growatt-client'
 import { PROVIDERS, DEVICE_TYPE_IDS } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs } from '@/lib/poller-utils'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
@@ -351,9 +351,11 @@ async function processDeviceData(
   }
 
   if (measurements.length > 0) {
-    await generateAlerts(device.id, device.plant_id, measurements)
-    await updateHourlyAggregates(device.id, device.plant_id, maxStrings || strings.length)
-    await updateDailyAggregates(device.id, device.plant_id, maxStrings || strings.length)
+    const stringConfigs = await loadStringConfigs(device.id)
+    const effectiveStrings = maxStrings || strings.length
+    await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
+    await updateHourlyAggregates(device.id, device.plant_id, effectiveStrings, stringConfigs)
+    await updateDailyAggregates(device.id, device.plant_id, effectiveStrings, stringConfigs)
   }
 
   // Process fault/warning codes → vendor_alarms

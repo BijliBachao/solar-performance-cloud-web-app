@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { SolisClient } from '@/lib/solis-client'
 import { PROVIDERS, DEVICE_TYPE_IDS } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs } from '@/lib/poller-utils'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
@@ -240,9 +240,10 @@ async function fetchSolisStringData(client: SolisClient): Promise<void> {
       }
 
       if (measurements.length > 0) {
-        await generateAlerts(device.id, device.plant_id, measurements)
-        await updateHourlyAggregates(device.id, device.plant_id, maxStrings)
-        await updateDailyAggregates(device.id, device.plant_id, maxStrings)
+        const stringConfigs = await loadStringConfigs(device.id)
+        await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
+        await updateHourlyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
+        await updateDailyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
       }
 
       // Save hardware daily counter — source of truth for "today's energy" display

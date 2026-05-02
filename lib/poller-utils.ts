@@ -75,6 +75,34 @@ function dropSensorFaults<T extends { current: any; power?: any }>(rows: T[]): T
   })
 }
 
+/**
+ * Per-device admin flag sets used by all three poller helpers. Hoisting the
+ * fetch out of the helpers into the calling poller turns 3 redundant queries
+ * per device per cycle into 1 — and lets the per-device pipeline be safely
+ * parallelised without multiplying the query count.
+ */
+export interface StringConfigSets {
+  unusedSet: Set<number>
+  peerExcludedSet: Set<number>
+}
+
+export async function loadStringConfigs(deviceId: string): Promise<StringConfigSets> {
+  const adminConfigs = await prisma.string_configs.findMany({
+    where: { device_id: deviceId },
+    select: { string_number: true, is_used: true, exclude_from_peer_comparison: true },
+  })
+  return {
+    unusedSet: new Set(
+      adminConfigs.filter(c => c.is_used === false).map(c => c.string_number),
+    ),
+    peerExcludedSet: new Set(
+      adminConfigs
+        .filter(c => c.exclude_from_peer_comparison === true)
+        .map(c => c.string_number),
+    ),
+  }
+}
+
 export async function generateAlerts(
   deviceId: string,
   plantId: string,
@@ -83,7 +111,8 @@ export async function generateAlerts(
     current: Decimal
     voltage: Decimal
     power: Decimal
-  }>
+  }>,
+  configs?: StringConfigSets,
 ): Promise<void> {
   if (rawMeasurements.length === 0) return
 
@@ -97,16 +126,7 @@ export async function generateAlerts(
   //     (wall, east/west, shaded). Lower output is expected, not a fault. Removed
   //     from the PEER POOL only — still gets dead-string detection (Part 2) so a
   //     real 0 A fault on a wall-mounted string is still flagged.
-  const adminConfigs = await prisma.string_configs.findMany({
-    where: { device_id: deviceId },
-    select: { string_number: true, is_used: true, exclude_from_peer_comparison: true },
-  })
-  const unusedSet = new Set(
-    adminConfigs.filter(c => c.is_used === false).map(c => c.string_number),
-  )
-  const peerExcludedSet = new Set(
-    adminConfigs.filter(c => c.exclude_from_peer_comparison === true).map(c => c.string_number),
-  )
+  const { unusedSet, peerExcludedSet } = configs ?? (await loadStringConfigs(deviceId))
   const usedRaw = unusedSet.size > 0
     ? rawMeasurements.filter(m => !unusedSet.has(m.string_number))
     : rawMeasurements
@@ -291,7 +311,8 @@ const safeMax = (arr: number[]) =>
 export async function updateHourlyAggregates(
   deviceId: string,
   plantId: string,
-  _maxStrings: number
+  _maxStrings: number,
+  configs?: StringConfigSets,
 ): Promise<void> {
   const hourStart = getPKTHourStart()
 
@@ -308,11 +329,7 @@ export async function updateHourlyAggregates(
 
   // Skip admin-flagged unused strings — don't pollute string_hourly with
   // induction-leak noise from physically-empty PV ports.
-  const adminUnused = await prisma.string_configs.findMany({
-    where: { device_id: deviceId, is_used: false },
-    select: { string_number: true },
-  })
-  const unusedSet = new Set(adminUnused.map(c => c.string_number))
+  const { unusedSet } = configs ?? (await loadStringConfigs(deviceId))
   const usedRaw = unusedSet.size > 0
     ? rawMeasurements.filter(m => !unusedSet.has(m.string_number))
     : rawMeasurements
@@ -373,7 +390,8 @@ export async function updateHourlyAggregates(
 export async function updateDailyAggregates(
   deviceId: string,
   plantId: string,
-  _maxStrings: number
+  _maxStrings: number,
+  configs?: StringConfigSets,
 ): Promise<void> {
   const dayStart = getPKTDayStart()
   const pktDate = getPKTDateForDB()
@@ -392,11 +410,7 @@ export async function updateDailyAggregates(
 
   // Skip admin-flagged unused strings — keep string_daily clean of induction
   // noise from empty PV ports.
-  const adminUnused = await prisma.string_configs.findMany({
-    where: { device_id: deviceId, is_used: false },
-    select: { string_number: true },
-  })
-  const unusedSet = new Set(adminUnused.map(c => c.string_number))
+  const { unusedSet } = configs ?? (await loadStringConfigs(deviceId))
   const usedRaw = unusedSet.size > 0
     ? rawMeasurements.filter(m => !unusedSet.has(m.string_number))
     : rawMeasurements
