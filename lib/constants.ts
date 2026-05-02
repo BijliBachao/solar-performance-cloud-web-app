@@ -13,8 +13,11 @@ export const DEVICE_TYPE_IDS = {
 export const INVERTER_DEVICE_TYPE_IDS = [1, 38, 100, 200, 201, 300]
 
 // How many devices a single provider's poller may process concurrently.
-// Bounded by the shared RDS connection budget (connection_limit=20 per app
-// on bijli-bachao-db, co-tenanted with Wattey). With ~3-5 awaited DB ops
-// per device, 4 in-flight devices peak at ~16-20 connections — leaves
-// headroom for the other 3 providers polling at the same time.
+// Each in-flight worker holds 1 Prisma pool slot at a time (sequential
+// awaits inside the worker), so 4 workers per provider = ~4 connections
+// peak per provider per process. Across 4 providers running concurrently
+// in pollAll(), the poller process peaks ~16 of its connection_limit=20
+// pool — leaves 4-slot headroom for ad-hoc queries (sync-plants,
+// fetchAlarms, vendor_alarms upserts) that run alongside string-data.
+// Shared RDS bijli-bachao-db has max_connections=181 (co-tenanted with Wattey).
 export const POLLER_DEVICE_CONCURRENCY = 4
