@@ -1,4 +1,5 @@
 import crypto from 'crypto'
+import { safeArray } from '@/lib/poller-utils'
 
 const RATE_LIMIT_DELAY_MS = 1000
 
@@ -269,17 +270,19 @@ export class SungrowClient {
       size: 100,
     })
 
-    const records = data?.pageList || []
-    return records.map((p: any) => ({
-      ps_id: String(p.ps_id),
-      ps_name: p.ps_name || '',
-      ps_type: p.ps_type || 0,
-      total_capacity_kw: p.total_capcity ? Number(p.total_capcity.value) || 0 : 0,
-      ps_status: p.ps_status ?? 1,
-      latitude: p.latitude || null,
-      longitude: p.longitude || null,
-      ps_location: p.ps_location || null,
-    }))
+    const records = safeArray<any>(data?.pageList)
+    return records
+      .filter((p) => p)
+      .map((p: any) => ({
+        ps_id: String(p.ps_id),
+        ps_name: p.ps_name || '',
+        ps_type: p.ps_type || 0,
+        total_capacity_kw: p.total_capcity ? Number(p.total_capcity.value) || 0 : 0,
+        ps_status: p.ps_status ?? 1,
+        latitude: p.latitude || null,
+        longitude: p.longitude || null,
+        ps_location: p.ps_location || null,
+      }))
   }
 
   async getDeviceList(psId: string): Promise<SungrowDevice[]> {
@@ -289,9 +292,9 @@ export class SungrowClient {
       size: 100,
     })
 
-    const records = data?.pageList || []
+    const records = safeArray<any>(data?.pageList)
     return records
-      .filter((d: any) => d.device_type === 1) // type 1 = inverter
+      .filter((d: any) => d && d.device_type === 1) // type 1 = inverter
       .map((d: any) => ({
         ps_key: d.ps_key || '',
         device_code: d.device_code || 0,

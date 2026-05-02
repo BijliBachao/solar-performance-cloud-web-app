@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { SungrowClient } from '@/lib/sungrow-client'
 import { PROVIDERS, DEVICE_TYPE_IDS } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, safeObject, getPKTDateForDB } from '@/lib/poller-utils'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
@@ -220,7 +220,10 @@ async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
       )
 
       if (results.length === 0) continue
-      const dp = results[0]
+      // Guard: Sungrow can return result_data with empty/null first slot during
+      // partial outages — without safeObject every dp[...] access below throws.
+      const dp = safeObject(results[0])
+      if (Object.keys(dp).length === 0) continue
 
       // Detect active strings from data — only count strings with current
       // (Sungrow reports voltage on MPPT pairs but current only on primary string)

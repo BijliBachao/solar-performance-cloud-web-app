@@ -1,4 +1,5 @@
 import crypto from 'crypto'
+import { safeArray } from '@/lib/poller-utils'
 
 const RATE_LIMIT_DELAY_MS = 520
 
@@ -132,8 +133,11 @@ export class SolisClient {
         pageNo,
         pageSize,
       })
-      const records = data?.page?.records || []
+      // safeArray: Solis can send {page: null} on partial outages — defending
+      // the iteration boundary keeps pagination safe.
+      const records = safeArray<any>(data?.page?.records)
       for (const s of records) {
+        if (!s) continue
         allStations.push({
           id: String(s.id),
           stationName: s.stationName,

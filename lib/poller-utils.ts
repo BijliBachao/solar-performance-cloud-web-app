@@ -14,6 +14,38 @@ export function safeFloat(v: any): number {
 }
 
 /**
+ * Safe array coercion at vendor-data boundaries. Returns the input if it's an
+ * array, else returns []. Use this where a vendor API claims to return an array
+ * but might send null, undefined, or a wrapped object on edge cases (rate-limit
+ * payloads, partial outages, malformed paginated responses).
+ *
+ * Without this guard, `for (const x of vendor.maybeList)` throws "is not
+ * iterable" and the whole poll cycle dies. With it, we silently get an empty
+ * iteration and the next inverter / next provider keeps working.
+ */
+export function safeArray<T = any>(v: any): T[] {
+  return Array.isArray(v) ? v : []
+}
+
+/**
+ * Safe object coercion at vendor-data boundaries. Returns the input if it's a
+ * non-null plain object, else returns {}. Useful for guarding against vendors
+ * sending `data: null` where we expect a key/value bag (e.g. Sungrow's
+ * `device_point` map, Huawei's `dataItemMap`, Growatt's per-type device groups).
+ */
+export function safeObject(v: any): Record<string, any> {
+  return v != null && typeof v === 'object' && !Array.isArray(v) ? v : {}
+}
+
+/** Safe parseInt that returns 0 instead of NaN. Use for vendor-reported counts,
+ *  status codes, plant IDs that should be integers but sometimes arrive as
+ *  strings or null. */
+export function safeInt(v: any): number {
+  const n = parseInt(v, 10)
+  return isNaN(n) || !isFinite(n) ? 0 : n
+}
+
+/**
  * Drop physically-impossible sensor readings (CT faults) so they don't
  * pollute downstream aggregates, peer averages, or alerts. A measurement
  * is rejected if:

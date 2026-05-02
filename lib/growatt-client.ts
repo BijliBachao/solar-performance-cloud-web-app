@@ -1,3 +1,5 @@
+import { safeArray, safeObject } from '@/lib/poller-utils'
+
 export interface GrowattPlant {
   plant_id: number
   name: string
@@ -135,9 +137,10 @@ export class GrowattClient {
 
     while (page <= maxPages) {
       const pageData: any = await this.v1Get(`/v1/plant/list?page=${page}`)
-      const plants = pageData.data?.plants || []
+      const plants = safeArray<any>(pageData?.data?.plants)
 
       for (const p of plants) {
+        if (!p) continue
         allPlants.push({
           plant_id: p.plant_id,
           name: p.name,
@@ -158,13 +161,15 @@ export class GrowattClient {
     const json: any = await this.v4Post('/v4/new-api/queryDeviceList', {})
 
     const devices: GrowattDevice[] = []
-    const data = json.data || {}
+    const data = json?.data
 
     // V4 API returns data grouped by device type: { max: [...], "sph-s": [...], min: [...] }
-    // Flatten all device type arrays into one list
+    // Flatten all device type arrays into one list. safeObject guards against
+    // Growatt sending data:null on partial outages — Object.values(null) throws.
     const allDevices: any[] = Array.isArray(data)
       ? data
-      : Object.values(data).flat()
+      : Object.values(safeObject(data))
+          .flatMap((v) => safeArray<any>(v))
 
     for (const d of allDevices) {
       if (!d || !d.deviceSn) continue
@@ -189,12 +194,12 @@ export class GrowattClient {
     })
 
     // Response structure: data.max[] or data['sph-s'][]
-    const data = json.data || {}
-    return data[deviceType] || []
+    const data = safeObject(json?.data)
+    return safeArray<any>(data[deviceType])
   }
 
   async getDevicesByPlant(plantId: string): Promise<any[]> {
     const json: any = await this.v1Get(`/v1/device/list?plant_id=${plantId}`)
-    return json.data?.devices || []
+    return safeArray<any>(json?.data?.devices)
   }
 }

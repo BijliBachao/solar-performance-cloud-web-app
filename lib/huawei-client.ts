@@ -1,3 +1,5 @@
+import { safeArray } from '@/lib/poller-utils'
+
 export class SmartPVMSError extends Error {
   code: number
   response?: any
@@ -273,8 +275,11 @@ class HuaweiClient {
         60 * 60 * 1000 // 1 hour cache
       )
 
-      const list = data?.list || []
+      // safeArray guards against Huawei returning {list: null} on partial
+      // outages — without it the for-of throws and the whole poll dies.
+      const list = safeArray<any>(data?.list)
       for (const p of list) {
+        if (!p) continue
         allPlants.push({
           plantCode: p.plantCode,
           plantName: p.plantName,

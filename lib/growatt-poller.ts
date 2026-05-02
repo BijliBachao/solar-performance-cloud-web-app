@@ -254,6 +254,7 @@ async function fetchStringData(client: GrowattClient): Promise<void> {
       console.log(`[Growatt] MAX batch: ${maxData.length} responses for ${maxSns.length} devices`)
 
       for (const deviceData of maxData) {
+        if (!deviceData) continue
         const sn = deviceData.serialNum || deviceData.deviceSn || deviceData.sn
         const device = maxDevices.find(d => d.id === sn)
         if (!device) {
@@ -280,6 +281,7 @@ async function fetchStringData(client: GrowattClient): Promise<void> {
       console.log(`[Growatt] SPH-S batch: ${sphData.length} responses for ${sphSns.length} devices`)
 
       for (const deviceData of sphData) {
+        if (!deviceData) continue
         const sn = deviceData.serialNum || deviceData.deviceSn || deviceData.sn
         const device = sphDevices.find(d => d.id === sn)
         if (!device) {

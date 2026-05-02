@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { huaweiClient } from '@/lib/huawei-client'
 import { Decimal } from '@prisma/client/runtime/library'
 import { PROVIDERS } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, safeArray, safeObject, safeFloat } from '@/lib/poller-utils'
 import { ACTIVE_CURRENT_THRESHOLD } from '@/lib/string-health'
 
 let lastPlantSync = 0
@@ -185,12 +185,18 @@ async function fetchStringData(): Promise<void> {
         devTypeId
       )
 
-      for (const data of realtimeData) {
+      for (const data of safeArray<any>(realtimeData)) {
+        if (!data) continue
         const device = typeDevices.find((d) => d.id === data.devId)
         if (!device) continue
 
         try {
-          const maxStrings = device.max_strings || detectMaxStrings(data.dataItemMap)
+          // Guard against Huawei returning a device with no dataItemMap at all
+          // (happens during partial outages — without this, every property
+          // access below throws TypeError and crashes this device's processing).
+          const dim = safeObject(data.dataItemMap)
+
+          const maxStrings = device.max_strings || detectMaxStrings(dim)
           // Update max_strings if not yet set or if we found MORE (daytime has more data)
           if (maxStrings > 0 && (!device.max_strings || maxStrings > device.max_strings)) {
             await prisma.devices.update({
@@ -209,8 +215,8 @@ async function fetchStringData(): Promise<void> {
           }> = []
 
           for (let s = 1; s <= maxStrings; s++) {
-            const voltage = data.dataItemMap[`pv${s}_u`] || 0
-            const current = data.dataItemMap[`pv${s}_i`] || 0
+            const voltage = safeFloat(dim[`pv${s}_u`])
+            const current = safeFloat(dim[`pv${s}_i`])
 
             if (voltage > 0 || current > 0) {
               const vDec = new Decimal(voltage).toDecimalPlaces(2)
@@ -242,8 +248,8 @@ async function fetchStringData(): Promise<void> {
           }
 
           // Save hardware daily counter — source of truth for "today's energy" display
-          const nativeKwh = data.dataItemMap['day_cap'] ?? (data.dataItemMap as any)['e_day'] ?? null
-          if (nativeKwh !== null && Number(nativeKwh) > 0) {
+          const nativeKwh = dim['day_cap'] ?? dim['e_day'] ?? null
+          if (nativeKwh !== null && safeFloat(nativeKwh) > 0) {
             await prisma.device_daily.upsert({
               where: { device_id_date: { device_id: device.id, date: getPKTDateForDB() } },
               update: { native_kwh: new Decimal(nativeKwh) },
