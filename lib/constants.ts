@@ -11,3 +11,10 @@ export const DEVICE_TYPE_IDS = {
 } as const
 
 export const INVERTER_DEVICE_TYPE_IDS = [1, 38, 100, 200, 201, 300]
+
+// How many devices a single provider's poller may process concurrently.
+// Bounded by the shared RDS connection budget (connection_limit=20 per app
+// on bijli-bachao-db, co-tenanted with Wattey). With ~3-5 awaited DB ops
+// per device, 4 in-flight devices peak at ~16-20 connections — leaves
+// headroom for the other 3 providers polling at the same time.
+export const POLLER_DEVICE_CONCURRENCY = 4

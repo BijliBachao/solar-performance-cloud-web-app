@@ -1,8 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { SungrowClient } from '@/lib/sungrow-client'
-import { PROVIDERS, DEVICE_TYPE_IDS } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, safeObject, getPKTDateForDB, loadStringConfigs } from '@/lib/poller-utils'
+import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, safeObject, getPKTDateForDB, loadStringConfigs, processInBatches } from '@/lib/poller-utils'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
@@ -212,110 +212,116 @@ async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
     return
   }
 
-  for (const device of devices) {
-    try {
-      const results = await client.getDeviceRealTimeData(
-        [device.id], // device_sn
-        ALL_POINT_IDS
-      )
+  await processInBatches(
+    devices,
+    POLLER_DEVICE_CONCURRENCY,
+    (device) => processSungrowDevice(client, device),
+    'Sungrow',
+  )
 
-      if (results.length === 0) continue
-      // Guard: Sungrow can return result_data with empty/null first slot during
-      // partial outages — without safeObject every dp[...] access below throws.
-      const dp = safeObject(results[0])
-      if (Object.keys(dp).length === 0) continue
+  console.log('[Sungrow] String data fetch complete')
+}
 
-      // Detect active strings from data — only count strings with current
-      // (Sungrow reports voltage on MPPT pairs but current only on primary string)
-      let detectedStrings = 0
-      for (let s = 32; s >= 1; s--) {
-        const cid = STRING_CURRENT_IDS[s]
-        if (!cid) continue
-        const current = safeFloat(dp[`p${cid}`])
-        if (current > 0) {
-          detectedStrings = s
-          break
-        }
-      }
+async function processSungrowDevice(
+  client: SungrowClient,
+  device: { id: string; plant_id: string; max_strings: number | null },
+): Promise<void> {
+  const results = await client.getDeviceRealTimeData(
+    [device.id], // device_sn
+    ALL_POINT_IDS
+  )
 
-      const maxStrings = device.max_strings || detectedStrings
-      if (maxStrings === 0) continue // No strings detected, skip
+  if (results.length === 0) return
+  // Guard: Sungrow can return result_data with empty/null first slot during
+  // partial outages — without safeObject every dp[...] access below throws.
+  const dp = safeObject(results[0])
+  if (Object.keys(dp).length === 0) return
 
-      // Update max_strings if discovered
-      if (detectedStrings > 0 && detectedStrings !== device.max_strings) {
-        await prisma.devices.update({
-          where: { id: device.id },
-          data: { max_strings: detectedStrings },
-        })
-      }
-
-      const measurements: Array<{
-        device_id: string
-        plant_id: string
-        string_number: number
-        voltage: Decimal
-        current: Decimal
-        power: Decimal
-      }> = []
-
-      for (let s = 1; s <= maxStrings; s++) {
-        const currentPointId = STRING_CURRENT_IDS[s]
-        const voltagePointId = STRING_VOLTAGE_IDS[s]
-        if (!currentPointId || !voltagePointId) continue
-
-        const current = safeFloat(dp[`p${currentPointId}`])
-        const voltage = safeFloat(dp[`p${voltagePointId}`])
-
-        // Sungrow MPPT topology: 2 strings share 1 MPPT, API reports current
-        // on primary string only (odd-numbered). Secondary strings have voltage
-        // but always 0 current — storing them creates misleading 0% health scores.
-        // Only store strings that have measurable current (real individual data).
-        if (current > 0) {
-          const vDec = new Decimal(voltage).toDecimalPlaces(2)
-          const cDec = new Decimal(current).toDecimalPlaces(3)
-          measurements.push({
-            device_id: device.id,
-            plant_id: device.plant_id,
-            string_number: s,
-            voltage: vDec,
-            current: cDec,
-            power: vDec.mul(cDec).toDecimalPlaces(2),
-          })
-        }
-      }
-
-      if (measurements.length > 0) {
-        await prisma.string_measurements.createMany({
-          data: measurements.map((m) => ({
-            ...m,
-            timestamp: new Date(),
-          })),
-        })
-        const stringConfigs = await loadStringConfigs(device.id)
-        await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
-        await updateHourlyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
-        await updateDailyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
-      }
-
-      // Save hardware daily counter — p1 = Today's Energy (当日发电), per-device, unit = Wh
-      const nativeKwh = safeFloat(dp['p1']) / 1000 // convert Wh → kWh
-      if (nativeKwh > 0) {
-        await prisma.device_daily.upsert({
-          where: { device_id_date: { device_id: device.id, date: getPKTDateForDB() } },
-          update: { native_kwh: new Decimal(nativeKwh) },
-          create: {
-            device_id: device.id,
-            plant_id: device.plant_id,
-            date: getPKTDateForDB(),
-            native_kwh: new Decimal(nativeKwh),
-            provider: PROVIDERS.SUNGROW,
-          },
-        })
-      }
-    } catch (error) {
-      console.error(`[Sungrow] Failed to fetch string data for device ${device.id}:`, error)
+  // Detect active strings from data — only count strings with current
+  // (Sungrow reports voltage on MPPT pairs but current only on primary string)
+  let detectedStrings = 0
+  for (let s = 32; s >= 1; s--) {
+    const cid = STRING_CURRENT_IDS[s]
+    if (!cid) continue
+    const current = safeFloat(dp[`p${cid}`])
+    if (current > 0) {
+      detectedStrings = s
+      break
     }
   }
 
-  console.log('[Sungrow] String data fetch complete')
+  const maxStrings = device.max_strings || detectedStrings
+  if (maxStrings === 0) return // No strings detected, skip
+
+  // Update max_strings if discovered
+  if (detectedStrings > 0 && detectedStrings !== device.max_strings) {
+    await prisma.devices.update({
+      where: { id: device.id },
+      data: { max_strings: detectedStrings },
+    })
+  }
+
+  const measurements: Array<{
+    device_id: string
+    plant_id: string
+    string_number: number
+    voltage: Decimal
+    current: Decimal
+    power: Decimal
+  }> = []
+
+  for (let s = 1; s <= maxStrings; s++) {
+    const currentPointId = STRING_CURRENT_IDS[s]
+    const voltagePointId = STRING_VOLTAGE_IDS[s]
+    if (!currentPointId || !voltagePointId) continue
+
+    const current = safeFloat(dp[`p${currentPointId}`])
+    const voltage = safeFloat(dp[`p${voltagePointId}`])
+
+    // Sungrow MPPT topology: 2 strings share 1 MPPT, API reports current
+    // on primary string only (odd-numbered). Secondary strings have voltage
+    // but always 0 current — storing them creates misleading 0% health scores.
+    // Only store strings that have measurable current (real individual data).
+    if (current > 0) {
+      const vDec = new Decimal(voltage).toDecimalPlaces(2)
+      const cDec = new Decimal(current).toDecimalPlaces(3)
+      measurements.push({
+        device_id: device.id,
+        plant_id: device.plant_id,
+        string_number: s,
+        voltage: vDec,
+        current: cDec,
+        power: vDec.mul(cDec).toDecimalPlaces(2),
+      })
+    }
+  }
+
+  if (measurements.length > 0) {
+    await prisma.string_measurements.createMany({
+      data: measurements.map((m) => ({
+        ...m,
+        timestamp: new Date(),
+      })),
+    })
+    const stringConfigs = await loadStringConfigs(device.id)
+    await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
+    await updateHourlyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
+    await updateDailyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
+  }
+
+  // Save hardware daily counter — p1 = Today's Energy (当日发电), per-device, unit = Wh
+  const nativeKwh = safeFloat(dp['p1']) / 1000 // convert Wh → kWh
+  if (nativeKwh > 0) {
+    await prisma.device_daily.upsert({
+      where: { device_id_date: { device_id: device.id, date: getPKTDateForDB() } },
+      update: { native_kwh: new Decimal(nativeKwh) },
+      create: {
+        device_id: device.id,
+        plant_id: device.plant_id,
+        date: getPKTDateForDB(),
+        native_kwh: new Decimal(nativeKwh),
+        provider: PROVIDERS.SUNGROW,
+      },
+    })
+  }
 }

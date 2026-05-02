@@ -46,6 +46,32 @@ export function safeInt(v: any): number {
 }
 
 /**
+ * Run `processor` over `items` with at most `concurrency` calls in flight at
+ * once. Errors are caught per-item and logged with `context` so a single bad
+ * device cannot poison the rest of the batch — same isolation model as the
+ * existing per-device try/catch, but parallelised.
+ *
+ * Concurrency is bounded by the shared RDS connection budget — see
+ * POLLER_DEVICE_CONCURRENCY in lib/constants.ts for the rationale.
+ */
+export async function processInBatches<T>(
+  items: T[],
+  concurrency: number,
+  processor: (item: T) => Promise<void>,
+  context: string,
+): Promise<void> {
+  for (let i = 0; i < items.length; i += concurrency) {
+    const batch = items.slice(i, i + concurrency)
+    const results = await Promise.allSettled(batch.map(processor))
+    for (const [j, result] of results.entries()) {
+      if (result.status === 'rejected') {
+        console.error(`[${context}] Batch item ${i + j} failed:`, result.reason)
+      }
+    }
+  }
+}
+
+/**
  * Drop physically-impossible sensor readings (CT faults) so they don't
  * pollute downstream aggregates, peer averages, or alerts. A measurement
  * is rejected if:

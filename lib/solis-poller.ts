@@ -1,8 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { SolisClient } from '@/lib/solis-client'
-import { PROVIDERS, DEVICE_TYPE_IDS } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs } from '@/lib/poller-utils'
+import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches } from '@/lib/poller-utils'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
@@ -188,85 +188,88 @@ async function fetchSolisStringData(client: SolisClient): Promise<void> {
     return
   }
 
-  for (const device of devices) {
-    try {
-      const detail = await client.getInverterDetail(device.id)
-      const maxStrings = device.max_strings || (detail.dcInputType ?? 0) + 1
+  await processInBatches(
+    devices,
+    POLLER_DEVICE_CONCURRENCY,
+    (device) => processSolisDevice(client, device),
+    'Solis',
+  )
 
-      if (maxStrings > 0 && !device.max_strings) {
-        await prisma.devices.update({
-          where: { id: device.id },
-          data: { max_strings: maxStrings },
-        })
-      }
+  console.log('[Solis] String data fetch complete')
+}
 
-      const measurements: Array<{
-        device_id: string
-        plant_id: string
-        string_number: number
-        voltage: Decimal
-        current: Decimal
-        power: Decimal
-      }> = []
+async function processSolisDevice(
+  client: SolisClient,
+  device: { id: string; plant_id: string; max_strings: number | null },
+): Promise<void> {
+  const detail = await client.getInverterDetail(device.id)
+  const maxStrings = device.max_strings || (detail.dcInputType ?? 0) + 1
 
-      for (let s = 1; s <= maxStrings; s++) {
-        const voltage = safeFloat(detail[`uPv${s}`])
-        const current = safeFloat(detail[`iPv${s}`])
-        const power = safeFloat(detail[`pow${s}`]) // Solis provides power directly
+  if (maxStrings > 0 && !device.max_strings) {
+    await prisma.devices.update({
+      where: { id: device.id },
+      data: { max_strings: maxStrings },
+    })
+  }
 
-        // Solis MPPT topology: 2 strings share 1 MPPT, API reports current
-        // on primary string only. Secondary strings have voltage but always
-        // 0 current — storing them creates false "0 A Fault" alerts.
-        // Only store strings that have measurable current.
-        if (current > 0) {
-          measurements.push({
-            device_id: device.id,
-            plant_id: device.plant_id,
-            string_number: s,
-            voltage: new Decimal(voltage.toFixed(2)),
-            current: new Decimal(current.toFixed(3)),
-            power: new Decimal(power.toFixed(2)),
-          })
-        }
-      }
+  const measurements: Array<{
+    device_id: string
+    plant_id: string
+    string_number: number
+    voltage: Decimal
+    current: Decimal
+    power: Decimal
+  }> = []
 
-      if (measurements.length > 0) {
-        await prisma.string_measurements.createMany({
-          data: measurements.map((m) => ({
-            ...m,
-            timestamp: new Date(),
-          })),
-        })
-      }
+  for (let s = 1; s <= maxStrings; s++) {
+    const voltage = safeFloat(detail[`uPv${s}`])
+    const current = safeFloat(detail[`iPv${s}`])
+    const power = safeFloat(detail[`pow${s}`]) // Solis provides power directly
 
-      if (measurements.length > 0) {
-        const stringConfigs = await loadStringConfigs(device.id)
-        await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
-        await updateHourlyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
-        await updateDailyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
-      }
-
-      // Save hardware daily counter — source of truth for "today's energy" display
-      const eToday = Number(detail.eToday ?? 0)
-      if (eToday > 0) {
-        await prisma.device_daily.upsert({
-          where: { device_id_date: { device_id: device.id, date: getPKTDateForDB() } },
-          update: { native_kwh: new Decimal(eToday) },
-          create: {
-            device_id: device.id,
-            plant_id: device.plant_id,
-            date: getPKTDateForDB(),
-            native_kwh: new Decimal(eToday),
-            provider: PROVIDERS.SOLIS,
-          },
-        })
-      }
-    } catch (error) {
-      console.error(`[Solis] Failed to fetch string data for device ${device.id}:`, error)
+    // Solis MPPT topology: 2 strings share 1 MPPT, API reports current
+    // on primary string only. Secondary strings have voltage but always
+    // 0 current — storing them creates false "0 A Fault" alerts.
+    // Only store strings that have measurable current.
+    if (current > 0) {
+      measurements.push({
+        device_id: device.id,
+        plant_id: device.plant_id,
+        string_number: s,
+        voltage: new Decimal(voltage.toFixed(2)),
+        current: new Decimal(current.toFixed(3)),
+        power: new Decimal(power.toFixed(2)),
+      })
     }
   }
 
-  console.log('[Solis] String data fetch complete')
+  if (measurements.length > 0) {
+    await prisma.string_measurements.createMany({
+      data: measurements.map((m) => ({
+        ...m,
+        timestamp: new Date(),
+      })),
+    })
+    const stringConfigs = await loadStringConfigs(device.id)
+    await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
+    await updateHourlyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
+    await updateDailyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
+  }
+
+  // Save hardware daily counter — source of truth for "today's energy" display
+  const eToday = Number(detail.eToday ?? 0)
+  if (eToday > 0) {
+    await prisma.device_daily.upsert({
+      where: { device_id_date: { device_id: device.id, date: getPKTDateForDB() } },
+      update: { native_kwh: new Decimal(eToday) },
+      create: {
+        device_id: device.id,
+        plant_id: device.plant_id,
+        date: getPKTDateForDB(),
+        native_kwh: new Decimal(eToday),
+        provider: PROVIDERS.SOLIS,
+      },
+    })
+  }
 }
 
 async function fetchSolisAlarms(client: SolisClient): Promise<void> {

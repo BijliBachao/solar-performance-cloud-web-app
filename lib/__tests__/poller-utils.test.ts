@@ -216,6 +216,64 @@ describe('loadStringConfigs (hoist for Task #108 / unblocks #97)', () => {
   })
 })
 
+describe('processInBatches (Task #97 — bounded per-device concurrency)', () => {
+  beforeAll(async () => {
+    // outer beforeAll already loaded helpers
+  })
+
+  it('processes every item exactly once', async () => {
+    const items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    const seen: number[] = []
+    const { processInBatches } = await import('@/lib/poller-utils')
+    await processInBatches(items, 3, async (n) => { seen.push(n) }, 'TEST')
+    expect(seen.sort((a, b) => a - b)).toEqual(items)
+  })
+
+  it('respects the concurrency cap (verified by tracking peak in-flight)', async () => {
+    const items = Array.from({ length: 20 }, (_, i) => i)
+    const cap = 4
+    let inFlight = 0
+    let peak = 0
+    const { processInBatches } = await import('@/lib/poller-utils')
+    await processInBatches(items, cap, async () => {
+      inFlight++
+      if (inFlight > peak) peak = inFlight
+      await new Promise((r) => setTimeout(r, 5))
+      inFlight--
+    }, 'TEST')
+    expect(peak).toBeLessThanOrEqual(cap)
+    expect(peak).toBeGreaterThan(1) // confirm we are actually parallelising, not serial
+  })
+
+  it('continues processing remaining items when one rejects (Promise.allSettled isolation)', async () => {
+    const processed: number[] = []
+    const { processInBatches } = await import('@/lib/poller-utils')
+    // Silence console.error noise in test output
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await processInBatches([1, 2, 3, 4, 5], 2, async (n) => {
+      if (n === 3) throw new Error('synthetic device-3 failure')
+      processed.push(n)
+    }, 'TEST')
+    expect(processed.sort()).toEqual([1, 2, 4, 5])
+    expect(errSpy).toHaveBeenCalled()
+    errSpy.mockRestore()
+  })
+
+  it('no-ops on empty input', async () => {
+    const { processInBatches } = await import('@/lib/poller-utils')
+    const processor = vi.fn()
+    await processInBatches([], 5, processor, 'TEST')
+    expect(processor).not.toHaveBeenCalled()
+  })
+
+  it('handles items < concurrency without padding', async () => {
+    const seen: string[] = []
+    const { processInBatches } = await import('@/lib/poller-utils')
+    await processInBatches(['a', 'b'], 10, async (s) => { seen.push(s) }, 'TEST')
+    expect(seen.sort()).toEqual(['a', 'b'])
+  })
+})
+
 describe('safeFloat', () => {
   it('returns parsed float for numeric input', () => {
     expect(safeFloat(42.5)).toBe(42.5)

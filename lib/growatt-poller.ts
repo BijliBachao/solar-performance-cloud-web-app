@@ -1,8 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { GrowattClient } from '@/lib/growatt-client'
-import { PROVIDERS, DEVICE_TYPE_IDS } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs } from '@/lib/poller-utils'
+import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches } from '@/lib/poller-utils'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
@@ -253,6 +253,7 @@ async function fetchStringData(client: GrowattClient): Promise<void> {
       const maxData = await client.getLastData(maxSns, 'max')
       console.log(`[Growatt] MAX batch: ${maxData.length} responses for ${maxSns.length} devices`)
 
+      const maxPairs: Array<{ device: typeof maxDevices[number]; deviceData: any }> = []
       for (const deviceData of maxData) {
         if (!deviceData) continue
         const sn = deviceData.serialNum || deviceData.deviceSn || deviceData.sn
@@ -261,13 +262,15 @@ async function fetchStringData(client: GrowattClient): Promise<void> {
           console.warn(`[Growatt] MAX device SN "${sn}" not found in DB (keys: ${Object.keys(deviceData).filter(k => k.toLowerCase().includes('sn') || k.toLowerCase().includes('serial')).join(', ')})`)
           continue
         }
-
-        try {
-          await processDeviceData(device, deviceData, 'max')
-        } catch (error) {
-          console.error(`[Growatt] Failed to process MAX device ${sn}:`, error)
-        }
+        maxPairs.push({ device, deviceData })
       }
+
+      await processInBatches(
+        maxPairs,
+        POLLER_DEVICE_CONCURRENCY,
+        ({ device, deviceData }) => processDeviceData(device, deviceData, 'max'),
+        'Growatt MAX',
+      )
     } catch (error) {
       console.error('[Growatt] Failed to fetch MAX batch data:', error)
     }
@@ -280,6 +283,7 @@ async function fetchStringData(client: GrowattClient): Promise<void> {
       const sphData = await client.getLastData(sphSns, 'sph-s')
       console.log(`[Growatt] SPH-S batch: ${sphData.length} responses for ${sphSns.length} devices`)
 
+      const sphPairs: Array<{ device: typeof sphDevices[number]; deviceData: any }> = []
       for (const deviceData of sphData) {
         if (!deviceData) continue
         const sn = deviceData.serialNum || deviceData.deviceSn || deviceData.sn
@@ -288,13 +292,15 @@ async function fetchStringData(client: GrowattClient): Promise<void> {
           console.warn(`[Growatt] SPH-S device SN "${sn}" not found in DB (keys: ${Object.keys(deviceData).filter(k => k.toLowerCase().includes('sn') || k.toLowerCase().includes('serial')).join(', ')})`)
           continue
         }
-
-        try {
-          await processDeviceData(device, deviceData, 'sph-s')
-        } catch (error) {
-          console.error(`[Growatt] Failed to process SPH-S device ${sn}:`, error)
-        }
+        sphPairs.push({ device, deviceData })
       }
+
+      await processInBatches(
+        sphPairs,
+        POLLER_DEVICE_CONCURRENCY,
+        ({ device, deviceData }) => processDeviceData(device, deviceData, 'sph-s'),
+        'Growatt SPH-S',
+      )
     } catch (error) {
       console.error('[Growatt] Failed to fetch SPH-S batch data:', error)
     }

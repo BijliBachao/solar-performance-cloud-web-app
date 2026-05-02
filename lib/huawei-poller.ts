@@ -1,8 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { huaweiClient } from '@/lib/huawei-client'
 import { Decimal } from '@prisma/client/runtime/library'
-import { PROVIDERS } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, safeArray, safeObject, safeFloat } from '@/lib/poller-utils'
+import { PROVIDERS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches, safeArray, safeObject, safeFloat } from '@/lib/poller-utils'
 import { ACTIVE_CURRENT_THRESHOLD } from '@/lib/string-health'
 
 let lastPlantSync = 0
@@ -185,93 +185,102 @@ async function fetchStringData(): Promise<void> {
         devTypeId
       )
 
+      // Pair each data row with its device record up-front so the parallel
+      // workers don't all hammer typeDevices.find() for the same lookup.
+      const pairs: Array<{ device: typeof devices[number]; data: any }> = []
       for (const data of safeArray<any>(realtimeData)) {
         if (!data) continue
         const device = typeDevices.find((d) => d.id === data.devId)
-        if (!device) continue
-
-        try {
-          // Guard against Huawei returning a device with no dataItemMap at all
-          // (happens during partial outages — without this, every property
-          // access below throws TypeError and crashes this device's processing).
-          const dim = safeObject(data.dataItemMap)
-
-          const maxStrings = device.max_strings || detectMaxStrings(dim)
-          // Update max_strings if not yet set or if we found MORE (daytime has more data)
-          if (maxStrings > 0 && (!device.max_strings || maxStrings > device.max_strings)) {
-            await prisma.devices.update({
-              where: { id: device.id },
-              data: { max_strings: maxStrings },
-            })
-          }
-
-          const measurements: Array<{
-            device_id: string
-            plant_id: string
-            string_number: number
-            voltage: Decimal
-            current: Decimal
-            power: Decimal
-          }> = []
-
-          for (let s = 1; s <= maxStrings; s++) {
-            const voltage = safeFloat(dim[`pv${s}_u`])
-            const current = safeFloat(dim[`pv${s}_i`])
-
-            if (voltage > 0 || current > 0) {
-              const vDec = new Decimal(voltage).toDecimalPlaces(2)
-              const cDec = new Decimal(current).toDecimalPlaces(3)
-              measurements.push({
-                device_id: device.id,
-                plant_id: device.plant_id,
-                string_number: s,
-                voltage: vDec,
-                current: cDec,
-                power: vDec.mul(cDec).toDecimalPlaces(2),
-              })
-            }
-          }
-
-          if (measurements.length > 0) {
-            await prisma.string_measurements.createMany({
-              data: measurements.map((m) => ({
-                ...m,
-                timestamp: new Date(),
-              })),
-            })
-          }
-
-          if (measurements.length > 0) {
-            // Fetch admin flags once and share across all three helpers
-            const stringConfigs = await loadStringConfigs(device.id)
-            await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
-            await updateHourlyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
-            await updateDailyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
-          }
-
-          // Save hardware daily counter — source of truth for "today's energy" display
-          const nativeKwh = dim['day_cap'] ?? dim['e_day'] ?? null
-          if (nativeKwh !== null && safeFloat(nativeKwh) > 0) {
-            await prisma.device_daily.upsert({
-              where: { device_id_date: { device_id: device.id, date: getPKTDateForDB() } },
-              update: { native_kwh: new Decimal(nativeKwh) },
-              create: {
-                device_id: device.id,
-                plant_id: device.plant_id,
-                date: getPKTDateForDB(),
-                native_kwh: new Decimal(nativeKwh),
-                provider: PROVIDERS.HUAWEI,
-              },
-            })
-          }
-        } catch (error) {
-          console.error(`[Huawei] Failed to process device ${device.id}:`, error)
-        }
+        if (device) pairs.push({ device, data })
       }
+
+      await processInBatches(
+        pairs,
+        POLLER_DEVICE_CONCURRENCY,
+        async ({ device, data }) => {
+          await processHuaweiDeviceData(device, data)
+        },
+        'Huawei',
+      )
     }
   }
 
   console.log('[Huawei] String data fetch complete')
+}
+
+async function processHuaweiDeviceData(
+  device: { id: string; plant_id: string; device_type_id: number; max_strings: number | null },
+  data: any,
+): Promise<void> {
+  // Guard against Huawei returning a device with no dataItemMap at all
+  // (happens during partial outages — without this, every property
+  // access below throws TypeError and crashes this device's processing).
+  const dim = safeObject(data.dataItemMap)
+
+  const maxStrings = device.max_strings || detectMaxStrings(dim)
+  // Update max_strings if not yet set or if we found MORE (daytime has more data)
+  if (maxStrings > 0 && (!device.max_strings || maxStrings > device.max_strings)) {
+    await prisma.devices.update({
+      where: { id: device.id },
+      data: { max_strings: maxStrings },
+    })
+  }
+
+  const measurements: Array<{
+    device_id: string
+    plant_id: string
+    string_number: number
+    voltage: Decimal
+    current: Decimal
+    power: Decimal
+  }> = []
+
+  for (let s = 1; s <= maxStrings; s++) {
+    const voltage = safeFloat(dim[`pv${s}_u`])
+    const current = safeFloat(dim[`pv${s}_i`])
+
+    if (voltage > 0 || current > 0) {
+      const vDec = new Decimal(voltage).toDecimalPlaces(2)
+      const cDec = new Decimal(current).toDecimalPlaces(3)
+      measurements.push({
+        device_id: device.id,
+        plant_id: device.plant_id,
+        string_number: s,
+        voltage: vDec,
+        current: cDec,
+        power: vDec.mul(cDec).toDecimalPlaces(2),
+      })
+    }
+  }
+
+  if (measurements.length > 0) {
+    await prisma.string_measurements.createMany({
+      data: measurements.map((m) => ({
+        ...m,
+        timestamp: new Date(),
+      })),
+    })
+    const stringConfigs = await loadStringConfigs(device.id)
+    await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
+    await updateHourlyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
+    await updateDailyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
+  }
+
+  // Save hardware daily counter — source of truth for "today's energy" display
+  const nativeKwh = dim['day_cap'] ?? dim['e_day'] ?? null
+  if (nativeKwh !== null && safeFloat(nativeKwh) > 0) {
+    await prisma.device_daily.upsert({
+      where: { device_id_date: { device_id: device.id, date: getPKTDateForDB() } },
+      update: { native_kwh: new Decimal(nativeKwh) },
+      create: {
+        device_id: device.id,
+        plant_id: device.plant_id,
+        date: getPKTDateForDB(),
+        native_kwh: new Decimal(nativeKwh),
+        provider: PROVIDERS.HUAWEI,
+      },
+    })
+  }
 }
 
 function detectMaxStrings(dataItemMap: Record<string, number | null>): number {
