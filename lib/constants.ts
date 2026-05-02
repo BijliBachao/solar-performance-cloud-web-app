@@ -14,10 +14,11 @@ export const INVERTER_DEVICE_TYPE_IDS = [1, 38, 100, 200, 201, 300]
 
 // How many devices a single provider's poller may process concurrently.
 // Each in-flight worker holds 1 Prisma pool slot at a time (sequential
-// awaits inside the worker), so 4 workers per provider = ~4 connections
-// peak per provider per process. Across 4 providers running concurrently
-// in pollAll(), the poller process peaks ~16 of its connection_limit=20
-// pool — leaves 4-slot headroom for ad-hoc queries (sync-plants,
-// fetchAlarms, vendor_alarms upserts) that run alongside string-data.
+// awaits inside the worker), so 3 workers per provider = ~3 connections
+// peak per provider per process. With 5 providers (Huawei + Solis +
+// Growatt + Sungrow + Canadian Solar) running concurrently in pollAll(),
+// peak is ~15 of the connection_limit=20 pool — leaves ~5-slot headroom
+// for ad-hoc queries (sync-plants, fetchAlarms, vendor_alarms upserts).
+// Was 4 when only 4 providers existed; dropped to 3 ahead of CSI onboard.
 // Shared RDS bijli-bachao-db has max_connections=181 (co-tenanted with Wattey).
-export const POLLER_DEVICE_CONCURRENCY = 4
+export const POLLER_DEVICE_CONCURRENCY = 3

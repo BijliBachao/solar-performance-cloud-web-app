@@ -1,4 +1,4 @@
-import { safeArray } from '@/lib/poller-utils'
+import { safeArray, fetchWithTimeout } from '@/lib/poller-utils'
 
 export class SmartPVMSError extends Error {
   code: number
@@ -88,7 +88,7 @@ class HuaweiClient {
 
   async login(): Promise<void> {
     const url = `${this.baseUrl}/thirdData/login`
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -124,7 +124,7 @@ class HuaweiClient {
   async logout(): Promise<void> {
     if (!this.token) return
     try {
-      await fetch(`${this.baseUrl}/thirdData/logout`, {
+      await fetchWithTimeout(`${this.baseUrl}/thirdData/logout`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -201,7 +201,7 @@ class HuaweiClient {
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
         const url = `${this.baseUrl}${endpoint}`
-        const res = await fetch(url, {
+        const res = await fetchWithTimeout(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

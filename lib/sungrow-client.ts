@@ -1,5 +1,5 @@
 import crypto from 'crypto'
-import { safeArray } from '@/lib/poller-utils'
+import { safeArray, fetchWithTimeout } from '@/lib/poller-utils'
 
 const RATE_LIMIT_DELAY_MS = 1000
 
@@ -162,7 +162,7 @@ export class SungrowClient {
     const encryptedBody = this.aesEncrypt(bodyStr, aesKey)
 
     const url = `${this.gatewayUrl}${path}`
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json;charset=UTF-8',
@@ -227,7 +227,7 @@ export class SungrowClient {
 
     const encryptedBody = this.aesEncrypt(loginBody, aesKey)
 
-    const res = await fetch(`${this.gatewayUrl}/openapi/login`, {
+    const res = await fetchWithTimeout(`${this.gatewayUrl}/openapi/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json;charset=UTF-8',

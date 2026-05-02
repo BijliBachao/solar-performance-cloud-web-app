@@ -216,6 +216,56 @@ describe('loadStringConfigs (hoist for Task #108 / unblocks #97)', () => {
   })
 })
 
+describe('fetchWithTimeout (pre-CSI: prevent indefinite hangs from any vendor socket)', () => {
+  beforeAll(async () => {})
+
+  it('resolves normally when fetch completes before timeout', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { fetchWithTimeout } = await import('@/lib/poller-utils')
+    const res = await fetchWithTimeout('https://example.com', {}, 1000)
+    expect(res.status).toBe(200)
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const callOpts = fetchMock.mock.calls[0][1]
+    expect(callOpts.signal).toBeInstanceOf(AbortSignal)
+    vi.unstubAllGlobals()
+  })
+
+  it('aborts when timeout elapses before fetch resolves (vendor hangs the socket)', async () => {
+    // Simulate a fetch that respects AbortSignal — when aborted, reject with AbortError
+    const fetchMock = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => {
+          const err: any = new Error('The operation was aborted')
+          err.name = 'AbortError'
+          reject(err)
+        })
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { fetchWithTimeout } = await import('@/lib/poller-utils')
+    await expect(fetchWithTimeout('https://example.com', {}, 50)).rejects.toThrow(/aborted/i)
+    vi.unstubAllGlobals()
+  })
+
+  it('clears the timer on success so it does not leak (verify no abort fires after resolution)', async () => {
+    const abortListener = vi.fn()
+    const fetchMock = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      init.signal?.addEventListener('abort', abortListener)
+      return Promise.resolve(new Response('{}'))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { fetchWithTimeout } = await import('@/lib/poller-utils')
+    await fetchWithTimeout('https://example.com', {}, 100)
+    // Wait past the timeout to confirm no abort fires
+    await new Promise((r) => setTimeout(r, 150))
+    expect(abortListener).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+})
+
 describe('processInBatches (Task #97 — bounded per-device concurrency)', () => {
   beforeAll(async () => {
     // outer beforeAll already loaded helpers

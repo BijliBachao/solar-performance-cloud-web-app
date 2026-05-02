@@ -1,5 +1,5 @@
 import crypto from 'crypto'
-import { safeArray } from '@/lib/poller-utils'
+import { safeArray, fetchWithTimeout } from '@/lib/poller-utils'
 
 const RATE_LIMIT_DELAY_MS = 520
 
@@ -94,7 +94,7 @@ export class SolisClient {
         const bodyStr = JSON.stringify(body)
         const headers = this.signRequest(bodyStr, path)
 
-        const res = await fetch(`${this.baseUrl}${path}`, {
+        const res = await fetchWithTimeout(`${this.baseUrl}${path}`, {
           method: 'POST',
           headers,
           body: bodyStr,

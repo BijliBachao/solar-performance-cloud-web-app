@@ -46,6 +46,29 @@ export function safeInt(v: any): number {
 }
 
 /**
+ * fetch() wrapped with a hard timeout. Without this, a vendor that hangs
+ * the socket forever (TCP keepalive doesn't help; Node.js has no global
+ * fetch timeout) blocks one of the parallel workers in processInBatches
+ * indefinitely, eventually starving the whole provider's poll cycle.
+ *
+ * 30s default is generous for normal vendor responses (~1-3s) but bounded
+ * enough to surface a hang within one poll interval.
+ */
+export async function fetchWithTimeout(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs: number = 30000,
+): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
  * Run `processor` over `items` with at most `concurrency` calls in flight at
  * once. Errors are caught per-item and logged with `context` so a single bad
  * device cannot poison the rest of the batch — same isolation model as the
