@@ -53,10 +53,12 @@ export async function GET() {
       )
     }
 
-    // Update last login
+    // Update activity timestamp on every authenticated request.
+    // Sign-in events (last_login_at, login_count) are handled separately
+    // by the Clerk session.created webhook.
     await prisma.users.update({
       where: { id: dbUser.id },
-      data: { last_login_at: new Date() },
+      data: { last_active_at: new Date() },
     })
 
     const permissions = getPermissionsForRole(dbUser.role)

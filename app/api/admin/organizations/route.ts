@@ -45,8 +45,35 @@ export async function GET(request: NextRequest) {
       prisma.plant_assignments.count(),
     ])
 
+    // Per-org activity rollup: most recent user activity + total logins
+    // across the org. Drives the dormancy badge on the org list.
+    const orgIds = organizations.map(o => o.id)
+    const activityRows = orgIds.length
+      ? await prisma.users.groupBy({
+          by: ['organization_id'],
+          where: { organization_id: { in: orgIds } },
+          _max: { last_active_at: true },
+          _sum: { login_count: true },
+        })
+      : []
+    const activityByOrg = new Map(
+      activityRows.map(r => [r.organization_id, {
+        lastActiveAt: r._max.last_active_at,
+        loginCount: r._sum.login_count ?? 0,
+      }]),
+    )
+
+    const organizationsWithActivity = organizations.map(o => {
+      const a = activityByOrg.get(o.id)
+      return {
+        ...o,
+        last_active_at: a?.lastActiveAt ?? null,
+        total_logins: a?.loginCount ?? 0,
+      }
+    })
+
     return NextResponse.json({
-      organizations,
+      organizations: organizationsWithActivity,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
       globalStats: { total: activeCount + inactiveCount, active: activeCount, inactive: inactiveCount, totalUsers, totalPlants },
     })

@@ -83,6 +83,23 @@ export async function POST(req: Request) {
         break
       }
 
+      case 'session.created': {
+        // Fires once per Clerk sign-in. Increment login_count and stamp
+        // last_login_at — distinct from last_active_at, which updates on
+        // every authenticated request from /api/auth/user.
+        const { user_id } = evt.data
+        if (!user_id) break
+        await prisma.users.updateMany({
+          where: { clerk_user_id: user_id },
+          data: {
+            last_login_at: new Date(),
+            login_count: { increment: 1 },
+          },
+        })
+        console.log(`[Webhook] Session created: ${user_id}`)
+        break
+      }
+
       case 'user.deleted': {
         const { id } = evt.data
         if (!id) break

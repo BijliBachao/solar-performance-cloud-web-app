@@ -17,6 +17,8 @@ model users {
   role            String         @default("ORG_USER") @db.VarChar(20)
   status          String         @default("PENDING_ASSIGNMENT") @db.VarChar(20)
   last_login_at   DateTime?
+  last_active_at  DateTime?
+  login_count     Int            @default(0)
   created_at      DateTime       @default(now())
   updated_at      DateTime       @updatedAt
   organizations   organizations? @relation(fields: [organization_id], references: [id])
@@ -24,6 +26,7 @@ model users {
   @@index([clerk_user_id])
   @@index([email])
   @@index([organization_id, role])
+  @@index([last_active_at])
 }
 
 model organizations {

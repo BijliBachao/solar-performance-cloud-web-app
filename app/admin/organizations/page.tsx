@@ -20,6 +20,7 @@ import {
   Search, Loader2, Trash2, ArrowLeft, Plus, CheckCircle,
 } from 'lucide-react'
 import { STATUS_STYLES } from '@/lib/design-tokens'
+import { dormancyBucket, formatRelative } from '@/lib/dormancy'
 
 interface Organization {
   id: string
@@ -29,6 +30,8 @@ interface Organization {
   address: string | null
   status: string
   created_at: string
+  last_active_at: string | null
+  total_logins: number
   _count: { users: number; plant_assignments: number }
 }
 
@@ -141,6 +144,7 @@ export default function AdminOrganizationsPage() {
     if (isNaN(d.getTime())) return '\u2014'
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
+
 
   if (loading && orgs.length === 0) {
     return (
@@ -262,6 +266,8 @@ export default function AdminOrganizationsPage() {
                 <TableHead className="whitespace-nowrap hidden sm:table-cell">Contact</TableHead>
                 <TableHead className="whitespace-nowrap text-center">Plants</TableHead>
                 <TableHead className="whitespace-nowrap text-center">Users</TableHead>
+                <TableHead className="whitespace-nowrap">Activity</TableHead>
+                <TableHead className="whitespace-nowrap hidden lg:table-cell text-right">Logins</TableHead>
                 <TableHead className="whitespace-nowrap text-center">Status</TableHead>
                 <TableHead className="whitespace-nowrap hidden md:table-cell">Created</TableHead>
                 <TableHead className="whitespace-nowrap text-right">Actions</TableHead>
@@ -270,7 +276,7 @@ export default function AdminOrganizationsPage() {
             <TableBody>
               {orgs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-slate-400 py-12 text-sm">
+                  <TableCell colSpan={9} className="text-center text-slate-400 py-12 text-sm">
                     No organizations found
                   </TableCell>
                 </TableRow>
@@ -299,6 +305,49 @@ export default function AdminOrganizationsPage() {
                         org._count.users > 0 ? 'text-spc-green' : 'text-slate-400',
                       )}>
                         {org._count.users}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
+                        const bucket = dormancyBucket(org.total_logins, org.last_active_at)
+                        const dotClass =
+                          bucket === 'active'  ? STATUS_STYLES.healthy.dot
+                          : bucket === 'idle'  ? STATUS_STYLES.warning.dot
+                          : bucket === 'dormant' ? STATUS_STYLES.critical.dot
+                          : STATUS_STYLES.offline.dot
+                        const labelClass =
+                          bucket === 'active'  ? 'text-slate-700'
+                          : bucket === 'idle'  ? STATUS_STYLES.warning.fg
+                          : bucket === 'dormant' ? STATUS_STYLES.critical.fg
+                          : 'text-slate-400 italic'
+                        const tag =
+                          bucket === 'never'   ? 'never used'
+                          : bucket === 'dormant' ? 'dormant'
+                          : null
+                        return (
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', dotClass)} />
+                              <span className={cn('text-sm', labelClass)}>{formatRelative(org.last_active_at)}</span>
+                            </div>
+                            {tag && (
+                              <span className={cn(
+                                'text-[10px] uppercase tracking-wide font-bold',
+                                bucket === 'dormant' ? STATUS_STYLES.critical.fg : 'text-slate-400',
+                              )}>
+                                {tag}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })()}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell text-right">
+                      <span className={cn(
+                        'font-mono text-sm',
+                        org.total_logins > 0 ? 'text-slate-700' : 'text-slate-400',
+                      )}>
+                        {org.total_logins}
                       </span>
                     </TableCell>
                     <TableCell className="text-center">

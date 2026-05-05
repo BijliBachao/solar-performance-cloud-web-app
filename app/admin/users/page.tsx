@@ -20,6 +20,7 @@ import {
   Search, Building2, Shield, Loader2, ArrowLeft, CheckCircle, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { STATUS_STYLES } from '@/lib/design-tokens'
+import { dormancyBucket, formatRelative } from '@/lib/dormancy'
 
 interface User {
   id: string
@@ -30,6 +31,8 @@ interface User {
   status: string
   created_at: string
   last_login_at: string | null
+  last_active_at: string | null
+  login_count: number
   organizations: { id: string; name: string } | null
 }
 
@@ -160,6 +163,7 @@ export default function AdminUsersPage() {
     if (isNaN(date.getTime())) return '\u2014'
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
+
 
   const userName = (u: User) => [u.first_name, u.last_name].filter(Boolean).join(' ') || null
 
@@ -312,14 +316,15 @@ export default function AdminUsersPage() {
                 <TableHead className="whitespace-nowrap hidden sm:table-cell">Organization</TableHead>
                 <TableHead className="whitespace-nowrap">Role</TableHead>
                 <TableHead className="whitespace-nowrap text-center">Status</TableHead>
-                <TableHead className="whitespace-nowrap hidden md:table-cell">Last Login</TableHead>
+                <TableHead className="whitespace-nowrap hidden md:table-cell">Activity</TableHead>
+                <TableHead className="whitespace-nowrap hidden lg:table-cell text-right">Logins</TableHead>
                 <TableHead className="whitespace-nowrap text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-slate-400 py-12 text-sm">
+                  <TableCell colSpan={7} className="text-center text-slate-400 py-12 text-sm">
                     No users found
                   </TableCell>
                 </TableRow>
@@ -379,9 +384,29 @@ export default function AdminUsersPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
-                      <span className="text-sm text-slate-500">
-                        {user.last_login_at ? formatDate(user.last_login_at) : 'Never'}
-                      </span>
+                      {(() => {
+                        const bucket = dormancyBucket(user.login_count, user.last_active_at)
+                        const label = formatRelative(user.last_active_at)
+                        const dotClass =
+                          bucket === 'active'  ? STATUS_STYLES.healthy.dot
+                          : bucket === 'idle'  ? STATUS_STYLES.warning.dot
+                          : bucket === 'dormant' ? STATUS_STYLES.critical.dot
+                          : STATUS_STYLES.offline.dot
+                        const fgClass =
+                          bucket === 'active'  ? 'text-slate-700'
+                          : bucket === 'idle'  ? STATUS_STYLES.warning.fg
+                          : bucket === 'dormant' ? STATUS_STYLES.critical.fg
+                          : 'text-slate-400 italic'
+                        return (
+                          <div className="flex items-center gap-1.5">
+                            <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', dotClass)} />
+                            <span className={cn('text-sm', fgClass)}>{label}</span>
+                          </div>
+                        )
+                      })()}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell text-right">
+                      <span className="font-mono text-sm text-slate-700">{user.login_count}</span>
                     </TableCell>
                     <TableCell className="text-right">
                       {user.role !== 'SUPER_ADMIN' && (
