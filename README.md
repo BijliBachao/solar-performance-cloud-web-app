@@ -10,26 +10,7 @@ A Next.js 14 web app that tracks every PV string on commercial solar plants acro
 
 **Today's scale:** 48 plants · 2.2 MW · 1.3M+ measurements · 25,000+ faults detected.
 
-Full product context: [SPC-KNOWLEDGE-BOOK.md](./SPC-KNOWLEDGE-BOOK.md).
-
----
-
-## Quick links for developers
-
-| I want to… | Read this |
-|---|---|
-| **Understand the product** (for a new engineer or AI agent) | [`SPC-KNOWLEDGE-BOOK.md`](./SPC-KNOWLEDGE-BOOK.md) |
-| **Onboard as an operator** (day-to-day use, dashboards, incident response) | [`HANDOVER.md`](./HANDOVER.md) |
-| **Understand the product design system** (solar-gold branded, used on dashboard/admin) | [`DESIGN.md`](./DESIGN.md) |
-| **Understand the landing page design** (warm-cream + NVIDIA green, different from product) | [`LANDING-DESIGN.md`](./LANDING-DESIGN.md) |
-| **See what CI/CD will look like** (comprehensive design, not yet built) | [`CICD-PIPELINE-DESIGN.md`](./CICD-PIPELINE-DESIGN.md) |
-| **See the risk register + known open items** | [`AUDIT.md`](./AUDIT.md) |
-| **Understand the 2026-04-22 incident** (502 outage, root cause, fix) | [`POST_MORTEM_2026-04-22.md`](./POST_MORTEM_2026-04-22.md) |
-| **Weigh the next technical priorities** (UptimeRobot / Monthly Report / CI/CD / Next 15) | [`NEXT-STEPS.md`](./NEXT-STEPS.md) |
-| **Track client feedback + work items** | [`CLIENT-FEEDBACK-2026-04-23.md`](./CLIENT-FEEDBACK-2026-04-23.md) |
-| **Read the full change log** (every infra + feature change) | [`CHANGELOG.md`](./CHANGELOG.md) |
-| **Use the audit toolkit** (pre-deploy + post-deploy + continuous audits) | [`AUDITS.md`](./AUDITS.md) |
-| **Set up UptimeRobot external monitoring** | [`UPTIMEROBOT_SETUP.md`](./UPTIMEROBOT_SETUP.md) |
+Full change log in [`CHANGELOG.md`](./CHANGELOG.md). Internal planning, design, audit, post-mortem, and handover docs are maintained outside this repo (operator-only).
 
 ---
 
@@ -38,7 +19,7 @@ Full product context: [SPC-KNOWLEDGE-BOOK.md](./SPC-KNOWLEDGE-BOOK.md).
 ```
 solar-performance-cloud-web-app/
 ├── app/                              # Next.js App Router
-│   ├── page.tsx                      # Public landing page (see LANDING-DESIGN.md)
+│   ├── page.tsx                      # Public landing page
 │   ├── layout.tsx                    # Root layout + full metadata + OG image
 │   ├── opengraph-image.tsx           # Generated 1200x630 social preview card
 │   ├── dashboard/                    # Signed-in customer dashboard
@@ -49,7 +30,7 @@ solar-performance-cloud-web-app/
 │   │   └── ...
 │   └── providers.tsx                 # Clerk + theme providers
 │
-├── components/shared/                # Reusable UI (kept in sync with DESIGN.md)
+├── components/shared/                # Reusable UI (design-token discipline enforced by validator)
 │
 ├── lib/
 │   ├── string-health.ts              # Single source of truth for thresholds / classification
@@ -69,9 +50,7 @@ solar-performance-cloud-web-app/
 ├── public/landing/reyyan.jpeg        # Founder headshot used in landing page
 ├── middleware.ts                     # Clerk auth + public-route matcher
 │
-└── [DESIGN.md, LANDING-DESIGN.md, SPC-KNOWLEDGE-BOOK.md, CICD-PIPELINE-DESIGN.md,
-    AUDIT.md, AUDITS.md, HANDOVER.md, NEXT-STEPS.md, POST_MORTEM_2026-04-22.md,
-    UPTIMEROBOT_SETUP.md, CHANGELOG.md, README.md]
+└── [README.md, CHANGELOG.md]
 ```
 
 ---
@@ -128,7 +107,7 @@ npx prisma generate
 npm run dev                         # http://localhost:3000
 ```
 
-Requires a `.env` with `DATABASE_URL`, Clerk keys, and inverter API credentials. Full list in [`HANDOVER.md`](./HANDOVER.md).
+Requires a `.env` with `DATABASE_URL`, Clerk keys, and inverter API credentials. Full list in the operator handover doc (kept outside this repo).
 
 ---
 
@@ -154,7 +133,7 @@ bash scripts/audit-post-deploy.sh
 
 ### Future (automated)
 
-Full CI/CD pipeline design in [`CICD-PIPELINE-DESIGN.md`](./CICD-PIPELINE-DESIGN.md). Not yet built — scheduled for when the calendar clears.
+CI/CD pipeline design is drafted (operator-only). Not yet built — scheduled for when the calendar clears.
 
 ---
 
@@ -164,8 +143,8 @@ These are non-negotiable. If code contradicts them, **fix the code, not the rule
 
 ### Design system
 
-- **Product (dashboard/admin):** solar-gold `#F59E0B` brand, white canvas, slate text. See [`DESIGN.md`](./DESIGN.md).
-- **Landing page only:** NVIDIA green `#76B900` accent, warm-cream canvas, real founder photo. See [`LANDING-DESIGN.md`](./LANDING-DESIGN.md) and `DESIGN.md` §2.9 (the landing-page exception).
+- **Product (dashboard/admin):** solar-gold `#F59E0B` brand, white canvas, slate text.
+- **Landing page only:** NVIDIA green `#76B900` accent, warm-cream canvas (deliberate exception to the product theme).
 - **No pure black anywhere.** Slate-900 (`#0F172A`) where dark is needed.
 - **Status colours** flow through `STATUS_STYLES` in `lib/design-tokens.ts` — never inline `text-emerald-*` / `bg-red-*` for status.
 
@@ -187,29 +166,29 @@ These are non-negotiable. If code contradicts them, **fix the code, not the rule
 
 - Run `scripts/audit-pre-deploy.sh` before every push (today voluntary; mandatory after CI/CD lands).
 - Run `scripts/audit-post-deploy.sh` after every deploy (automated by the post-deploy SSH step).
-- Never skip the `@types/react@^19` defensive install (see 2026-04-22 post-mortem).
+- Never skip the `@types/react@^19` defensive install (peer-dep mismatch caused a 502 outage on 2026-04-22).
 
 ### Documentation discipline
 
 - **Every major infrastructure change** → document in [`CHANGELOG.md`](./CHANGELOG.md).
-- **Every incident** → new `POST_MORTEM_YYYY-MM-DD.md` file, linked from `CHANGELOG.md`.
-- **Every design decision** → update the relevant design doc (`DESIGN.md` for product, `LANDING-DESIGN.md` for landing).
-- **New design docs** → add to the "Quick links for developers" table at the top of this README.
+- **Every incident** → new dated post-mortem in the operator-only Working folder, linked from `CHANGELOG.md`.
+- **Every design decision** → update the relevant design doc (operator-only).
+- **Threshold or classification changes** → must be made only in `lib/string-health.ts`. The validator (`scripts/validate-centralized.sh`) blocks inline thresholds anywhere else.
 
 ---
 
 ## Known risks & open items
 
-Live at [`AUDIT.md`](./AUDIT.md). Summary:
+Tracked in the operator-only audit doc. Summary of standing items:
 
 | ID | Risk | Mitigation | Scheduled |
 |---|---|---|---|
 | SEC-2 | 7 Next 14.x DoS CVEs | nginx rate limit · fail2ban · no `images.remotePatterns` | Next.js 15 upgrade (30-day window) |
-| H1 | No CI/CD pipeline | Audit scripts as voluntary gate | GitHub Actions (30-day window) — **design doc ready:** [`CICD-PIPELINE-DESIGN.md`](./CICD-PIPELINE-DESIGN.md) |
+| H1 | No CI/CD pipeline | Audit scripts as voluntary gate | GitHub Actions (30-day window) |
 | H2 | No automated test suite | TS + validator + manual QA | Unit + integration (60-day window) |
 | H3 | Shared EC2 with Wattey | Netdata watches contention | Separate infra (90-day window) |
 | M1 | Pre-filter sensor-fault rows in old `string_daily` / `string_hourly` | Forward filter shipped; old rows overwrite on next aggregation | Optional backfill script |
-| — | UptimeRobot external monitoring | `/api/health` ready | **Awaiting your external signup (10 min)** |
+| — | UptimeRobot external monitoring | `/api/health` ready | **Awaiting external signup (10 min)** |
 
 ---
 
@@ -228,8 +207,9 @@ Live at [`AUDIT.md`](./AUDIT.md). Summary:
 
 See [`CHANGELOG.md`](./CHANGELOG.md) for the append-only change log.
 
-- **2026-04-22** — Observability baseline shipped (Sentry + Netdata + audit toolkit + `/api/health`). Data integrity overhaul (sensor-fault filter on write side). Design system v3 migration. Security: Clerk CVE patched. Incident: 3-min 502 outage from peer-dep mismatch — post-mortem in [`POST_MORTEM_2026-04-22.md`](./POST_MORTEM_2026-04-22.md).
-- **2026-04-23** — Landing page full structural redesign (warm-cream canvas + NVIDIA green accent + Mastercard asymmetric layouts + real founder photo). Published [`LANDING-DESIGN.md`](./LANDING-DESIGN.md) · [`SPC-KNOWLEDGE-BOOK.md`](./SPC-KNOWLEDGE-BOOK.md) · [`CICD-PIPELINE-DESIGN.md`](./CICD-PIPELINE-DESIGN.md) · [`NEXT-STEPS.md`](./NEXT-STEPS.md) · this README.
+- **2026-04-22** — Observability baseline shipped (Sentry + Netdata + audit toolkit + `/api/health`). Data integrity overhaul (sensor-fault filter on write side). Design system v3 migration. Security: Clerk CVE patched. Incident: 3-min 502 outage from peer-dep mismatch.
+- **2026-04-23** — Landing page full structural redesign (warm-cream canvas + NVIDIA green accent + Mastercard asymmetric layouts + real founder photo). Internal design and product docs published.
+- **2026-04-30** — Two false-alert sources eliminated. **Phase A** added a per-string `is_used` flag so admins can mark empty PV ports — induction-leak noise on disconnected channels stops triggering 96 %-below-peers CRITICAL alerts. **Phase B** added `exclude_from_peer_comparison` so non-standard installs (wall-mounted, east/west, shaded) drop out of the peer pool — they keep their real V/A/P readings on the dashboard but no longer fire CRITICAL alerts for being "below peers" by design. Hardware alarms, dead-string detection, stale-data detection, and sensor-fault filtering remain active on flagged strings. Co-tenant RDS upgraded the same day from `db.t3.micro` to `db.t4g.small` (Postgres 17.6); SPC's `connection_limit` held at 20 — measured live usage is 19/40, no bump justified. New `STATUS_STYLES['peer-excluded']` design token centralizes the indigo "non-standard" UI across `StringComparisonTable`, `StringHealthMatrix`, `InverterDetailSection`, and the admin per-row pill. A dedicated launch checklist (operator-only) documented the deploy runbook including the `prisma db push` schema-sync step, smoke tests, and rollback plan.
 
 ---
 
