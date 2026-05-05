@@ -33,6 +33,11 @@ export interface SungrowDevice {
   device_sn: string
   device_model: string
   ps_id: string
+  // dev_fault_status: 1 = no fault, anything else = fault present.
+  // Used as a minimum-viable signal for vendor_alarms ingestion until
+  // Sungrow's full alarm-list endpoint is wired up.
+  dev_fault_status: number
+  dev_status: number
 }
 
 export interface SungrowPointInfo {
@@ -303,6 +308,10 @@ export class SungrowClient {
         device_sn: d.device_sn || '',
         device_model: d.device_model_code || '',
         ps_id: String(d.ps_id || psId),
+        // 1 = no fault per Sungrow docs; null/0/anything else = fault.
+        // Default to 1 when missing so absence-of-data isn't treated as a fault.
+        dev_fault_status: typeof d.dev_fault_status === 'number' ? d.dev_fault_status : 1,
+        dev_status: typeof d.dev_status === 'number' ? d.dev_status : 0,
       }))
   }
 

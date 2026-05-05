@@ -300,9 +300,14 @@ async function fetchSolisAlarms(client: SolisClient): Promise<void> {
 
       const level = String(alarm.alarmLevel)
       const severity = level === '3' ? 'CRITICAL' : level === '2' ? 'WARNING' : 'INFO'
-      const isRestored = String(alarm.state) === '2'
-      const resolvedAt = isRestored && alarm.alarmEndTime
-        ? new Date(Number(alarm.alarmEndTime))
+      // Solis state: 0=pending, 1=processed (acknowledged in Solis UI),
+      //              2=restored (cleared by hardware).
+      // Both 1 and 2 mean "no longer actionable" — treat both as resolved.
+      // Previously only state===2 was resolved, leaving acknowledged alarms
+      // visible forever in our DB and confusing operators.
+      const closedState = String(alarm.state) === '1' || String(alarm.state) === '2'
+      const resolvedAt = closedState
+        ? (alarm.alarmEndTime ? new Date(Number(alarm.alarmEndTime)) : new Date())
         : null
 
       // Solis always returns id="-1" — not a real unique ID.

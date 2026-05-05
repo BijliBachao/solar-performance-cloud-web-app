@@ -487,7 +487,10 @@ function HardwareFaultsTab({ plants }: { plants: PlantOption[] }) {
   const [alarms, setAlarms] = useState<VendorAlarm[]>([])
   const [loading, setLoading] = useState(true)
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 })
-  const [status, setStatus]   = useState<HwStatus>('active')
+  // Default 'all' — Solis auto-resolves most alarms quickly, so 'active' often
+  // shows only 1-2 even when DB has hundreds. Users were confused by the empty
+  // view; 'all' reveals the real volume and they filter down via the pill bar.
+  const [status, setStatus]   = useState<HwStatus>('all')
   const [severity, setSeverity] = useState<HwSeverity>('ALL')
   const [provider, setProvider] = useState('')
   const [selectedPlant, setSelectedPlant] = useState('')
@@ -555,6 +558,7 @@ function HardwareFaultsTab({ plants }: { plants: PlantOption[] }) {
             <option value="solis">Solis</option>
             <option value="growatt">Growatt</option>
             <option value="huawei">Huawei</option>
+            <option value="sungrow">Sungrow</option>
           </select>
           {plants.length > 1 && (
             <select value={selectedPlant} onChange={e => { setSelectedPlant(e.target.value); setPage(1) }}

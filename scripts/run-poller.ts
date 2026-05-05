@@ -58,18 +58,30 @@ async function main() {
     }
   })
 
-  // Run data retention cleanup daily at 2:00 AM (30-day retention for raw measurements)
-  // Hourly/daily aggregates are kept indefinitely for historical analysis.
+  // Run data retention cleanup daily at 2:00 AM:
+  //   - 30-day retention for raw string_measurements (high churn, cheap to drop)
+  //   - 90-day retention for resolved vendor_alarms (keeps recent fault history
+  //     for technician root-cause investigation; OPEN alarms never deleted)
+  //   - Hourly/daily aggregates kept indefinitely for historical analysis
   cron.schedule('0 2 * * *', async () => {
-    console.log('[Poller] Running data retention cleanup (30-day retention)...')
+    console.log('[Poller] Running data retention cleanup...')
     try {
       const { prisma } = await import('../lib/prisma')
-      const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-      console.log(`[Poller] Deleting string_measurements older than ${cutoff.toISOString()}`)
-      const result = await prisma.string_measurements.deleteMany({
-        where: { timestamp: { lt: cutoff } },
+
+      const measurementsCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+      console.log(`[Poller] Deleting string_measurements older than ${measurementsCutoff.toISOString()}`)
+      const measurementsResult = await prisma.string_measurements.deleteMany({
+        where: { timestamp: { lt: measurementsCutoff } },
       })
-      console.log(`[Poller] Deleted ${result.count} old string_measurements`)
+      console.log(`[Poller] Deleted ${measurementsResult.count} old string_measurements`)
+
+      // Only prune RESOLVED vendor alarms — open ones stay regardless of age.
+      const alarmsCutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+      console.log(`[Poller] Deleting resolved vendor_alarms resolved before ${alarmsCutoff.toISOString()}`)
+      const alarmsResult = await prisma.vendor_alarms.deleteMany({
+        where: { resolved_at: { not: null, lt: alarmsCutoff } },
+      })
+      console.log(`[Poller] Deleted ${alarmsResult.count} old resolved vendor_alarms`)
     } catch (err) {
       console.error('[Poller] Data retention cleanup failed:', err)
     }

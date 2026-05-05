@@ -6,6 +6,7 @@ import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloa
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
+let lastAlarmSync = 0
 const HOUR_MS = 60 * 60 * 1000
 
 // Sungrow ps_status → our DB health_state
@@ -82,6 +83,11 @@ export async function pollSungrow(): Promise<void> {
     }
 
     await fetchSungrowStringData(client)
+
+    if (now - lastAlarmSync > HOUR_MS) {
+      await fetchSungrowAlarms(client)
+      lastAlarmSync = now
+    }
 
     console.log('[Sungrow] Poll cycle complete.')
   } catch (error) {
@@ -323,5 +329,95 @@ async function processSungrowDevice(
         provider: PROVIDERS.SUNGROW,
       },
     })
+  }
+}
+
+// Minimum-viable Sungrow vendor-alarm ingestion using `dev_fault_status` from
+// getDeviceList. Sungrow's full alarm-list endpoint (e.g. getDeviceFault) is
+// not yet researched in our knowledge base, so we synthesize one row per
+// faulty device. When Sungrow exposes proper alarm codes/names we'll replace
+// this with the real endpoint and richer data; until then, even a binary
+// "device X has a fault" beats the current behaviour of zero alarms ever.
+async function fetchSungrowAlarms(client: SungrowClient): Promise<void> {
+  console.log('[Sungrow] Fetching vendor alarms...')
+  try {
+    const plants = await prisma.plants.findMany({
+      where: { provider: PROVIDERS.SUNGROW },
+      select: { id: true },
+    })
+    if (plants.length === 0) return
+
+    // device_sn → device_id map for upsert lookups
+    const sungrowDevices = await prisma.devices.findMany({
+      where: { provider: PROVIDERS.SUNGROW },
+      select: { id: true, plant_id: true },
+    })
+    const deviceById = new Map(sungrowDevices.map(d => [d.id, d]))
+
+    const activeIds = new Set<string>()
+
+    for (const plant of plants) {
+      const devices = await client.getDeviceList(plant.id)
+      for (const dev of devices) {
+        const deviceRow = deviceById.get(dev.device_sn)
+        if (!deviceRow) continue
+
+        // dev_fault_status: 1 = no fault. Anything else (0, 2, 3, etc.) = fault.
+        const isFaulty = dev.dev_fault_status !== 1
+        if (!isFaulty) continue
+
+        // Composite key: plant + device-sn + 'devfault' (one synthetic
+        // row per faulty device; reopens automatically when fault clears
+        // and recurs).
+        const vendorAlarmId = `${plant.id}_${dev.device_sn}_devfault`
+        activeIds.add(vendorAlarmId)
+
+        try {
+          await prisma.vendor_alarms.upsert({
+            where: {
+              provider_vendor_alarm_id: {
+                provider: PROVIDERS.SUNGROW,
+                vendor_alarm_id: vendorAlarmId,
+              },
+            },
+            update: {},
+            create: {
+              device_id: deviceRow.id,
+              plant_id: deviceRow.plant_id,
+              provider: PROVIDERS.SUNGROW,
+              vendor_alarm_id: vendorAlarmId,
+              alarm_code: String(dev.dev_fault_status),
+              severity: 'CRITICAL',
+              message: `Device fault detected (status ${dev.dev_fault_status})`,
+              advice: 'Check the Sungrow iSolarCloud portal for fault details. ' +
+                      'Possible causes: communication loss, inverter trip, ' +
+                      'AC/DC fault, sensor error. Refer to inverter manual ' +
+                      'or contact Sungrow support if the fault persists.',
+              started_at: new Date(),
+              raw_data: dev as any,
+            },
+          })
+        } catch {
+          // unique constraint race — safe to skip
+        }
+      }
+    }
+
+    // Diff-resolve: any open Sungrow alarm not in the active set has cleared.
+    const openSungrowAlarms = await prisma.vendor_alarms.findMany({
+      where: { provider: PROVIDERS.SUNGROW, resolved_at: null },
+      select: { id: true, vendor_alarm_id: true },
+    })
+    const toResolve = openSungrowAlarms.filter(a => !activeIds.has(a.vendor_alarm_id))
+    if (toResolve.length > 0) {
+      await prisma.vendor_alarms.updateMany({
+        where: { id: { in: toResolve.map(a => a.id) } },
+        data: { resolved_at: new Date() },
+      })
+    }
+
+    console.log(`[Sungrow] ${activeIds.size} active alarms, resolved ${toResolve.length}`)
+  } catch (error) {
+    console.error('[Sungrow] Failed to fetch vendor alarms:', error)
   }
 }
