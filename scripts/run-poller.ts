@@ -10,16 +10,18 @@ async function pollAll() {
   const { pollSolis } = await import('../lib/solis-poller')
   const { pollGrowatt } = await import('../lib/growatt-poller')
   const { pollSungrow } = await import('../lib/sungrow-poller')
+  const { pollCsi } = await import('../lib/csi-poller')
 
   const results = await Promise.allSettled([
     pollHuawei(),
     pollSolis(),
     pollGrowatt(),
     pollSungrow(),
+    pollCsi(),
   ])
 
   results.forEach((r, i) => {
-    const name = ['Huawei', 'Solis', 'Growatt', 'Sungrow'][i]
+    const name = ['Huawei', 'Solis', 'Growatt', 'Sungrow', 'CSI'][i]
     if (r.status === 'rejected') console.error(`[${name}] Poll failed:`, r.reason)
     else console.log(`[${name}] Poll complete`)
   })
@@ -32,6 +34,7 @@ async function main() {
   console.log(`[Poller] Solis API ID: ${process.env.SOLIS_API_ID ? 'SET' : 'NOT SET'}`)
   console.log(`[Poller] Growatt API Token: ${process.env.GROWATT_API_TOKEN ? 'SET' : 'NOT SET'}`)
   console.log(`[Poller] Sungrow App Key: ${process.env.SUNGROW_APP_KEY ? 'SET' : 'NOT SET'}`)
+  console.log(`[Poller] CSI App ID:      ${process.env.CSI_APP_ID ? 'SET' : 'NOT SET'}`)
 
   // Run immediately on start
   try {

@@ -559,6 +559,7 @@ function HardwareFaultsTab({ plants }: { plants: PlantOption[] }) {
             <option value="growatt">Growatt</option>
             <option value="huawei">Huawei</option>
             <option value="sungrow">Sungrow</option>
+            <option value="csi">Canadian Solar</option>
           </select>
           {plants.length > 1 && (
             <select value={selectedPlant} onChange={e => { setSelectedPlant(e.target.value); setPage(1) }}

@@ -1,4 +1,4 @@
-export const PROVIDERS = { HUAWEI: 'huawei', SOLIS: 'solis', GROWATT: 'growatt', SUNGROW: 'sungrow' } as const
+export const PROVIDERS = { HUAWEI: 'huawei', SOLIS: 'solis', GROWATT: 'growatt', SUNGROW: 'sungrow', CSI: 'csi' } as const
 export type Provider = typeof PROVIDERS[keyof typeof PROVIDERS]
 
 export const DEVICE_TYPE_IDS = {
@@ -8,9 +8,10 @@ export const DEVICE_TYPE_IDS = {
   GROWATT_MAX_INVERTER: 200,
   GROWATT_SPHS_INVERTER: 201,
   SUNGROW_INVERTER: 300,
+  CSI_INVERTER: 400,
 } as const
 
-export const INVERTER_DEVICE_TYPE_IDS = [1, 38, 100, 200, 201, 300]
+export const INVERTER_DEVICE_TYPE_IDS = [1, 38, 100, 200, 201, 300, 400]
 
 // How many devices a single provider's poller may process concurrently.
 // Each in-flight worker holds 1 Prisma pool slot at a time (sequential
