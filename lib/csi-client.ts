@@ -93,7 +93,7 @@ export class CsiClient {
   private rateLimitPromise: Promise<void> = Promise.resolve()
 
   constructor(opts?: { baseUrl?: string; appId?: string; appSecret?: string }) {
-    this.baseUrl = opts?.baseUrl || process.env.CSI_API_URL || 'https://csiapi.hxsoft.net:9016'
+    this.baseUrl = opts?.baseUrl || process.env.CSI_API_URL || 'https://sep-api.csisolar.com'
     this.appId = opts?.appId || process.env.CSI_APP_ID || ''
     this.appSecret = opts?.appSecret || process.env.CSI_APP_SECRET || ''
 

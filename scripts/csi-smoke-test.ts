@@ -24,7 +24,7 @@
 
 import { writeFileSync } from 'fs'
 
-const BASE = process.env.CSI_API_URL || 'https://csiapi.hxsoft.net:9016'
+const BASE = process.env.CSI_API_URL || 'https://sep-api.csisolar.com'
 const APP_ID = process.env.CSI_APP_ID
 const APP_SECRET = process.env.CSI_APP_SECRET
 
