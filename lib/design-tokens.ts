@@ -250,9 +250,7 @@ export const PROVIDER_BADGE_STYLES: Record<ProviderKey, ProviderBadgeStyle> = {
     fg: 'text-emerald-700',
     bg: 'bg-emerald-50',
     border: 'border-emerald-200',
-    // Short label keeps the row badge single-line — "Canadian Solar" wrapped
-    // in /admin/plants. CSI is the industry-standard abbreviation.
-    label: 'CSI',
+    label: 'Canadian Solar',
   },
 }
 

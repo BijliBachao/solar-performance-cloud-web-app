@@ -84,6 +84,18 @@ export default function AdminPlantsPage() {
   // Quick assign
   const [quickAssignLoading, setQuickAssignLoading] = useState<string | null>(null)
 
+  // Unassign confirm modal — destructive action gets a 2-step modal.
+  // Single-click unassign caused a real production incident on 2026-05-07,
+  // never again. Button merely opens the modal; modal "Confirm" fires DELETE.
+  const [unassignConfirm, setUnassignConfirm] = useState<Plant | null>(null)
+
+  // Sortable columns. Default: alphabetical by plant_name (predictable on
+  // first load). User can click any column header to override.
+  type SortKey = 'name' | 'last_reading' | 'capacity' | 'assigned' | 'provider'
+  type SortDir = 'asc' | 'desc'
+  const [sortKey, setSortKey] = useState<SortKey>('name')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
+
   // Messages
   const [successMsg, setSuccessMsg] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
@@ -264,6 +276,64 @@ export default function AdminPlantsPage() {
     return 'none'
   }
 
+  // Click a column header to toggle sort. Same key clicked twice flips
+  // direction; new key resets to ascending. Mirrors industry convention
+  // (GitHub, Stripe, Vercel dashboards).
+  const toggleSort = (key: SortKey) => {
+    if (key === sortKey) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+
+  // Apply sort client-side. Stable; nulls always sort last regardless of dir.
+  const sortedPlants = [...plants].sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1
+    const nullsLast = (av: number | null, bv: number | null): number | null => {
+      if (av == null && bv == null) return 0
+      if (av == null) return 1
+      if (bv == null) return -1
+      return null  // both non-null — caller compares
+    }
+    if (sortKey === 'name') {
+      return a.plant_name.localeCompare(b.plant_name) * dir
+    }
+    if (sortKey === 'capacity') {
+      const av = a.capacity_kw == null ? null : Number(a.capacity_kw)
+      const bv = b.capacity_kw == null ? null : Number(b.capacity_kw)
+      const n = nullsLast(av, bv)
+      return n !== null ? n : (av! - bv!) * dir
+    }
+    if (sortKey === 'last_reading') {
+      const av = a.last_reading_at ? new Date(a.last_reading_at).getTime() : null
+      const bv = b.last_reading_at ? new Date(b.last_reading_at).getTime() : null
+      const n = nullsLast(av, bv)
+      return n !== null ? n : (av! - bv!) * dir
+    }
+    if (sortKey === 'assigned') {
+      // Assigned-first when asc, unassigned-first when desc.
+      const av = a.assigned_org ? 0 : 1
+      const bv = b.assigned_org ? 0 : 1
+      if (av !== bv) return (av - bv) * dir
+      return a.plant_name.localeCompare(b.plant_name)  // tiebreak by name
+    }
+    if (sortKey === 'provider') {
+      const av = a.provider || ''
+      const bv = b.provider || ''
+      if (av !== bv) return av.localeCompare(bv) * dir
+      return a.plant_name.localeCompare(b.plant_name)  // tiebreak
+    }
+    return 0
+  })
+
+  // Compact arrow indicator for the active sort column.
+  const SortIndicator = ({ active, dir }: { active: boolean; dir: SortDir }) => {
+    if (!active) return <span className="opacity-30 text-[10px] ml-1">▲▼</span>
+    return <span className="text-spc-green text-[10px] ml-1">{dir === 'asc' ? '▲' : '▼'}</span>
+  }
+
   if (loading && plants.length === 0) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -389,23 +459,57 @@ export default function AdminPlantsPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-slate-50">
-                <TableHead className="whitespace-nowrap">Plant</TableHead>
-                <TableHead className="whitespace-nowrap">Status</TableHead>
+                <TableHead className="whitespace-nowrap">
+                  <button
+                    onClick={() => toggleSort('name')}
+                    className="inline-flex items-center font-semibold text-slate-700 hover:text-slate-900"
+                  >
+                    Plant
+                    <SortIndicator active={sortKey === 'name'} dir={sortDir} />
+                  </button>
+                </TableHead>
+                <TableHead className="whitespace-nowrap">
+                  <button
+                    onClick={() => toggleSort('last_reading')}
+                    className="inline-flex items-center font-semibold text-slate-700 hover:text-slate-900"
+                    title="Sort by last reading time"
+                  >
+                    Status
+                    <SortIndicator active={sortKey === 'last_reading'} dir={sortDir} />
+                  </button>
+                </TableHead>
                 <TableHead className="whitespace-nowrap hidden md:table-cell">Issues</TableHead>
-                <TableHead className="whitespace-nowrap hidden md:table-cell">Devices · Capacity</TableHead>
-                <TableHead className="whitespace-nowrap hidden lg:table-cell">Organization</TableHead>
+                <TableHead className="whitespace-nowrap hidden md:table-cell">
+                  <button
+                    onClick={() => toggleSort('capacity')}
+                    className="inline-flex items-center font-semibold text-slate-700 hover:text-slate-900"
+                  >
+                    Devices · Capacity
+                    <SortIndicator active={sortKey === 'capacity'} dir={sortDir} />
+                  </button>
+                </TableHead>
+                <TableHead className="whitespace-nowrap hidden lg:table-cell">
+                  <button
+                    onClick={() => toggleSort('assigned')}
+                    className="inline-flex items-center font-semibold text-slate-700 hover:text-slate-900"
+                    title="Assigned plants first"
+                  >
+                    Organization
+                    <SortIndicator active={sortKey === 'assigned'} dir={sortDir} />
+                  </button>
+                </TableHead>
                 <TableHead className="whitespace-nowrap text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {plants.length === 0 ? (
+              {sortedPlants.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-slate-400 py-12 text-sm">
                     No plants found
                   </TableCell>
                 </TableRow>
               ) : (
-                plants.map((plant) => {
+                sortedPlants.map((plant) => {
                   const badge = providerBadge(plant.provider)
                   const status = plantStatus(plant)
                   const issueKey = issueSeverityKey(plant.alerts_unresolved)
@@ -505,8 +609,11 @@ export default function AdminPlantsPage() {
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           {plant.assigned_org ? (
+                            // Unassign is destructive — opens confirm modal,
+                            // does NOT fire DELETE on this click. Single-click
+                            // unassign caused a real prod incident on 2026-05-07.
                             <button
-                              onClick={() => handleUnassign(plant)}
+                              onClick={() => setUnassignConfirm(plant)}
                               disabled={quickAssignLoading === plant.id}
                               className="px-2 py-1 text-xs font-semibold rounded border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50 transition-colors whitespace-nowrap"
                             >
@@ -540,6 +647,61 @@ export default function AdminPlantsPage() {
           </Table>
         </div>
       </div>
+
+      {/* Unassign Confirmation Dialog — destructive action requires explicit
+           confirmation. Single-click unassign caused a real prod incident
+           on 2026-05-07 when an admin mistakenly removed a paying client's
+           plant. Modal keeps the action one accidental click away from
+           irreversible (the DELETE) by adding a deliberate confirm step. */}
+      <Dialog
+        open={!!unassignConfirm}
+        onOpenChange={(open) => { if (!open && !quickAssignLoading) setUnassignConfirm(null) }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-100">
+                <span className={`text-amber-700 text-base font-bold`}>!</span>
+              </span>
+              Unassign plant from organization?
+            </DialogTitle>
+            <DialogDescription>
+              This will remove the organization&rsquo;s access to this plant.
+              The plant will need to be re-assigned for the organization to see it again.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className={`my-2 p-3 rounded border ${STATUS_STYLES.warning.bg} ${STATUS_STYLES.warning.border}`}>
+            <div className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-1">Plant</div>
+            <div className="font-semibold text-slate-900 mb-2">{unassignConfirm?.plant_name}</div>
+            <div className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-1">Organization</div>
+            <div className="font-semibold text-slate-900">{unassignConfirm?.assigned_org?.name}</div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setUnassignConfirm(null)}
+              disabled={!!quickAssignLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (!unassignConfirm) return
+                const plant = unassignConfirm
+                setUnassignConfirm(null)
+                await handleUnassign(plant)
+              }}
+              disabled={!!quickAssignLoading}
+            >
+              {quickAssignLoading === unassignConfirm?.id && <Loader2 className="w-4 h-4 animate-spin mr-1" strokeWidth={2} />}
+              {quickAssignLoading === unassignConfirm?.id ? 'Unassigning...' : 'Yes, unassign'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Assign Plant Dialog */}
       <Dialog open={!!assignPlant} onOpenChange={(open) => { if (!open && !assignLoading) { setAssignPlant(null); setAssignSuccess(false) } }}>
