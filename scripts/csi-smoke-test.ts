@@ -50,7 +50,7 @@ async function callJson<T = any>(label: string, url: string, init: RequestInit):
   try { json = JSON.parse(text) }
   catch { throw new Error(`Unparseable response from ${label}: ${text.substring(0, 300)}`) }
 
-  if (json.code !== 0) {
+  if (json.code !== 200) {
     throw new Error(`API error on ${label}: code=${json.code} msg=${json.msg || ''}`)
   }
   return json.data as T

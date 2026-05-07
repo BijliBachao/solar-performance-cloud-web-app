@@ -6,14 +6,14 @@ import { safeArray, fetchWithTimeout } from '@/lib/poller-utils'
 // undocumented — defensive 1 req/sec until CSI confirms otherwise.
 //
 // CRITICAL gotchas from docs (`Working/all_API/csi/CSI-API-KNOWLEDGE.md` §8):
-//   • code:0 = success (inverted vs Solis/Growatt). Use code !== 0 to throw.
+//   • code:200 = success (verified 2026-05-07 against sep-api.csisolar.com — docs said 0, reality differs).
 //   • 503 means token expired, NOT service unavailable. Re-auth on 503.
-//   • realData[].data is typed `object` not scalar. Probably { value: "..." }.
+//   • realData[].data is a scalar (number or string), NOT an object — verified 2026-05-07.
 //   • realData entries can be missing on partial outages — treat as no-data,
 //     not as "string broken".
 //   • Accept-Language: en-US — without it, msg/labels come back zh-CN.
-//   • Field-code taxonomy is undocumented. We dump the first response to
-//     api-test-results.json and verify the regex (^DV\d+$, ^DC\d+$, ^DP\d+$).
+//   • Field-code taxonomy verified 2026-05-07: dv{N} (voltage V), dc{N} (current A),
+//     dp{N} (power W) — all lowercase, no zero-padding. 490 rows per inverter.
 
 const RATE_LIMIT_DELAY_MS = 1000
 const TOKEN_EXPIRY_MS = 30 * 60 * 1000 // 30 min defensive default; verify on first run
@@ -54,7 +54,7 @@ export interface CsiRealDataRow {
   fieldCode: string
   fieldName: string
   fieldUnitName: string
-  data: Record<string, unknown> | null
+  data: number | string | null  // scalar, verified 2026-05-07
 }
 
 export interface CsiDeviceData {
@@ -154,7 +154,7 @@ export class CsiClient {
     try { json = JSON.parse(text) }
     catch { throw new Error(`[CsiClient] Failed to parse ${path}: ${text.substring(0, 200)}`) }
 
-    if (json.code !== 0) {
+    if (json.code !== 200) {
       throw new Error(`[CsiClient] API error on ${path}: code=${json.code} msg=${json.msg || ''}`)
     }
 
@@ -183,7 +183,7 @@ export class CsiClient {
     try { json = JSON.parse(text) }
     catch { throw new Error(`[CsiClient] Auth response unparseable: ${text.substring(0, 200)}`) }
 
-    if (json.code !== 0) {
+    if (json.code !== 200) {
       throw new Error(`[CsiClient] Auth failed: code=${json.code} msg=${json.msg || ''}`)
     }
 
@@ -238,29 +238,25 @@ export class CsiClient {
     return all
   }
 
-  // Plant → device tree. Returns flattened inverter list with parent collector SN.
+  // Plant → device list. Uses /device/page (flat list, verified 2026-05-07).
+  // /plant/devices always returns [] — wrong endpoint per docs.
   async getPlantDevices(plantId: string): Promise<CsiDevice[]> {
-    const data = await this.get<any[]>(`/open-api/plant/devices/${encodeURIComponent(plantId)}`)
-    const collectors = safeArray<any>(data)
+    const data = await this.get<any[]>('/open-api/device/page', { plantId })
     const devices: CsiDevice[] = []
 
-    for (const collector of collectors) {
-      const collectorSn = collector?.collectorSn || ''
-      const children = safeArray<any>(collector?.childDevice)
-      for (const d of children) {
-        if (!d?.deviceSn) continue
-        devices.push({
-          deviceId: String(d.deviceId || ''),
-          deviceSn: d.deviceSn,
-          deviceType: Number(d.deviceType) || 0,
-          deviceType2: Number(d.deviceType2) || 0,
-          ratePower: Number(d.ratePower) || 0,
-          status: Number(d.status) || 0,
-          productKey: d.productKey || '',
-          plantId: String(plantId),
-          collectorSn,
-        })
-      }
+    for (const d of safeArray<any>(data)) {
+      if (!d?.deviceSn) continue
+      devices.push({
+        deviceId: String(d.deviceId || ''),
+        deviceSn: d.deviceSn,
+        deviceType: Number(d.deviceType) || 0,
+        deviceType2: Number(d.deviceType2) || 0,
+        ratePower: Number(d.ratePower) || 0,
+        status: Number(d.status) || 0,
+        productKey: d.productKey || '',
+        plantId: String(d.plantId || plantId),
+        collectorSn: d.upDeviceSn || '',
+      })
     }
 
     // Inverters only (deviceType === 2 per docs §6.1).
@@ -308,7 +304,7 @@ export class CsiClient {
               fieldCode: String(r.fieldCode),
               fieldName: r.fieldName || '',
               fieldUnitName: r.fieldUnitName || '',
-              data: (r.data && typeof r.data === 'object') ? r.data : null,
+              data: (r.data !== undefined && r.data !== null) ? r.data : null,
             })),
         })
       }
@@ -366,40 +362,30 @@ export class CsiClient {
   }
 }
 
-// Helper: extract a numeric value from a CSI realData row's `data` object.
-// `data` is typed `object` per docs §8 quirk #5 — likely {value: "..."} or
-// {value: "...", display: "..."} but we don't know yet. This helper is the
-// only place to evolve when we see the real shape.
+// Helper: extract a numeric value from a CSI realData row's `data` field.
+// Verified 2026-05-07: data is a scalar (number or string), not an object.
 export function extractRealDataValue(row: CsiRealDataRow): number | null {
-  if (!row.data) return null
-  const d = row.data as Record<string, unknown>
-  // Common SolarMAN-style shapes: {value}, {data}, {val}, scalar string fallback.
-  for (const key of ['value', 'data', 'val']) {
-    const v = d[key]
-    if (typeof v === 'number' && Number.isFinite(v)) return v
-    if (typeof v === 'string') {
-      const n = Number(v)
-      if (Number.isFinite(n)) return n
-    }
+  if (row.data === null || row.data === undefined) return null
+  if (typeof row.data === 'number' && Number.isFinite(row.data)) return row.data
+  if (typeof row.data === 'string' && row.data !== '') {
+    const n = Number(row.data)
+    if (Number.isFinite(n)) return n
   }
   return null
 }
 
 // ━━━ Field-code parsing for /open-api/device/data realData[] rows ━━━
-// Per CSI-API-KNOWLEDGE.md §5.2 (SolarMAN convention, INFERRED — verify
-// against api-test-results.json on first sandbox call):
-//   DV1, DV2, ... = DC string voltage (V)
-//   DC1, DC2, ... = DC string current (A)
-//   DP1, DP2, ... = DC string power (W)
-//   Etoday / EtTo / Et_today = today's energy (kWh)
-//
-// Lives here (not in csi-poller) because it's pure data-shape transformation
-// of the CsiDeviceData wire format and easier to unit-test in isolation.
+// Verified 2026-05-07 against live sep-api.csisolar.com (490 rows per inverter):
+//   dv{N} = DC string voltage (V)
+//   dc{N} = DC string current (A)
+//   dp{N} = DC string power (W)
+//   elec_day = today's energy (kWh)
+// All lowercase, no zero-padding.
 
-export const CSI_STRING_VOLTAGE_RE = /^DV(\d+)$/
-export const CSI_STRING_CURRENT_RE = /^DC(\d+)$/
-export const CSI_STRING_POWER_RE   = /^DP(\d+)$/
-export const CSI_DAILY_ENERGY_FIELD_CODES = ['Etoday', 'EtTo', 'Et_today'] as const
+export const CSI_STRING_VOLTAGE_RE = /^dv(\d+)$/
+export const CSI_STRING_CURRENT_RE = /^dc(\d+)$/
+export const CSI_STRING_POWER_RE   = /^dp(\d+)$/
+export const CSI_DAILY_ENERGY_FIELD_CODES = ['elec_day'] as const
 
 export interface ParsedCsiStringMeasurement {
   string_number: number
