@@ -14,8 +14,8 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { Search, Loader2, ArrowLeft, ChevronDown } from 'lucide-react'
-import { providerBadge } from '@/lib/design-tokens'
+import { Search, Loader2, ArrowLeft, ChevronDown, ChevronRight } from 'lucide-react'
+import { providerBadge, statusKeyFromPlantHealth } from '@/lib/design-tokens'
 
 interface AlertCounts { critical: number; warning: number; info: number; total: number }
 
@@ -169,8 +169,8 @@ export default function AdminPlantsPage() {
     }
   }
 
-  const flashSuccess = (m: string) => { setSuccessMsg(m); setTimeout(() => setSuccessMsg(''), 3000) }
-  const flashError   = (m: string) => { setErrorMsg(m); setTimeout(() => setErrorMsg(''), 4000) }
+  const flashSuccess = (m: string) => { setSuccessMsg(m); setTimeout(() => setSuccessMsg(''), 4000) }
+  const flashError   = (m: string) => { setErrorMsg(m);   setTimeout(() => setErrorMsg(''),   4000) }
 
   // Compact relative time. "<1m" for very fresh, "Xm" / "Xh" / date for older.
   const relativeTime = (d: string | null): string => {
@@ -198,8 +198,12 @@ export default function AdminPlantsPage() {
     else if (ageMin > 15) readingKey = 'stale'
     else if (ageMin > 5) readingKey = 'idle'
 
-    const isFaulty = plant.health_state !== null && plant.health_state !== 1
-    if (isFaulty && lastReading && ageMin <= 60) {
+    // Only flag "Faulty" when the centralized health helper says so AND we
+    // have recent data — a stale plant is "Offline", not "Faulty", regardless
+    // of the cached health flag. PLANT_HEALTH_HEALTHY=3, FAULTY=2 (not 1) —
+    // never compare against magic numbers, always go through statusKeyFromPlantHealth.
+    const healthKey = statusKeyFromPlantHealth(plant.health_state)
+    if (healthKey === 'critical' && lastReading && ageMin <= 60) {
       return { key: 'faulty', label: 'Faulty', relative }
     }
     if (readingKey === 'offline') return { key: 'offline', label: 'Offline', relative }
@@ -264,21 +268,44 @@ export default function AdminPlantsPage() {
     })
   }, [plants, sortKey, sortDir])
 
-  const SortHead = ({ k, label, align = 'left' }: { k: SortKey; label: string; align?: 'left' | 'right' }) => {
+  // Active-sort always visible at full opacity; inactive columns reveal the
+  // chevron at low opacity on hover, full on focus. Screen readers get
+  // aria-sort on the parent <th> (threaded via SortableHead) and an explicit
+  // aria-label on the button announcing what the click does.
+  const SortButton = ({ k, label }: { k: SortKey; label: string }) => {
     const active = sortKey === k
+    const nextDir = active && sortDir === 'asc' ? 'descending' : 'ascending'
     return (
       <button
         onClick={() => toggleSort(k)}
-        className={`group inline-flex items-center gap-1 select-none ${align === 'right' ? 'flex-row-reverse' : ''}`}
+        aria-label={`Sort by ${label.toLowerCase()} ${nextDir}`}
+        className="group inline-flex items-center gap-1 select-none"
       >
         <span className="text-slate-600 group-hover:text-slate-900 transition-colors">{label}</span>
         <ChevronDown
+          aria-hidden="true"
           className={`h-3 w-3 shrink-0 transition-all ${
-            active ? 'text-slate-700 opacity-100' : 'text-slate-400 opacity-0 group-hover:opacity-60'
+            active
+              ? 'text-slate-700 opacity-100'
+              : 'text-slate-400 opacity-30 group-hover:opacity-70 group-focus-visible:opacity-100'
           } ${active && sortDir === 'asc' ? 'rotate-180' : ''}`}
           strokeWidth={2.5}
         />
       </button>
+    )
+  }
+
+  // <th> with aria-sort threaded through, so screen readers announce
+  // "ascending" / "descending" / "none" per WAI-ARIA grid pattern.
+  const SortableHead = ({ k, label, className = '' }: { k: SortKey; label: string; className?: string }) => {
+    const active = sortKey === k
+    const ariaSort: 'ascending' | 'descending' | 'none' = active
+      ? (sortDir === 'asc' ? 'ascending' : 'descending')
+      : 'none'
+    return (
+      <TableHead className={`px-4 py-2.5 ${className}`} aria-sort={ariaSort}>
+        <SortButton k={k} label={label} />
+      </TableHead>
     )
   }
 
@@ -395,13 +422,15 @@ export default function AdminPlantsPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-slate-50 hover:bg-slate-50">
-                <TableHead className="px-4 py-2.5"><SortHead k="name" label="Plant" /></TableHead>
-                <TableHead className="px-4 py-2.5"><SortHead k="last_reading" label="Status" /></TableHead>
+                <SortableHead k="name"         label="Plant" />
+                <SortableHead k="last_reading" label="Status" />
                 <TableHead className="px-4 py-2.5 hidden md:table-cell">Issues</TableHead>
-                <TableHead className="px-4 py-2.5 hidden md:table-cell"><SortHead k="capacity" label="Capacity" /></TableHead>
-                <TableHead className="px-4 py-2.5 hidden lg:table-cell"><SortHead k="assigned" label="Organization" /></TableHead>
-                <TableHead className="px-4 py-2.5 hidden md:table-cell"><SortHead k="provider" label="Provider" /></TableHead>
-                <TableHead className="px-4 py-2.5 w-px" />
+                <SortableHead k="capacity"     label="Devices · Capacity" className="hidden md:table-cell" />
+                <SortableHead k="assigned"     label="Organization"       className="hidden lg:table-cell" />
+                <SortableHead k="provider"     label="Provider"           className="hidden md:table-cell" />
+                <TableHead className="px-4 py-2.5 w-px">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -428,11 +457,28 @@ export default function AdminPlantsPage() {
                         <div className="font-medium text-sm text-slate-900 group-hover:text-slate-950 truncate max-w-[220px] sm:max-w-none">
                           {plant.plant_name}
                         </div>
-                        {/* Mobile-only meta line — all secondary info folds here */}
-                        <div className="md:hidden text-xs text-slate-500 mt-0.5 truncate">
-                          {badge?.label} · {plant.device_count} dev
-                          {plant.capacity_kw ? ` · ${Number(plant.capacity_kw).toFixed(1)} kW` : ''}
-                          {plant.assigned_org ? ` · ${plant.assigned_org.name}` : ' · Unassigned'}
+                        {/* Mobile-only meta line — capacity/devices on first
+                             row, assignment on second so a long org name
+                             wraps cleanly rather than truncating off-screen. */}
+                        <div className="md:hidden mt-0.5 text-xs text-slate-500 leading-tight">
+                          <div className="truncate">
+                            {badge?.label}
+                            <span className="mx-1 text-slate-300">·</span>
+                            {plant.device_count} dev
+                            {plant.capacity_kw && (
+                              <>
+                                <span className="mx-1 text-slate-300">·</span>
+                                {Number(plant.capacity_kw).toFixed(1)} kW
+                              </>
+                            )}
+                          </div>
+                          <div className="truncate">
+                            {plant.assigned_org ? (
+                              <span className="text-slate-600">{plant.assigned_org.name}</span>
+                            ) : (
+                              <span className="text-amber-600 font-medium">Unassigned</span>
+                            )}
+                          </div>
                         </div>
                       </TableCell>
 
@@ -444,17 +490,23 @@ export default function AdminPlantsPage() {
                         </div>
                       </TableCell>
 
-                      {/* Issues — bare colored count, hover for breakdown */}
+                      {/* Issues — colored count, font-weight encodes severity
+                           (critical=bold, warning/info=normal) so the cell is
+                           legible to red-green-deficient users too. Click drills
+                           into the plant detail (where the alerts list lives). */}
                       <TableCell className="px-4 py-2.5 hidden md:table-cell">
                         {plant.alerts_unresolved.total === 0 ? (
                           <span className="text-slate-300 font-mono text-sm">—</span>
                         ) : (
-                          <span
+                          <button
                             title={tooltipBreakdown}
-                            className={`text-sm font-mono tabular-nums cursor-help ${issueColor(plant.alerts_unresolved)}`}
+                            onClick={() => router.push(`/admin/plants/${plant.id}`)}
+                            className={`text-sm font-mono tabular-nums hover:underline underline-offset-2 ${
+                              plant.alerts_unresolved.critical > 0 ? 'font-semibold' : 'font-normal'
+                            } ${issueColor(plant.alerts_unresolved)}`}
                           >
                             {plant.alerts_unresolved.total} open
-                          </span>
+                          </button>
                         )}
                       </TableCell>
 
@@ -518,9 +570,10 @@ export default function AdminPlantsPage() {
                           )}
                           <button
                             onClick={() => router.push(`/admin/plants/${plant.id}`)}
-                            className="px-2 h-7 text-xs text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded transition-colors"
+                            className="px-2 h-7 text-xs text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded transition-colors inline-flex items-center gap-0.5"
                           >
-                            View →
+                            View
+                            <ChevronRight className="w-3 h-3" strokeWidth={2.5} aria-hidden="true" />
                           </button>
                         </div>
                       </TableCell>
