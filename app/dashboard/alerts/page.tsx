@@ -478,6 +478,7 @@ const PROVIDER_BADGE: Record<string, string> = {
   growatt: 'bg-orange-50 text-orange-700 border-orange-200',
   huawei:  'bg-red-50 text-red-700 border-red-200',
   sungrow: 'bg-violet-50 text-violet-700 border-violet-200',
+  csi:     'bg-emerald-50 text-emerald-700 border-emerald-200',
 }
 
 type HwStatus = 'active' | 'resolved' | 'all'

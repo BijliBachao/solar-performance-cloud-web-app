@@ -18,7 +18,10 @@ import { safeArray, fetchWithTimeout } from '@/lib/poller-utils'
 const RATE_LIMIT_DELAY_MS = 1000
 const TOKEN_EXPIRY_MS = 30 * 60 * 1000 // 30 min defensive default; verify on first run
 const PLANT_LIST_PAGE_SIZE = 20
+const DEVICE_LIST_PAGE_SIZE = 100  // /device/page returns paginated; cap before hitting silent truncation
+const ALERT_LIST_PAGE_SIZE = 100
 const REALTIME_BATCH = 20  // hard cap from docs §4.2.4 / §4.3.1
+const PAGINATION_HARD_CAP = 100  // runaway-loop guard if API misreports totalPages
 
 export interface CsiPlant {
   plantId: string
@@ -36,11 +39,9 @@ export interface CsiDevice {
   deviceSn: string
   deviceType: number   // 1=Data Logger, 2=Inverter
   deviceType2: number  // sub-type, undocumented enum
-  ratePower: number    // W (rated)
   status: number
   productKey: string
   plantId: string
-  collectorSn: string  // parent data logger SN
 }
 
 export interface CsiPlantRealtime {
@@ -123,11 +124,14 @@ export class CsiClient {
     return url.toString()
   }
 
-  // GET wrapper handling: rate-limit, auth refresh, code:0 success check,
+  // GET wrapper handling: rate-limit, proactive token-expiry refresh,
   // 503 → re-auth-and-retry-once, en-US localisation.
+  // Uses isTokenValid() so callers don't burn an extra request waiting for
+  // the API to tell us the token is stale — matters once we deploy and the
+  // 30-min defensive TTL fires across many providers in pollAll().
   private async get<T>(path: string, query?: Record<string, string | number | undefined>, isRetry = false): Promise<T> {
     await this.rateLimit()
-    if (!this.accessToken) await this.authenticate()
+    if (!this.isTokenValid()) await this.authenticate()
 
     const res = await fetchWithTimeout(this.buildUrl(path, query), {
       method: 'GET',
@@ -196,22 +200,62 @@ export class CsiClient {
     console.log(`[CsiClient] Authenticated (uid=${this.uid})`)
   }
 
-  // Paginated plant list. Loops until currentPage >= totalPages.
-  async getPlantList(): Promise<CsiPlant[]> {
-    const all: CsiPlant[] = []
+  // Paginated GET helper. Used by every list endpoint that returns either
+  // the standard pageV2 envelope `{records, totalPages, currentPage}` OR a
+  // bare array (some CSI endpoints return flat lists when small). Loops
+  // until either currentPage >= totalPages, an empty page, or the runaway
+  // guard. Caller-supplied mapper produces typed rows.
+  private async paginate<TRow, TItem>(
+    path: string,
+    pageSize: number,
+    extraQuery: Record<string, string | undefined>,
+    map: (row: any) => TItem | null,
+  ): Promise<TItem[]> {
+    const all: TItem[] = []
     let page = 1
 
     while (true) {
-      const data = await this.get<{
-        totalPages?: number
-        currentPage?: number
-        records?: any[]
-      }>('/open-api/plant/pageV2', { page: String(page), size: String(PLANT_LIST_PAGE_SIZE) })
+      const data = await this.get<TRow | any[]>(path, {
+        ...extraQuery,
+        page: String(page),
+        size: String(pageSize),
+      })
 
-      const records = safeArray<any>(data?.records)
-      for (const p of records) {
-        if (!p?.plantId) continue
-        all.push({
+      // Accept both shapes: paged envelope OR bare flat array.
+      const isPaged = data && typeof data === 'object' && !Array.isArray(data)
+      const records = isPaged
+        ? safeArray<any>((data as any).records)
+        : safeArray<any>(data)
+
+      for (const row of records) {
+        const mapped = map(row)
+        if (mapped !== null) all.push(mapped)
+      }
+
+      // Bare flat array → one page only. Paged envelope → respect totalPages.
+      if (!isPaged) break
+      const totalPages = Number((data as any).totalPages) || 1
+      const currentPage = Number((data as any).currentPage) || page
+      if (currentPage >= totalPages || records.length === 0) break
+      page++
+      if (page > PAGINATION_HARD_CAP) {
+        console.warn(`[CsiClient] paginate(${path}): stopping after ${PAGINATION_HARD_CAP} pages — suspected bad pagination response`)
+        break
+      }
+    }
+
+    return all
+  }
+
+  // Paginated plant list.
+  async getPlantList(): Promise<CsiPlant[]> {
+    return this.paginate<{ totalPages?: number; currentPage?: number; records?: any[] }, CsiPlant>(
+      '/open-api/plant/pageV2',
+      PLANT_LIST_PAGE_SIZE,
+      {},
+      (p) => {
+        if (!p?.plantId) return null
+        return {
           plantId: String(p.plantId),
           plantName: p.plantName || '',
           capacityKw: Number(p.capacity) || 0,
@@ -221,43 +265,32 @@ export class CsiClient {
           latitude: p.latitude !== undefined && p.latitude !== '' ? Number(p.latitude) : null,
           address: p.address || null,
           lastReportTime: p.lastReportTime || null,
-        })
-      }
-
-      const totalPages = Number(data?.totalPages) || 1
-      const currentPage = Number(data?.currentPage) || page
-      if (currentPage >= totalPages || records.length === 0) break
-      page++
-      // Hard guard against runaway loops on malformed responses.
-      if (page > 100) {
-        console.warn('[CsiClient] getPlantList: stopping after 100 pages (suspected bad pagination response)')
-        break
-      }
-    }
-
-    return all
+        }
+      },
+    )
   }
 
-  // Plant → device list. Uses /device/page (flat list, verified 2026-05-07).
-  // /plant/devices always returns [] — wrong endpoint per docs.
+  // Plant → device list. Uses /device/page (verified 2026-05-07; the
+  // /plant/devices/{id} endpoint always returns []). Paginates so plants
+  // with >DEVICE_LIST_PAGE_SIZE devices don't silently truncate.
   async getPlantDevices(plantId: string): Promise<CsiDevice[]> {
-    const data = await this.get<any[]>('/open-api/device/page', { plantId })
-    const devices: CsiDevice[] = []
-
-    for (const d of safeArray<any>(data)) {
-      if (!d?.deviceSn) continue
-      devices.push({
-        deviceId: String(d.deviceId || ''),
-        deviceSn: d.deviceSn,
-        deviceType: Number(d.deviceType) || 0,
-        deviceType2: Number(d.deviceType2) || 0,
-        ratePower: Number(d.ratePower) || 0,
-        status: Number(d.status) || 0,
-        productKey: d.productKey || '',
-        plantId: String(d.plantId || plantId),
-        collectorSn: d.upDeviceSn || '',
-      })
-    }
+    const devices = await this.paginate<{ totalPages?: number; currentPage?: number; records?: any[] }, CsiDevice>(
+      '/open-api/device/page',
+      DEVICE_LIST_PAGE_SIZE,
+      { plantId },
+      (d) => {
+        if (!d?.deviceSn) return null
+        return {
+          deviceId: String(d.deviceId || ''),
+          deviceSn: d.deviceSn,
+          deviceType: Number(d.deviceType) || 0,
+          deviceType2: Number(d.deviceType2) || 0,
+          status: Number(d.status) || 0,
+          productKey: d.productKey || '',
+          plantId: String(d.plantId || plantId),
+        }
+      },
+    )
 
     // Inverters only (deviceType === 2 per docs §6.1).
     return devices.filter((d) => d.deviceType === 2)
@@ -304,7 +337,7 @@ export class CsiClient {
               fieldCode: String(r.fieldCode),
               fieldName: r.fieldName || '',
               fieldUnitName: r.fieldUnitName || '',
-              data: (r.data !== undefined && r.data !== null) ? r.data : null,
+              data: r.data ?? null,
             })),
         })
       }
@@ -312,28 +345,21 @@ export class CsiClient {
     return out
   }
 
-  // Active alerts, paginated. Used for vendor_alarms refresh.
-  async getActiveAlerts(plantId?: string): Promise<CsiAlarm[]> {
-    const all: CsiAlarm[] = []
-    let page = 1
-
-    while (true) {
-      const data = await this.get<{
-        totalPages?: number
-        currentPage?: number
-        records?: any[]
-      }>('/open-api/alert/pageV2', {
-        plantId,
-        page: String(page),
-        size: '100',
-      })
-
-      const records = safeArray<any>(data?.records)
-      for (const a of records) {
-        if (!a?.alertId) continue
-        all.push({
+  // Active alerts for one plant. SolarMAN-derived alert endpoints typically
+  // require plantId to scope the result; calling with no plantId may either
+  // return [] or throw 400 — we don't depend on that behaviour. Sungrow
+  // iterates per-plant for the same reason; CSI follows that pattern via
+  // getAllActiveAlerts() below.
+  async getActiveAlertsForPlant(plantId: string): Promise<CsiAlarm[]> {
+    return this.paginate<{ totalPages?: number; currentPage?: number; records?: any[] }, CsiAlarm>(
+      '/open-api/alert/pageV2',
+      ALERT_LIST_PAGE_SIZE,
+      { plantId },
+      (a) => {
+        if (!a?.alertId) return null
+        return {
           alertId: String(a.alertId),
-          plantId: String(a.plantId || ''),
+          plantId: String(a.plantId || plantId),
           deviceSn: a.deviceSn || '',
           alertCode: String(a.alertCode || ''),
           alertCodeName: a.alertCodeName || '',
@@ -344,14 +370,23 @@ export class CsiClient {
           startTime: a.startTime || '',
           endTime: a.endTime || null,
           raw: a,
-        })
-      }
+        }
+      },
+    )
+  }
 
-      const totalPages = Number(data?.totalPages) || 1
-      const currentPage = Number(data?.currentPage) || page
-      if (currentPage >= totalPages || records.length === 0) break
-      page++
-      if (page > 100) break
+  // Aggregate active alerts across many plants (matches Sungrow's per-plant
+  // iteration). Each plant's call is rate-limited by the shared rateLimit
+  // promise so we never burst beyond 1 req/sec.
+  async getAllActiveAlerts(plantIds: string[]): Promise<CsiAlarm[]> {
+    const all: CsiAlarm[] = []
+    for (const plantId of plantIds) {
+      try {
+        const alerts = await this.getActiveAlertsForPlant(plantId)
+        all.push(...alerts)
+      } catch (err) {
+        console.error(`[CsiClient] getAllActiveAlerts: plant ${plantId} failed:`, err)
+      }
     }
 
     return all

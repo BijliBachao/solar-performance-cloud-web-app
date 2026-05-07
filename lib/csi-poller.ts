@@ -11,23 +11,37 @@ const HOUR_MS = 60 * 60 * 1000
 
 // CSI device status → our health_state. Per docs §6.3 the LABELS are
 // OnLine/OffLine/Alarm/Breakdown/Manual but the numeric encoding is
-// undocumented. Educated guess based on most-common API convention
-// (1=normal); verify against api-test-results.json on first run.
-//
-// CSI plant status: same uncertainty — using same heuristic until verified.
+// UNVERIFIED — first prod cycle log will tell. Default mapping is the
+// most common convention (1=normal); unrecognised values fall through to
+// disconnected (conservative) and emit a once-per-cycle warning so we
+// can fingerprint the real encoding from production logs.
+const seenUnknownHealthStates = new Set<number>()
 function mapCsiHealthState(status: number): number {
   if (status === 1) return 3 // online → healthy
   if (status === 2 || status === 4) return 2 // alarm/breakdown → faulty
   if (status === 0 || status === 3) return 1 // offline/unknown → disconnected
-  return 1 // any unrecognised value → disconnected (conservative)
+  // Unrecognised — log once per process so we can refine the mapping.
+  if (!seenUnknownHealthStates.has(status)) {
+    seenUnknownHealthStates.add(status)
+    console.warn(`[CSI] mapCsiHealthState: unrecognised status=${status} → defaulting to disconnected`)
+  }
+  return 1
 }
 
-// CSI alert level → our severity. Numeric encoding undocumented; the
-// API also returns alertLevelLabel which we use as a tiebreaker.
+// CSI alert level → our severity. Numeric encoding UNVERIFIED. The API
+// also returns alertLevelLabel which we use as a tiebreaker. Same once-
+// per-cycle warn pattern so production logs reveal the real encoding.
+const seenUnknownSeverities = new Set<string>()
 function mapCsiSeverity(level: number, label: string): 'CRITICAL' | 'WARNING' | 'INFO' {
   const lower = label.toLowerCase()
   if (level === 3 || lower.includes('critical') || lower.includes('fault')) return 'CRITICAL'
   if (level === 2 || lower.includes('warn')) return 'WARNING'
+  // Unrecognised level + label combo. Log once.
+  const key = `${level}:${lower}`
+  if (level !== 1 && level !== 0 && !seenUnknownSeverities.has(key)) {
+    seenUnknownSeverities.add(key)
+    console.warn(`[CSI] mapCsiSeverity: unrecognised level=${level} label="${label}" → defaulting to INFO`)
+  }
   return 'INFO'
 }
 
@@ -89,6 +103,9 @@ async function syncCsiPlants(client: CsiClient): Promise<void> {
         update: {
           plant_name: p.plantName,
           capacity_kw: p.capacityKw ? new Decimal(p.capacityKw) : null,
+          address: p.address,
+          latitude: p.latitude !== null ? new Decimal(p.latitude) : null,
+          longitude: p.longitude !== null ? new Decimal(p.longitude) : null,
           health_state: mapCsiHealthState(p.status),
           provider: PROVIDERS.CSI,
           last_synced: new Date(),
@@ -97,6 +114,9 @@ async function syncCsiPlants(client: CsiClient): Promise<void> {
           id: p.plantId,
           plant_name: p.plantName,
           capacity_kw: p.capacityKw ? new Decimal(p.capacityKw) : null,
+          address: p.address,
+          latitude: p.latitude !== null ? new Decimal(p.latitude) : null,
+          longitude: p.longitude !== null ? new Decimal(p.longitude) : null,
           health_state: mapCsiHealthState(p.status),
           provider: PROVIDERS.CSI,
           last_synced: new Date(),
@@ -301,6 +321,14 @@ async function processCsiDevice(
 async function fetchCsiAlarms(client: CsiClient): Promise<void> {
   console.log('[CSI] Fetching vendor alarms...')
   try {
+    // Need plant IDs first — SolarMAN-derived alert endpoints typically
+    // require plantId scoping (matches Sungrow's per-plant iteration).
+    const csiPlants = await prisma.plants.findMany({
+      where: { provider: PROVIDERS.CSI },
+      select: { id: true },
+    })
+    if (csiPlants.length === 0) return
+
     const csiDevices = await prisma.devices.findMany({
       where: { provider: PROVIDERS.CSI },
       select: { id: true, plant_id: true },
@@ -308,7 +336,7 @@ async function fetchCsiAlarms(client: CsiClient): Promise<void> {
     if (csiDevices.length === 0) return
     const deviceBySn = new Map(csiDevices.map((d) => [d.id, d]))
 
-    const alerts = await client.getActiveAlerts()
+    const alerts = await client.getAllActiveAlerts(csiPlants.map((p) => p.id))
     let stored = 0
 
     const seenIds = new Set<string>()

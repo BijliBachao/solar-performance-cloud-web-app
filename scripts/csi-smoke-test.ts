@@ -104,20 +104,24 @@ async function main() {
 
   const firstPlantId = String(plants.records[0].plantId)
 
-  // 3. Plant → device tree for first plant
-  console.log(`→ GET /open-api/plant/devices/${firstPlantId}`)
-  const devices = await callJson<any[]>(
+  // 3. Plant → device list. Verified 2026-05-07: /plant/devices/{id} returns
+  // [], the working endpoint is /device/page?plantId=. Response shape can be
+  // either a paged envelope {records,...} or a bare flat array — handle both.
+  console.log(`→ GET /open-api/device/page?plantId=${firstPlantId}&page=1&size=100`)
+  const devicesData = await callJson<any>(
     'plantDevices',
-    `${BASE}/open-api/plant/devices/${encodeURIComponent(firstPlantId)}`,
+    `${BASE}/open-api/device/page?plantId=${encodeURIComponent(firstPlantId)}&page=1&size=100`,
     { method: 'GET', headers: authedHeaders },
   )
-  dump.devices = devices
-  const totalChildren = devices.reduce((acc, c) => acc + (Array.isArray(c?.childDevice) ? c.childDevice.length : 0), 0)
-  const inverters = devices.flatMap((c) => (c?.childDevice || []).filter((d: any) => d?.deviceType === 2))
-  console.log(`  ✓ ${devices.length} collectors, ${totalChildren} total child devices, ${inverters.length} inverters`)
+  dump.devices = devicesData
+  const allDevices: any[] = Array.isArray(devicesData)
+    ? devicesData
+    : (devicesData?.records || [])
+  const inverters = allDevices.filter((d: any) => d?.deviceType === 2)
+  console.log(`  ✓ ${allDevices.length} total devices, ${inverters.length} inverters`)
   if (inverters[0]) {
     const i = inverters[0]
-    console.log(`  first inverter: sn=${i.deviceSn} type=${i.deviceType} type2=${i.deviceType2} status=${i.status} ratePower=${i.ratePower}W`)
+    console.log(`  first inverter: sn=${i.deviceSn} type=${i.deviceType} type2=${i.deviceType2} status=${i.status}`)
   }
   console.log()
 
@@ -164,17 +168,20 @@ async function main() {
     if (realData.length > 20) console.log(`    ... and ${realData.length - 20} more`)
     console.log()
 
-    // Attempt CSI parser regex match — what would parseRealData extract?
+    // Verify the live taxonomy still matches lib/csi-client.ts assumptions
+    // (verified 2026-05-07: lowercase dv/dc/dp + elec_day, scalar data).
     const stringRows = realData.filter((r: any) =>
-      /^DV\d+$|^DC\d+$|^DP\d+$/.test(r.fieldCode || '')
+      /^dv\d+$|^dc\d+$|^dp\d+$/.test(r.fieldCode || '')
     )
-    console.log(`  → DV/DC/DP fieldCodes matched (our parser): ${stringRows.length}`)
+    const dailyEnergyRow = realData.find((r: any) => r.fieldCode === 'elec_day')
+    console.log(`  → dv/dc/dp fieldCodes matched (our parser): ${stringRows.length}`)
+    console.log(`  → elec_day present: ${dailyEnergyRow ? `yes (data=${JSON.stringify(dailyEnergyRow.data)})` : 'NO'}`)
     if (stringRows.length === 0 && realData.length > 0) {
-      console.log('  ⚠⚠⚠  No DV/DC/DP fieldCodes found! Parser regex needs updating.')
+      console.log('  ⚠⚠⚠  No dv/dc/dp fieldCodes found! Parser regex may need updating.')
       console.log('  Likely candidates from realData:')
       const candidates = realData.filter((r: any) => {
         const name = (r.fieldName || '').toLowerCase()
-        const code = (r.fieldCode || '').toUpperCase()
+        const code = String(r.fieldCode || '')
         return name.includes('pv') || name.includes('string') || name.includes('voltage') || name.includes('current') || /\d/.test(code)
       })
       for (const c of candidates.slice(0, 15)) {

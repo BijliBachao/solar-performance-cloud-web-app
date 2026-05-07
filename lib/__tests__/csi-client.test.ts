@@ -204,20 +204,36 @@ describe('CsiClient.getPlantDevices — flat /device/page list + deviceType filt
   })
   afterEach(() => { vi.restoreAllMocks() })
 
-  it('filters to inverters (deviceType === 2) from flat list, maps upDeviceSn as collectorSn', async () => {
+  it('filters to inverters (deviceType === 2) from flat list', async () => {
     const { CsiClient } = await import('@/lib/csi-client')
     const client = new CsiClient()
     vi.spyOn(client as any, 'get').mockResolvedValue([
-      { deviceId: 100, deviceType: 2, deviceType2: 204, deviceSn: 'INV001', ratePower: 50000, status: 1, productKey: 'B204', plantId: 'plant-1', upDeviceSn: 'LG001' },
-      { deviceId: 101, deviceType: 1, deviceType2: 102, deviceSn: 'LG001', ratePower: 0, status: 1, productKey: 'B102', plantId: 'plant-1', upDeviceSn: '' },
-      { deviceId: 102, deviceType: 2, deviceType2: 204, deviceSn: 'INV002', ratePower: 50000, status: 1, productKey: 'B204', plantId: 'plant-1', upDeviceSn: 'LG001' },
+      { deviceId: 100, deviceType: 2, deviceType2: 204, deviceSn: 'INV001', status: 1, productKey: 'B204', plantId: 'plant-1' },
+      { deviceId: 101, deviceType: 1, deviceType2: 102, deviceSn: 'LG001', status: 1, productKey: 'B102', plantId: 'plant-1' },
+      { deviceId: 102, deviceType: 2, deviceType2: 204, deviceSn: 'INV002', status: 1, productKey: 'B204', plantId: 'plant-1' },
     ])
 
     const devices = await client.getPlantDevices('plant-1')
     expect(devices.map((d) => d.deviceSn)).toEqual(['INV001', 'INV002'])
     expect(devices.every((d) => d.deviceType === 2)).toBe(true)
-    expect(devices[0].collectorSn).toBe('LG001')
     expect(devices[0].plantId).toBe('plant-1')
+  })
+
+  it('paginates /device/page when totalPages > 1 (avoids silent truncation on plants with >100 devices)', async () => {
+    const { CsiClient } = await import('@/lib/csi-client')
+    const client = new CsiClient()
+    const get = vi.spyOn(client as any, 'get')
+    get.mockResolvedValueOnce({
+      totalPages: 2, currentPage: 1, pageSize: 100,
+      records: [{ deviceId: 1, deviceType: 2, deviceSn: 'INV001', plantId: 'p' }],
+    })
+    get.mockResolvedValueOnce({
+      totalPages: 2, currentPage: 2, pageSize: 100,
+      records: [{ deviceId: 2, deviceType: 2, deviceSn: 'INV002', plantId: 'p' }],
+    })
+    const devices = await client.getPlantDevices('p')
+    expect(devices.map((d) => d.deviceSn)).toEqual(['INV001', 'INV002'])
+    expect(get).toHaveBeenCalledTimes(2)
   })
 
   it('returns [] when response is null or empty', async () => {
