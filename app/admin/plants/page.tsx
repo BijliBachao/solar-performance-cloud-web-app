@@ -40,6 +40,7 @@ interface Plant {
   health_state: number | null
   provider?: string
   last_synced: string | null
+  last_reading_at: string | null
   assigned_org: { id: string; name: string } | null
   device_count: number
   alerts_today: AlertCounts
@@ -211,6 +212,58 @@ export default function AdminPlantsPage() {
     return 'secondary'
   }
 
+  // Combined plant status: takes the WORST of (health_state, reading
+  // freshness). A "healthy" plant whose last reading was 4 hours ago is
+  // operationally offline regardless of the cached health flag.
+  const plantStatus = (plant: Plant): {
+    key: 'healthy' | 'idle' | 'stale' | 'offline' | 'faulty'
+    label: string
+    relative: string
+  } => {
+    const healthKey = statusKeyFromPlantHealth(plant.health_state)
+    const lastReading = plant.last_reading_at ? new Date(plant.last_reading_at) : null
+    const ageMin = lastReading ? Math.floor((Date.now() - lastReading.getTime()) / 60000) : Infinity
+    const relative = lastReading ? formatDate(plant.last_reading_at) : '—'
+
+    // Reading-age severity (a plant must report every ~5 min — 15 min stale,
+    // >1h offline). Worst-of with health flag.
+    type ReadingKey = 'healthy' | 'idle' | 'stale' | 'offline'
+    let readingKey: ReadingKey = 'healthy'
+    if (!lastReading) readingKey = 'offline'
+    else if (ageMin > 60) readingKey = 'offline'
+    else if (ageMin > 15) readingKey = 'stale'
+    else if (ageMin > 5) readingKey = 'idle'
+
+    if (healthKey === 'critical') return { key: 'faulty', label: 'Faulty', relative }
+    if (readingKey === 'offline') return { key: 'offline', label: 'Offline', relative }
+    if (readingKey === 'stale') return { key: 'stale', label: 'Stale', relative }
+    if (readingKey === 'idle') return { key: 'idle', label: 'Idle', relative }
+    return { key: 'healthy', label: 'Healthy', relative }
+  }
+
+  const statusDot = (key: 'healthy' | 'idle' | 'stale' | 'offline' | 'faulty') => {
+    if (key === 'healthy') return STATUS_STYLES.healthy.dot
+    if (key === 'idle') return STATUS_STYLES.healthy.dot  // green still — slightly behind but fine
+    if (key === 'stale') return STATUS_STYLES.warning.dot
+    if (key === 'offline') return STATUS_STYLES.offline.dot
+    return STATUS_STYLES.critical.dot
+  }
+  const statusFg = (key: 'healthy' | 'idle' | 'stale' | 'offline' | 'faulty') => {
+    if (key === 'healthy' || key === 'idle') return 'text-slate-700'
+    if (key === 'stale') return STATUS_STYLES.warning.fg
+    if (key === 'offline') return 'text-slate-400'
+    return STATUS_STYLES.critical.fg
+  }
+
+  // Issues column: single colored count of unresolved alerts. Tooltip on
+  // hover gives the breakdown. Replaces the cryptic 142/6/10/138 number salad.
+  const issueSeverityKey = (counts: AlertCounts): 'critical' | 'warning' | 'info' | 'none' => {
+    if (counts.critical > 0) return 'critical'
+    if (counts.warning > 0) return 'warning'
+    if (counts.info > 0) return 'info'
+    return 'none'
+  }
+
   if (loading && plants.length === 0) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -235,66 +288,60 @@ export default function AdminPlantsPage() {
 
   return (
     <div>
-      {/* Page Header */}
+      {/* Page Header — stats bar + filters */}
       <div className="border-b border-slate-200 bg-white">
         <div className="px-4 sm:px-6 py-5">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex flex-col sm:flex-row sm:items-baseline gap-3 sm:gap-6">
-              <h1 className="text-2xl font-bold leading-tight tracking-tight text-slate-900">Plants</h1>
-              <div className="flex items-center gap-3 sm:gap-4 text-xs overflow-x-auto pb-1">
-                <div className="flex items-center gap-1.5 whitespace-nowrap">
-                  <span className="w-2 h-2 rounded-full bg-slate-400" />
-                  <span className="font-mono font-semibold text-slate-500">{stats.total}</span>
-                  <span className="text-slate-500">total</span>
-                </div>
-                <div className="flex items-center gap-1.5 whitespace-nowrap">
-                  <span className={`w-2 h-2 rounded-full ${STATUS_STYLES.healthy.dot}`} />
-                  <span className="font-mono font-semibold text-slate-700">{stats.assigned}</span>
-                  <span className="text-slate-500">assigned</span>
-                </div>
-                <div className="flex items-center gap-1.5 whitespace-nowrap">
-                  <span className={`w-2 h-2 rounded-full ${STATUS_STYLES.warning.dot}`} />
-                  <span className="font-mono font-semibold text-slate-700">{stats.unassigned}</span>
-                  <span className="text-slate-500">unassigned</span>
-                </div>
-                <span className="text-slate-300 hidden sm:inline">|</span>
-                <div className="flex items-center gap-1.5 whitespace-nowrap">
-                  <span className={`w-2 h-2 rounded-full ${STATUS_STYLES.healthy.dot}`} />
-                  <span className="font-mono font-semibold text-slate-700">{stats.healthy}</span>
-                  <span className="text-slate-500">healthy</span>
-                </div>
-                <div className="flex items-center gap-1.5 whitespace-nowrap">
-                  <span className={`w-2 h-2 rounded-full ${STATUS_STYLES.critical.dot}`} />
-                  <span className="font-mono font-semibold text-slate-700">{stats.faulty}</span>
-                  <span className="text-slate-500">faulty</span>
-                </div>
-                {stats.plants_with_alerts > 0 && (
-                  <div className="flex items-center gap-1.5 whitespace-nowrap">
-                    <span className={`w-2 h-2 rounded-full ${STATUS_STYLES.warning.dot}`} />
-                    <span className="font-mono font-semibold text-slate-700">{stats.plants_with_alerts}</span>
-                    <span className="text-slate-500">with alerts</span>
-                  </div>
-                )}
-              </div>
-            </div>
+          {/* Title row */}
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-2xl font-bold leading-tight tracking-tight text-slate-900">Plants</h1>
             <Button variant="ghost" size="sm" onClick={() => router.push('/admin')}>
               <ArrowLeft className="h-4 w-4 mr-1" strokeWidth={2} /> Back
             </Button>
           </div>
 
-          {/* Search & Filters */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-4">
-            <div className="relative flex-1 sm:max-w-xs">
+          {/* Stats — compact pill row */}
+          <div className="flex flex-wrap items-center gap-1.5 mb-4">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 rounded-full">
+              <span className="font-mono font-semibold text-slate-900 text-sm">{stats.total}</span>
+              <span className="text-slate-600 text-xs">plants</span>
+            </div>
+            <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${STATUS_STYLES.healthy.bg}`}>
+              <span className={`font-mono font-semibold text-sm ${STATUS_STYLES.healthy.fg}`}>{stats.healthy}</span>
+              <span className={`text-xs ${STATUS_STYLES.healthy.fg} opacity-80`}>healthy</span>
+            </div>
+            {stats.faulty > 0 && (
+              <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${STATUS_STYLES.critical.bg}`}>
+                <span className={`font-mono font-semibold text-sm ${STATUS_STYLES.critical.fg}`}>{stats.faulty}</span>
+                <span className={`text-xs ${STATUS_STYLES.critical.fg} opacity-80`}>faulty</span>
+              </div>
+            )}
+            {stats.unassigned > 0 && (
+              <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${STATUS_STYLES.warning.bg}`}>
+                <span className={`font-mono font-semibold text-sm ${STATUS_STYLES.warning.fg}`}>{stats.unassigned}</span>
+                <span className={`text-xs ${STATUS_STYLES.warning.fg} opacity-80`}>unassigned</span>
+              </div>
+            )}
+            {stats.plants_with_alerts > 0 && (
+              <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${STATUS_STYLES.warning.bg}`}>
+                <span className={`font-mono font-semibold text-sm ${STATUS_STYLES.warning.fg}`}>{stats.plants_with_alerts}</span>
+                <span className={`text-xs ${STATUS_STYLES.warning.fg} opacity-80`}>with open issues</span>
+              </div>
+            )}
+          </div>
+
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <div className="relative flex-1 sm:max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" strokeWidth={2} />
               <Input
-                placeholder="Search plants..."
+                placeholder="Search plants by name..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9 h-9"
               />
             </div>
             <Select value={providerFilter} onValueChange={setProviderFilter}>
-              <SelectTrigger className="w-full sm:w-[160px] h-9">
+              <SelectTrigger className="w-full sm:w-[170px] h-9 text-xs sm:text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -303,18 +350,18 @@ export default function AdminPlantsPage() {
                   const badge = providerBadge(provider)
                   return (
                     <SelectItem key={provider} value={provider}>
-                      {badge?.label || provider} ({count})
+                      {badge?.label || provider} · {count}
                     </SelectItem>
                   )
                 })}
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-[160px] h-9">
+              <SelectTrigger className="w-full sm:w-[150px] h-9 text-xs sm:text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ALL">All Status</SelectItem>
+                <SelectItem value="ALL">All assignment</SelectItem>
                 <SelectItem value="ASSIGNED">Assigned</SelectItem>
                 <SelectItem value="UNASSIGNED">Unassigned</SelectItem>
               </SelectContent>
@@ -335,124 +382,136 @@ export default function AdminPlantsPage() {
         </div>
       )}
 
-      {/* Table */}
+      {/* Table — 6 cols max, no horizontal scroll. Columns drop progressively
+           on smaller viewports; mobile collapses meta into the Plant cell. */}
       <div className="px-4 sm:px-6 py-4">
         <div className="border border-slate-200 rounded-sm overflow-hidden bg-white">
           <Table>
             <TableHeader>
               <TableRow className="bg-slate-50">
                 <TableHead className="whitespace-nowrap">Plant</TableHead>
-                <TableHead className="whitespace-nowrap hidden sm:table-cell">Capacity</TableHead>
-                <TableHead className="whitespace-nowrap text-center">Health</TableHead>
+                <TableHead className="whitespace-nowrap">Status</TableHead>
                 <TableHead className="whitespace-nowrap hidden md:table-cell">Issues</TableHead>
-                <TableHead className="whitespace-nowrap hidden sm:table-cell">Organization</TableHead>
-                <TableHead className="whitespace-nowrap text-center hidden md:table-cell">Devices</TableHead>
-                <TableHead className="whitespace-nowrap hidden md:table-cell">Last Synced</TableHead>
+                <TableHead className="whitespace-nowrap hidden md:table-cell">Devices · Capacity</TableHead>
+                <TableHead className="whitespace-nowrap hidden lg:table-cell">Organization</TableHead>
                 <TableHead className="whitespace-nowrap text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {plants.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-slate-400 py-12 text-sm">
+                  <TableCell colSpan={6} className="text-center text-slate-400 py-12 text-sm">
                     No plants found
                   </TableCell>
                 </TableRow>
               ) : (
                 plants.map((plant) => {
                   const badge = providerBadge(plant.provider)
+                  const status = plantStatus(plant)
+                  const issueKey = issueSeverityKey(plant.alerts_unresolved)
+                  const tooltipBreakdown = plant.alerts_unresolved.total > 0
+                    ? `${plant.alerts_unresolved.critical} critical · ${plant.alerts_unresolved.warning} warning · ${plant.alerts_unresolved.info} info`
+                    : 'No open issues'
                   return (
                     <TableRow
                       key={plant.id}
-                      className={!plant.assigned_org ? 'bg-amber-50/40' : ''}
+                      className={!plant.assigned_org ? 'bg-amber-50/30' : ''}
                     >
+                      {/* Plant: name + provider badge; on mobile, capacity + devices fold under */}
                       <TableCell>
                         <div
                           className="cursor-pointer group"
                           onClick={() => router.push(`/admin/plants/${plant.id}`)}
                         >
-                          <div className="font-semibold text-slate-900 text-sm flex items-center gap-1.5 group-hover:text-spc-green transition-colors">
+                          <div className="font-semibold text-slate-900 text-sm flex items-center gap-2 group-hover:text-spc-green transition-colors flex-wrap">
                             <Zap className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={2} />
-                            {plant.plant_name}
+                            <span className="truncate max-w-[180px] sm:max-w-none">{plant.plant_name}</span>
                             {badge && (
-                              <span className={`inline-flex items-center text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-sm border ${badge.bg} ${badge.fg} ${badge.border}`}>
+                              <span className={`inline-flex items-center text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ${badge.bg} ${badge.fg} ${badge.border} border whitespace-nowrap`}>
                                 {badge.label}
                               </span>
                             )}
                           </div>
-                          <div className="sm:hidden text-xs text-slate-500 font-mono mt-0.5">
-                            {plant.capacity_kw ? `${Number(plant.capacity_kw).toFixed(1)} kW` : 'N/A'}
+                          {/* Mobile-only meta line: capacity · devices · org */}
+                          <div className="md:hidden text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            <span className="font-mono">
+                              {plant.device_count} dev · {plant.capacity_kw ? `${Number(plant.capacity_kw).toFixed(1)} kW` : 'N/A'}
+                            </span>
+                            {plant.assigned_org ? (
+                              <span className="text-slate-500">· {plant.assigned_org.name}</span>
+                            ) : (
+                              <span className="text-amber-700 font-semibold">· Unassigned</span>
+                            )}
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="hidden sm:table-cell">
-                        <span className="text-sm font-mono text-slate-700">
-                          {plant.capacity_kw ? `${Number(plant.capacity_kw).toFixed(1)} kW` : 'N/A'}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant={healthBadgeVariant(plant.health_state)}>
-                          {plantHealthLabel(plant.health_state)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        {plant.alerts_unresolved.total === 0 && plant.alerts_today.total === 0 ? (
-                          <span className="text-slate-300">—</span>
-                        ) : (
-                          <div className="flex items-center gap-2 text-xs">
-                            {plant.alerts_today.critical > 0 && (
-                              <span className="flex items-center gap-1">
-                                <span className={`w-2 h-2 rounded-full ${STATUS_STYLES.critical.dot}`} />
-                                <span className="font-mono text-slate-700">{plant.alerts_today.critical}</span>
-                              </span>
-                            )}
-                            {plant.alerts_today.warning > 0 && (
-                              <span className="flex items-center gap-1">
-                                <span className={`w-2 h-2 rounded-full ${STATUS_STYLES.warning.dot}`} />
-                                <span className="font-mono text-slate-700">{plant.alerts_today.warning}</span>
-                              </span>
-                            )}
-                            {plant.alerts_today.info > 0 && (
-                              <span className="flex items-center gap-1">
-                                <span className={`w-2 h-2 rounded-full ${STATUS_STYLES.info.dot}`} />
-                                <span className="font-mono text-slate-700">{plant.alerts_today.info}</span>
-                              </span>
-                            )}
-                            {plant.alerts_unresolved.total > 0 && (
-                              <>
-                                {plant.alerts_today.total > 0 && <span className="text-slate-300">·</span>}
-                                <span className="text-slate-500 font-mono">{plant.alerts_unresolved.total} open</span>
-                              </>
-                            )}
+
+                      {/* Status: combined health + last reading. Two-line cell */}
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${statusDot(status.key)}`} />
+                          <div className="flex flex-col">
+                            <span className={`text-sm font-semibold leading-tight ${statusFg(status.key)}`}>
+                              {status.label}
+                            </span>
+                            <span className="text-xs text-slate-500 leading-tight">{status.relative}</span>
                           </div>
+                        </div>
+                      </TableCell>
+
+                      {/* Issues: single colored count + tooltip with breakdown */}
+                      <TableCell className="hidden md:table-cell">
+                        {issueKey === 'none' ? (
+                          <span className="text-slate-300 text-sm">—</span>
+                        ) : (
+                          <span
+                            title={tooltipBreakdown}
+                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold cursor-help ${
+                              issueKey === 'critical' ? STATUS_STYLES.critical.bg + ' ' + STATUS_STYLES.critical.fg :
+                              issueKey === 'warning'  ? STATUS_STYLES.warning.bg  + ' ' + STATUS_STYLES.warning.fg  :
+                                                        STATUS_STYLES.info.bg     + ' ' + STATUS_STYLES.info.fg
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${
+                              issueKey === 'critical' ? STATUS_STYLES.critical.dot :
+                              issueKey === 'warning'  ? STATUS_STYLES.warning.dot  :
+                                                        STATUS_STYLES.info.dot
+                            }`} />
+                            {plant.alerts_unresolved.total} open
+                          </span>
                         )}
                       </TableCell>
-                      <TableCell className="hidden sm:table-cell">
+
+                      {/* Devices · Capacity (combined to save a column) */}
+                      <TableCell className="hidden md:table-cell">
+                        <span className="text-sm font-mono text-slate-600 whitespace-nowrap">
+                          {plant.device_count} dev · {plant.capacity_kw ? `${Number(plant.capacity_kw).toFixed(1)} kW` : 'N/A'}
+                        </span>
+                      </TableCell>
+
+                      {/* Organization (desktop only) */}
+                      <TableCell className="hidden lg:table-cell">
                         {plant.assigned_org ? (
                           <div className="flex items-center gap-1.5">
                             <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={2} />
-                            <span className="text-sm text-slate-700">{plant.assigned_org.name}</span>
+                            <span className="text-sm text-slate-700 truncate max-w-[180px]">{plant.assigned_org.name}</span>
                           </div>
                         ) : (
-                          <span className="text-sm text-amber-700 font-semibold">Unassigned</span>
+                          <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Unassigned</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-center hidden md:table-cell">
-                        <span className="text-sm font-mono text-slate-600">{plant.device_count}</span>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        <span className="text-sm text-slate-500">{formatDate(plant.last_synced)}</span>
-                      </TableCell>
+
+                      {/* Actions: 2 distinct buttons, never wrapped */}
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex items-center justify-end gap-1.5">
                           {plant.assigned_org ? (
                             <button
                               onClick={() => handleUnassign(plant)}
                               disabled={quickAssignLoading === plant.id}
-                              className="text-amber-600 hover:text-amber-700 text-xs sm:text-sm font-semibold disabled:opacity-50 transition-colors"
+                              className="px-2 py-1 text-xs font-semibold rounded border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50 transition-colors whitespace-nowrap"
                             >
                               {quickAssignLoading === plant.id ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" strokeWidth={2} />
+                                <Loader2 className="w-3 h-3 animate-spin" strokeWidth={2} />
                               ) : (
                                 'Unassign'
                               )}
@@ -460,16 +519,16 @@ export default function AdminPlantsPage() {
                           ) : (
                             <button
                               onClick={() => openAssignModal(plant)}
-                              className="text-spc-green hover:text-spc-green-dark text-xs sm:text-sm font-semibold transition-colors"
+                              className="px-2 py-1 text-xs font-semibold rounded border border-spc-green/30 bg-spc-green/10 text-spc-green hover:bg-spc-green/20 transition-colors whitespace-nowrap"
                             >
                               Assign
                             </button>
                           )}
                           <button
                             onClick={() => router.push(`/admin/plants/${plant.id}`)}
-                            className="text-slate-600 hover:text-slate-900 text-xs sm:text-sm font-semibold ml-2 sm:ml-3 flex items-center gap-0.5 transition-colors"
+                            className="px-2 py-1 text-xs font-semibold rounded border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors whitespace-nowrap inline-flex items-center gap-0.5"
                           >
-                            View <ChevronRight className="w-3.5 h-3.5" strokeWidth={2} />
+                            View <ChevronRight className="w-3 h-3" strokeWidth={2.5} />
                           </button>
                         </div>
                       </TableCell>

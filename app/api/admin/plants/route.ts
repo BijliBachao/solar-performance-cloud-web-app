@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     const plants = await prisma.plants.findMany({
       where,
       include: {
+        devices: { select: { id: true } },  // need device IDs to compute last reading per plant
         plant_assignments: {
           include: {
             organizations: { select: { id: true, name: true } },
@@ -35,9 +36,10 @@ export async function GET(request: NextRequest) {
     })
 
     const plantIds = plants.map(p => p.id)
+    const allDeviceIds = plants.flatMap(p => p.devices.map(d => d.id))
     const todayStart = new Date(new Date().setHours(0, 0, 0, 0))
 
-    const [unresolvedByPlant, todayByPlant] = await Promise.all([
+    const [unresolvedByPlant, todayByPlant, lastReadingByDevice] = await Promise.all([
       prisma.alerts.groupBy({
         by: ['plant_id', 'severity'],
         where: { plant_id: { in: plantIds }, resolved_at: null },
@@ -51,7 +53,36 @@ export async function GET(request: NextRequest) {
         },
         _count: { id: true },
       }),
+      // MAX(timestamp) per device — folded into per-plant max below.
+      // Bounded to last 7 days so the query hits the recent partition only;
+      // a plant whose freshest reading is older than that is "offline" from
+      // the dashboard's perspective anyway. Index: (device_id, timestamp DESC).
+      allDeviceIds.length === 0
+        ? Promise.resolve([] as Array<{ device_id: string; _max: { timestamp: Date | null } }>)
+        : prisma.string_measurements.groupBy({
+            by: ['device_id'],
+            where: {
+              device_id: { in: allDeviceIds },
+              timestamp: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+            },
+            _max: { timestamp: true },
+          }),
     ])
+
+    // Per-device latest timestamp → per-plant max via the plants→devices map.
+    const lastReadingByDeviceMap = new Map<string, Date>()
+    for (const row of lastReadingByDevice) {
+      if (row._max.timestamp) lastReadingByDeviceMap.set(row.device_id, row._max.timestamp)
+    }
+    const lastReadingByPlant = new Map<string, Date>()
+    for (const p of plants) {
+      let maxTs: Date | null = null
+      for (const d of p.devices) {
+        const ts = lastReadingByDeviceMap.get(d.id)
+        if (ts && (!maxTs || ts > maxTs)) maxTs = ts
+      }
+      if (maxTs) lastReadingByPlant.set(p.id, maxTs)
+    }
 
     const buildAlertMap = (rows: typeof unresolvedByPlant) => {
       const map = new Map<string, { critical: number; warning: number; info: number; total: number }>()
@@ -73,13 +104,17 @@ export async function GET(request: NextRequest) {
     const todayMap = buildAlertMap(todayByPlant)
     const emptyAlerts = { critical: 0, warning: 0, info: 0, total: 0 }
 
-    const formatted = plants.map((p) => ({
-      ...p,
-      assigned_org: p.plant_assignments[0]?.organizations || null,
-      device_count: p._count.devices,
-      alerts_today: todayMap.get(p.id) || emptyAlerts,
-      alerts_unresolved: unresolvedMap.get(p.id) || emptyAlerts,
-    }))
+    const formatted = plants.map((p) => {
+      const { devices: _devices, ...rest } = p  // strip device-id list, only used for lastReading rollup
+      return {
+        ...rest,
+        assigned_org: p.plant_assignments[0]?.organizations || null,
+        device_count: p._count.devices,
+        alerts_today: todayMap.get(p.id) || emptyAlerts,
+        alerts_unresolved: unresolvedMap.get(p.id) || emptyAlerts,
+        last_reading_at: lastReadingByPlant.get(p.id)?.toISOString() ?? null,
+      }
+    })
 
     // Filter by assignment status after formatting
     const filtered = status === 'ALL'
