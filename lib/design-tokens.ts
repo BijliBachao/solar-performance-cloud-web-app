@@ -212,7 +212,7 @@ export function gradeFromScore(score: number | null): HealthGrade {
 // ━━━ PROVIDER BADGE STYLES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Per-inverter-brand badge styling. Used wherever a plant/device is listed.
 
-export type ProviderKey = 'huawei' | 'solis' | 'growatt' | 'sungrow'
+export type ProviderKey = 'huawei' | 'solis' | 'growatt' | 'sungrow' | 'csi'
 
 export interface ProviderBadgeStyle {
   fg: string
@@ -245,6 +245,12 @@ export const PROVIDER_BADGE_STYLES: Record<ProviderKey, ProviderBadgeStyle> = {
     bg: 'bg-violet-50',
     border: 'border-violet-200',
     label: 'Sungrow',
+  },
+  csi: {
+    fg: 'text-emerald-700',
+    bg: 'bg-emerald-50',
+    border: 'border-emerald-200',
+    label: 'Canadian Solar',
   },
 }
 

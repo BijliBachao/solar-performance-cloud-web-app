@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
-import { CsiClient, CsiDeviceData, parseRealData } from '@/lib/csi-client'
+import { CsiClient, CsiDevice, CsiDeviceData, parseRealData } from '@/lib/csi-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
 import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches } from '@/lib/poller-utils'
 
@@ -172,40 +172,55 @@ async function syncCsiDevices(client: CsiClient): Promise<void> {
     return
   }
 
-  let totalInverters = 0
-
+  // Dedupe by deviceSn: observed 2026-05-07 that /open-api/device/page can
+  // return the same inverter under multiple plant queries (CSI's plantId
+  // filter is loose). Without dedupe we'd upsert 5×5=25 times for 5 unique
+  // inverters, AND each iteration would overwrite plant_id with whichever
+  // plant was iterated last — so devices ended up associated with the wrong
+  // plant. Use the device's own plantId from the API response, not the
+  // loop's plant.id.
+  const devicesBySn = new Map<string, CsiDevice>()
   for (const plant of plants) {
     const devices = await client.getPlantDevices(plant.id)
-    if (devices.length === 0) continue
+    for (const d of devices) {
+      if (!devicesBySn.has(d.deviceSn)) {
+        devicesBySn.set(d.deviceSn, d)
+      }
+    }
+  }
+  const allDevices = Array.from(devicesBySn.values())
 
-    await prisma.$transaction(
-      devices.map((d) =>
-        prisma.devices.upsert({
-          where: { id: d.deviceSn },  // CSI devices keyed by SN (no separate id)
-          update: {
-            device_name: d.deviceSn,
-            plant_id: plant.id,
-            device_type_id: DEVICE_TYPE_IDS.CSI_INVERTER,
-            // max_strings unknown until first /device/data response — leave
-            // null and let processCsiDevice fill it in based on realData parse.
-            provider: PROVIDERS.CSI,
-            last_synced: new Date(),
-          },
-          create: {
-            id: d.deviceSn,
-            plant_id: plant.id,
-            device_name: d.deviceSn,
-            device_type_id: DEVICE_TYPE_IDS.CSI_INVERTER,
-            provider: PROVIDERS.CSI,
-            last_synced: new Date(),
-          },
-        }),
-      ),
-    )
-    totalInverters += devices.length
+  if (allDevices.length === 0) {
+    console.log('[CSI] Synced 0 inverters')
+    return
   }
 
-  console.log(`[CSI] Synced ${totalInverters} inverters`)
+  await prisma.$transaction(
+    allDevices.map((d) =>
+      prisma.devices.upsert({
+        where: { id: d.deviceSn },  // CSI devices keyed by SN (no separate id)
+        update: {
+          device_name: d.deviceSn,
+          plant_id: d.plantId,  // trust API response, not iteration var
+          device_type_id: DEVICE_TYPE_IDS.CSI_INVERTER,
+          // max_strings unknown until first /device/data response — leave
+          // null and let processCsiDevice fill it in based on realData parse.
+          provider: PROVIDERS.CSI,
+          last_synced: new Date(),
+        },
+        create: {
+          id: d.deviceSn,
+          plant_id: d.plantId,
+          device_name: d.deviceSn,
+          device_type_id: DEVICE_TYPE_IDS.CSI_INVERTER,
+          provider: PROVIDERS.CSI,
+          last_synced: new Date(),
+        },
+      }),
+    ),
+  )
+
+  console.log(`[CSI] Synced ${allDevices.length} inverters`)
 }
 
 async function fetchCsiStringData(client: CsiClient): Promise<void> {
