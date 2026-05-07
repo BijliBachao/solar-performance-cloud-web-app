@@ -454,7 +454,7 @@ export default function AdminPlantsPage() {
                         className="px-4 py-2.5 cursor-pointer"
                         onClick={() => router.push(`/admin/plants/${plant.id}`)}
                       >
-                        <div className="font-medium text-sm text-slate-900 group-hover:text-slate-950 truncate max-w-[220px] sm:max-w-none">
+                        <div className="font-medium text-sm text-slate-900 group-hover:text-slate-950 truncate max-w-[220px] sm:max-w-[280px] lg:max-w-[360px]">
                           {plant.plant_name}
                         </div>
                         {/* Mobile-only meta line — capacity/devices on first
@@ -462,8 +462,12 @@ export default function AdminPlantsPage() {
                              wraps cleanly rather than truncating off-screen. */}
                         <div className="md:hidden mt-0.5 text-xs text-slate-500 leading-tight">
                           <div className="truncate">
-                            {badge?.label}
-                            <span className="mx-1 text-slate-300">·</span>
+                            {badge?.label && (
+                              <>
+                                {badge.label}
+                                <span className="mx-1 text-slate-300">·</span>
+                              </>
+                            )}
                             {plant.device_count} dev
                             {plant.capacity_kw && (
                               <>
@@ -607,6 +611,15 @@ export default function AdminPlantsPage() {
             <div className="grid grid-cols-[100px_1fr] px-3 py-2 text-sm">
               <span className="text-slate-500">Organization</span>
               <span className="text-slate-900 font-medium truncate">{unassignConfirm?.assigned_org?.name}</span>
+            </div>
+            <div className="grid grid-cols-[100px_1fr] px-3 py-2 text-sm">
+              <span className="text-slate-500">Losing access to</span>
+              <span className="text-slate-900 font-mono tabular-nums">
+                {unassignConfirm?.device_count ?? 0} device{unassignConfirm?.device_count === 1 ? '' : 's'}
+                {unassignConfirm?.capacity_kw && (
+                  <span className="text-slate-500"> · {Number(unassignConfirm.capacity_kw).toFixed(1)} kW</span>
+                )}
+              </span>
             </div>
           </div>
 
