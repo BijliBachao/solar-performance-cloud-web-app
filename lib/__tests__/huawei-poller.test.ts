@@ -95,7 +95,7 @@ describe('pollHuawei — degraded-path resilience', () => {
 
     mockPrisma.plants.findMany.mockResolvedValue([{ id: 'NE=1' }])
     mockPrisma.devices.findMany.mockResolvedValue([
-      { id: '100', plant_id: 'NE=1', device_type_id: 1, max_strings: null },
+      { id: '100', plant_id: 'NE=1', device_type_id: 1, max_strings: null, model: null },
     ])
 
     const { pollHuawei } = await import('@/lib/huawei-poller')
@@ -112,10 +112,77 @@ describe('pollHuawei — degraded-path resilience', () => {
     huaweiClientMock.getDeviceRealtimeData.mockResolvedValue([null])
 
     mockPrisma.devices.findMany.mockResolvedValue([
-      { id: '100', plant_id: 'NE=1', device_type_id: 1, max_strings: 4 },
+      { id: '100', plant_id: 'NE=1', device_type_id: 1, max_strings: 4, model: null },
     ])
 
     const { pollHuawei } = await import('@/lib/huawei-poller')
     await expect(pollHuawei()).resolves.toBeUndefined()
+  })
+
+  it('lookup overrides stale stored max_strings — production self-heal (issue from review 2026-05-07)', async () => {
+    // Reproduces the user's production case: device row has model=SUN2000-115KTL-M0
+    // and max_strings=14 (an old undercount from heuristic detection). After
+    // this poll, max_strings must be persisted as 20 — the value from the
+    // datasheet lookup — even though only 1 string is currently producing.
+    huaweiClientMock.getPlantList.mockResolvedValue([])
+    huaweiClientMock.getDeviceList.mockResolvedValue([])
+    huaweiClientMock.getPlantRealKpi.mockResolvedValue([])
+    huaweiClientMock.getActiveAlarms.mockResolvedValue([])
+    huaweiClientMock.getDeviceRealtimeData.mockResolvedValue([
+      { devId: '100', dataItemMap: { pv1_u: 600, pv1_i: 5, day_cap: 50 } },
+    ])
+
+    mockPrisma.devices.findMany.mockResolvedValue([
+      {
+        id: '100',
+        plant_id: 'NE=1',
+        device_type_id: 1,
+        max_strings: 14,
+        model: 'SUN2000-115KTL-M0',
+      },
+    ])
+
+    const { pollHuawei } = await import('@/lib/huawei-poller')
+    await pollHuawei()
+
+    expect(mockPrisma.devices.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: '100' },
+        data: { max_strings: 20 },
+      }),
+    )
+  })
+
+  it('unknown model: does NOT update max_strings when stored is already non-null and detected is not greater', async () => {
+    // V500R023C00SPC156 is firmware (the historical bug — we used to store
+    // this in the model column). Lookup must return null and the heuristic
+    // stays the source of truth. With max_strings=4 already stored and
+    // detectedMax also=2, no DB write should fire (avoids redundant upserts
+    // every 5-minute poll).
+    huaweiClientMock.getPlantList.mockResolvedValue([])
+    huaweiClientMock.getDeviceList.mockResolvedValue([])
+    huaweiClientMock.getPlantRealKpi.mockResolvedValue([])
+    huaweiClientMock.getActiveAlarms.mockResolvedValue([])
+    huaweiClientMock.getDeviceRealtimeData.mockResolvedValue([
+      { devId: '100', dataItemMap: { pv1_u: 600, pv1_i: 5, pv2_u: 600, pv2_i: 5, day_cap: 50 } },
+    ])
+
+    mockPrisma.devices.findMany.mockResolvedValue([
+      {
+        id: '100',
+        plant_id: 'NE=1',
+        device_type_id: 1,
+        max_strings: 4,
+        model: 'V500R023C00SPC156',
+      },
+    ])
+
+    const { pollHuawei } = await import('@/lib/huawei-poller')
+    await pollHuawei()
+
+    // No max_strings update should fire — stored 4 ≥ detected 2.
+    const calls = mockPrisma.devices.update.mock.calls
+    const maxStringUpdates = calls.filter(([arg]) => 'max_strings' in (arg?.data ?? {}))
+    expect(maxStringUpdates).toHaveLength(0)
   })
 })

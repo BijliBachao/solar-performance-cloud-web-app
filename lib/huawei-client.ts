@@ -53,6 +53,12 @@ export interface Device {
   devTypeId: number
   stationCode: string
   softwareVersion?: string
+  /** Hardware model name (e.g. "SUN2000-100KTL-M2"). Use for max-strings lookup. */
+  model?: string
+  /** Inverter model. Per docs always equals `model` for inverters; kept as a fallback. */
+  invType?: string
+  /** Serial number — useful for support tickets / diagnostics. */
+  esnCode?: string
 }
 
 export interface DeviceData {
@@ -313,6 +319,13 @@ class HuaweiClient {
       devTypeId: d.devTypeId,
       stationCode: d.stationCode,
       softwareVersion: d.softwareVersion,
+      // Hardware model name. Per docs `model` and `invType` are the same
+      // string for inverters; we keep both fields and let the consumer
+      // prefer `model` with `invType` as a fallback (some firmware /
+      // device types omit one).
+      model: d.model,
+      invType: d.invType,
+      esnCode: d.esnCode,
     }))
   }
 

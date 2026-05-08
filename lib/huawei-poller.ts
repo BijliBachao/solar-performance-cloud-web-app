@@ -4,11 +4,34 @@ import { Decimal } from '@prisma/client/runtime/library'
 import { PROVIDERS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
 import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches, safeArray, safeObject, safeFloat } from '@/lib/poller-utils'
 import { ACTIVE_CURRENT_THRESHOLD } from '@/lib/string-health'
+import { getHuaweiMaxStrings } from '@/lib/huawei-model-strings'
 
+// These three "last sync" timestamps are intentionally process-local
+// (module-scoped). PM2 fully restarts the worker on every deploy, which
+// resets them to 0 — that's what makes "merge → deploy → wait one cycle"
+// safe: the first post-deploy poll re-runs the full sync chain (plant
+// list, device list including hardware model name, alarm list) before
+// any string-level work, so a fix to syncDevices self-heals every device
+// in the first 5-minute cycle after deploy. If pollers are ever moved
+// off PM2 to a runtime that hot-reloads modules without restarting the
+// process, these gates need to be moved into a database row.
 let lastPlantSync = 0
 let lastDeviceSync = 0
 let lastAlarmSync = 0
 const HOUR_MS = 60 * 60 * 1000
+
+// Models we've already warned about — keeps the unknown-model log to one
+// line per process per model, so production logs don't fill up.
+const warnedUnknownModels = new Set<string>()
+function warnUnknownHuaweiModelOnce(model: string): void {
+  if (warnedUnknownModels.has(model)) return
+  warnedUnknownModels.add(model)
+  console.warn(
+    `[Huawei] Unknown inverter model "${model}" — falling back to runtime ` +
+      `string-count detection. Add this model to lib/huawei-model-strings.ts ` +
+      `with its physical PV input count from the Huawei datasheet.`
+  )
+}
 
 export async function pollHuawei(): Promise<void> {
   console.log('[Huawei] Starting poll cycle...')
@@ -119,8 +142,23 @@ async function syncDevices(): Promise<void> {
   )
 
   await prisma.$transaction(
-    inverters.map((device) =>
-      prisma.devices.upsert({
+    inverters.map((device) => {
+      // Hardware model is what we want for the max-strings lookup.
+      // Huawei docs: `model` and `invType` carry the hardware name (e.g.
+      // SUN2000-100KTL-M2). We DELIBERATELY do not fall back to
+      // `softwareVersion` (e.g. V500R023C00SPC156) — that's firmware and
+      // storing it here is exactly the bug we're fixing. If both `model`
+      // and `invType` are missing, leave `model` null and let the lookup
+      // fall through to runtime detection (with one warning).
+      // Updating on every sync (not just create) lets the next poll cycle
+      // self-heal devices that were created before this fix shipped.
+      const hardwareModel = device.model || device.invType || null
+      const lookupMaxStrings = getHuaweiMaxStrings(hardwareModel)
+      if (hardwareModel && lookupMaxStrings === null) {
+        warnUnknownHuaweiModelOnce(hardwareModel)
+      }
+
+      return prisma.devices.upsert({
         where: { id: String(device.id) },
         update: {
           device_name: device.devName,
@@ -128,19 +166,24 @@ async function syncDevices(): Promise<void> {
           device_type_id: device.devTypeId,
           provider: PROVIDERS.HUAWEI,
           last_synced: new Date(),
+          // Refresh hardware model on every sync so the lookup stays accurate.
+          ...(hardwareModel ? { model: hardwareModel } : {}),
+          // When the lookup yields a definitive answer, that is the source of
+          // truth. Lookup is authoritative; runtime detection is the fallback.
+          ...(lookupMaxStrings !== null ? { max_strings: lookupMaxStrings } : {}),
         },
         create: {
           id: String(device.id),
           plant_id: device.stationCode,
           device_name: device.devName,
           device_type_id: device.devTypeId,
-          model: device.softwareVersion || null,
-          max_strings: null,
+          model: hardwareModel,
+          max_strings: lookupMaxStrings,
           provider: PROVIDERS.HUAWEI,
           last_synced: new Date(),
         },
       })
-    )
+    })
   )
 
   console.log(
@@ -160,6 +203,9 @@ async function fetchStringData(): Promise<void> {
       plant_id: true,
       device_type_id: true,
       max_strings: true,
+      // Needed so processHuaweiDeviceData can prefer the model-based lookup
+      // (authoritative) over the runtime detection (heuristic).
+      model: true,
     },
   })
 
@@ -209,7 +255,7 @@ async function fetchStringData(): Promise<void> {
 }
 
 async function processHuaweiDeviceData(
-  device: { id: string; plant_id: string; device_type_id: number; max_strings: number | null },
+  device: { id: string; plant_id: string; device_type_id: number; max_strings: number | null; model: string | null },
   data: any,
 ): Promise<void> {
   // Guard against Huawei returning a device with no dataItemMap at all
@@ -217,9 +263,33 @@ async function processHuaweiDeviceData(
   // access below throws TypeError and crashes this device's processing).
   const dim = safeObject(data.dataItemMap)
 
-  const maxStrings = device.max_strings || detectMaxStrings(dim)
-  // Update max_strings if not yet set or if we found MORE (daytime has more data)
-  if (maxStrings > 0 && (!device.max_strings || maxStrings > device.max_strings)) {
+  // Source of truth for "how many strings does this inverter have":
+  //   1. Hardware-model lookup (Huawei datasheet table) — authoritative.
+  //   2. max(stored value, currently-detected count) — grows monotonically
+  //      for unknown-model devices as more strings produce through the day.
+  // detectMaxStrings only counts strings currently producing > 0.1 A, so
+  // it under-counts open-circuit / dead / temporarily-zero strings. The
+  // lookup is far more accurate when the model is known.
+  const lookupMaxStrings = getHuaweiMaxStrings(device.model)
+  if (device.model && lookupMaxStrings === null) {
+    warnUnknownHuaweiModelOnce(device.model)
+  }
+  const detectedMax = detectMaxStrings(dim)
+  // For unknown-model devices, take the max of stored and detected. This
+  // preserves the pre-existing "highest-seen-ever" semantic and actually
+  // grows the stored value when more strings come online (e.g. as the
+  // morning warms up). For known-model devices, the lookup is the answer
+  // and detection is ignored — the inverter has exactly the slots its
+  // datasheet describes, regardless of which ones are producing right now.
+  const maxStrings = lookupMaxStrings ?? Math.max(device.max_strings ?? 0, detectedMax)
+  // Persist when:
+  //   - the lookup gives a definitive value that differs from what's stored, or
+  //   - lookup is unknown AND the new max is strictly greater than stored
+  //     (avoids redundant writes every poll cycle).
+  const shouldPersist =
+    (lookupMaxStrings !== null && lookupMaxStrings !== device.max_strings) ||
+    (lookupMaxStrings === null && maxStrings > (device.max_strings ?? 0))
+  if (maxStrings > 0 && shouldPersist) {
     await prisma.devices.update({
       where: { id: device.id },
       data: { max_strings: maxStrings },
