@@ -11,7 +11,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['lib/__tests__/**/*.test.ts'],
+    include: ['lib/__tests__/**/*.test.ts', 'app/**/__tests__/**/*.test.ts'],
     // Pollers transitively import @prisma/client which loads native bindings
     // at module-evaluation time. We mock those modules in each test file, but
     // setting globals=false keeps a clean module graph per test file.
