@@ -85,22 +85,40 @@ export async function GET(
       nativeDailyRows.map(r => [r.device_id, Number(r.native_kwh || 0)])
     )
 
-    const deviceStrings = await Promise.all(
-      devices.map(async (device) => {
-        // Latest measurement per string (for real-time status)
-        const latestMeasurements = await prisma.string_measurements.findMany({
-          where: { device_id: device.id },
-          orderBy: { timestamp: 'desc' },
-          take: 100,
-          distinct: ['string_number'],
+    // Batch both string_measurements reads across all devices in one query each,
+    // then group in memory. Sentry flagged this loop as N+1 — on a 10-inverter
+    // plant the prior code fired 20 round-trips.
+    const allLatest = deviceIds.length > 0
+      ? await prisma.string_measurements.findMany({
+          where: { device_id: { in: deviceIds } },
+          orderBy: [{ device_id: 'asc' }, { timestamp: 'desc' }],
+          distinct: ['device_id', 'string_number'],
         })
+      : []
+    const latestByDevice = new Map<string, typeof allLatest>()
+    for (const m of allLatest) {
+      const arr = latestByDevice.get(m.device_id) || []
+      arr.push(m)
+      latestByDevice.set(m.device_id, arr)
+    }
 
-        // Today's measurements per string (for energy calculation)
-        const todayMeasurements = await prisma.string_measurements.findMany({
-          where: { device_id: device.id, timestamp: { gte: todayStart } },
-          select: { string_number: true, power: true, timestamp: true },
+    const allToday = deviceIds.length > 0
+      ? await prisma.string_measurements.findMany({
+          where: { device_id: { in: deviceIds }, timestamp: { gte: todayStart } },
+          select: { device_id: true, string_number: true, power: true, timestamp: true },
           orderBy: { timestamp: 'asc' },
         })
+      : []
+    const todayByDevice = new Map<string, typeof allToday>()
+    for (const m of allToday) {
+      const arr = todayByDevice.get(m.device_id) || []
+      arr.push(m)
+      todayByDevice.set(m.device_id, arr)
+    }
+
+    const deviceStrings = devices.map((device) => {
+        const latestMeasurements = latestByDevice.get(device.id) || []
+        const todayMeasurements = todayByDevice.get(device.id) || []
 
         // Group today's measurements by string for trapezoidal kWh
         const todayByString = new Map<number, Array<{ power: any; timestamp: Date }>>()
@@ -198,7 +216,6 @@ export async function GET(
           native_kwh_today: nativeKwhToday && nativeKwhToday > 0 ? nativeKwhToday : null,
         }
       })
-    )
 
     return NextResponse.json({ devices: deviceStrings })
   } catch (error) {
