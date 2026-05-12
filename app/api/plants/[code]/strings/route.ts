@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
 import { requirePlantAccess } from '@/lib/api-access'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
+import { Decimal } from '@prisma/client/runtime/library'
 import { INVERTER_DEVICE_TYPE_IDS } from '@/lib/constants'
 import {
   isStale, classifyRealtime, leaveOneOutAvg, activeAvg,
@@ -34,6 +36,16 @@ function trapezoidalKwh(
     }
   }
   return energyWh / 1000
+}
+
+type LatestRow = {
+  device_id: string
+  plant_id: string
+  timestamp: Date
+  string_number: number
+  voltage: Decimal | null
+  current: Decimal | null
+  power: Decimal | null
 }
 
 export async function GET(
@@ -78,30 +90,37 @@ export async function GET(
       new Date(Date.now() + 5 * 60 * 60 * 1000).getUTCDate(),
     ))
     const nativeDailyRows = await prisma.device_daily.findMany({
-      where: { device_id: { in: devices.map(d => d.id) }, date: todayDate },
+      where: { device_id: { in: deviceIds }, date: todayDate },
       select: { device_id: true, native_kwh: true },
     })
     const nativeByDevice = new Map(
       nativeDailyRows.map(r => [r.device_id, Number(r.native_kwh || 0)])
     )
 
-    // Batch both string_measurements reads across all devices in one query each,
-    // then group in memory. Sentry flagged this loop as N+1 — on a 10-inverter
-    // plant the prior code fired 20 round-trips.
-    const allLatest = deviceIds.length > 0
-      ? await prisma.string_measurements.findMany({
-          where: { device_id: { in: deviceIds } },
-          orderBy: [{ device_id: 'asc' }, { timestamp: 'desc' }],
-          distinct: ['device_id', 'string_number'],
-        })
+    // Latest measurement per (device, string) across the whole plant in ONE query.
+    // Uses Postgres DISTINCT ON so dedup happens server-side — returns at most
+    // devices × max_strings rows (~240 worst-case) regardless of history depth.
+    // Prisma's own `distinct` is post-processed in Node, which would force-load
+    // millions of rows on year-old plants; raw SQL with the composite index
+    // (device_id, string_number, timestamp DESC) keeps this O(devices × strings).
+    const allLatest: LatestRow[] = deviceIds.length > 0
+      ? await prisma.$queryRaw<LatestRow[]>`
+          SELECT DISTINCT ON (device_id, string_number)
+            device_id, plant_id, timestamp, string_number, voltage, current, power
+          FROM string_measurements
+          WHERE device_id IN (${Prisma.join(deviceIds)})
+          ORDER BY device_id, string_number, timestamp DESC
+        `
       : []
-    const latestByDevice = new Map<string, typeof allLatest>()
+    const latestByDevice = new Map<string, LatestRow[]>()
     for (const m of allLatest) {
       const arr = latestByDevice.get(m.device_id) || []
       arr.push(m)
       latestByDevice.set(m.device_id, arr)
     }
 
+    // Today's measurements for kWh integration. Bounded by `gte: todayStart`
+    // so the row count scales with daylight hours, not history depth.
     const allToday = deviceIds.length > 0
       ? await prisma.string_measurements.findMany({
           where: { device_id: { in: deviceIds }, timestamp: { gte: todayStart } },
@@ -117,43 +136,43 @@ export async function GET(
     }
 
     const deviceStrings = devices.map((device) => {
-        const latestMeasurements = latestByDevice.get(device.id) || []
-        const todayMeasurements = todayByDevice.get(device.id) || []
+      const latestMeasurements = latestByDevice.get(device.id) || []
+      const todayMeasurements = todayByDevice.get(device.id) || []
 
-        // Group today's measurements by string for trapezoidal kWh
-        const todayByString = new Map<number, Array<{ power: any; timestamp: Date }>>()
-        for (const m of todayMeasurements) {
-          const group = todayByString.get(m.string_number) || []
-          group.push(m)
-          todayByString.set(m.string_number, group)
-        }
+      // Group today's measurements by string for trapezoidal kWh
+      const todayByString = new Map<number, Array<{ power: any; timestamp: Date }>>()
+      for (const m of todayMeasurements) {
+        const group = todayByString.get(m.string_number) || []
+        group.push(m)
+        todayByString.set(m.string_number, group)
+      }
 
-        // Staleness: find freshest timestamp, compare each string
-        const freshestTs = latestMeasurements.length > 0
-          ? Math.max(...latestMeasurements.map(m => m.timestamp.getTime()))
-          : 0
+      // Staleness: find freshest timestamp, compare each string
+      const freshestTs = latestMeasurements.length > 0
+        ? Math.max(...latestMeasurements.map(m => m.timestamp.getTime()))
+        : 0
 
-        // Build fresh readings for peer-comparison average (exclude stale, admin-flagged
-        // unused, AND admin-flagged peer-excluded). Unused strings show induction-leak
-        // noise; peer-excluded strings are non-standard orientation/shaded — both would
-        // pollute the peer pool that healthy peers are compared against.
-        const freshReadings: StringReading[] = latestMeasurements
-          .filter(m => !isStale(m.timestamp.getTime(), freshestTs))
-          .filter(m => {
-            const c = configByKey.get(`${device.id}:${m.string_number}`)
-            return c?.is_used !== false && c?.exclude_from_peer_comparison !== true
-          })
-          .map(m => ({ string_number: m.string_number, current: Number(m.current), voltage: Number(m.voltage) }))
+      // Build fresh readings for peer-comparison average (exclude stale, admin-flagged
+      // unused, AND admin-flagged peer-excluded). Unused strings show induction-leak
+      // noise; peer-excluded strings are non-standard orientation/shaded — both would
+      // pollute the peer pool that healthy peers are compared against.
+      const freshReadings: StringReading[] = latestMeasurements
+        .filter(m => !isStale(m.timestamp.getTime(), freshestTs))
+        .filter(m => {
+          const c = configByKey.get(`${device.id}:${m.string_number}`)
+          return c?.is_used !== false && c?.exclude_from_peer_comparison !== true
+        })
+        .map(m => ({ string_number: m.string_number, current: Number(m.current), voltage: Number(m.voltage) }))
 
-        // Display average (active peer-pool strings, self-inclusive — for KPI pill)
-        const displayAvg = activeAvg(freshReadings)
+      // Display average (active peer-pool strings, self-inclusive — for KPI pill)
+      const displayAvg = activeAvg(freshReadings)
 
-        // Build string data with kWh — exclude admin-flagged unused (those are empty
-        // ports, no real energy). Peer-excluded strings DO appear in the response with
-        // their real V/A/P/kWh — they're producing energy, just not peer-comparable.
-        const strings = latestMeasurements
-          .filter(m => configByKey.get(`${device.id}:${m.string_number}`)?.is_used !== false)
-          .map((m) => {
+      // Build string data with kWh — exclude admin-flagged unused (those are empty
+      // ports, no real energy). Peer-excluded strings DO appear in the response with
+      // their real V/A/P/kWh — they're producing energy, just not peer-comparable.
+      const strings = latestMeasurements
+        .filter(m => configByKey.get(`${device.id}:${m.string_number}`)?.is_used !== false)
+        .map((m) => {
           const current = Number(m.current)
           const voltage = Number(m.voltage)
           const stale = isStale(m.timestamp.getTime(), freshestTs)
@@ -197,25 +216,25 @@ export async function GET(
           }
         })
 
-        strings.sort((a, b) => a.string_number - b.string_number)
+      strings.sort((a, b) => a.string_number - b.string_number)
 
-        // Best string kWh for peer comparison
-        const bestKwh = strings.length > 0
-          ? Math.max(...strings.map(s => s.energy_kwh))
-          : 0
+      // Best string kWh for peer comparison
+      const bestKwh = strings.length > 0
+        ? Math.max(...strings.map(s => s.energy_kwh))
+        : 0
 
-        const nativeKwhToday = nativeByDevice.get(device.id) ?? null
+      const nativeKwhToday = nativeByDevice.get(device.id) ?? null
 
-        return {
-          device_id: device.id,
-          device_name: device.device_name,
-          strings,
-          avg_current: Math.round(displayAvg * 1000) / 1000,
-          active_avg_current: Math.round(displayAvg * 1000) / 1000,
-          best_string_kwh: bestKwh,
-          native_kwh_today: nativeKwhToday && nativeKwhToday > 0 ? nativeKwhToday : null,
-        }
-      })
+      return {
+        device_id: device.id,
+        device_name: device.device_name,
+        strings,
+        avg_current: Math.round(displayAvg * 1000) / 1000,
+        active_avg_current: Math.round(displayAvg * 1000) / 1000,
+        best_string_kwh: bestKwh,
+        native_kwh_today: nativeKwhToday && nativeKwhToday > 0 ? nativeKwhToday : null,
+      }
+    })
 
     return NextResponse.json({ devices: deviceStrings })
   } catch (error) {
