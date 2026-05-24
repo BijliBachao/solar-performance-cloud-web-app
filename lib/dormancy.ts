@@ -21,6 +21,51 @@ export function dormancyBucket(
   return 'dormant'
 }
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Recovery buckets — for the client re-engagement worklist (/admin/recovery)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Distinct from dormancyBucket above: solar clients check weekly/monthly,
+// not daily, so the recovery thresholds are intentionally LENIENT. These
+// drive the "who do we call to win back" list, not the general activity badge.
+
+/** ≤ this many days since last activity → Active (leave alone) */
+export const RECOVERY_ACTIVE_DAYS = 14
+/** ≤ this → Cooling (watch) */
+export const RECOVERY_COOLING_DAYS = 45
+/** ≤ this → At risk (reach out). Beyond this → Lost (re-engage urgently) */
+export const RECOVERY_AT_RISK_DAYS = 90
+
+export type RecoveryBucket = 'active' | 'cooling' | 'at_risk' | 'lost' | 'never'
+
+/** Order for sorting a worklist — most urgent first. */
+export const RECOVERY_PRIORITY: Record<RecoveryBucket, number> = {
+  lost: 0,
+  at_risk: 1,
+  never: 2,
+  cooling: 3,
+  active: 4,
+}
+
+export function recoveryBucket(
+  loginCount: number,
+  lastActiveAt: string | null,
+): RecoveryBucket {
+  if (loginCount === 0 || !lastActiveAt) return 'never'
+  const days = (Date.now() - new Date(lastActiveAt).getTime()) / DAY_MS
+  if (days <= RECOVERY_ACTIVE_DAYS) return 'active'
+  if (days <= RECOVERY_COOLING_DAYS) return 'cooling'
+  if (days <= RECOVERY_AT_RISK_DAYS) return 'at_risk'
+  return 'lost'
+}
+
+/** Whole-days since last activity (null → null). For display. */
+export function daysSinceActive(lastActiveAt: string | null): number | null {
+  if (!lastActiveAt) return null
+  const ms = Date.now() - new Date(lastActiveAt).getTime()
+  if (ms < 0 || isNaN(ms)) return null
+  return Math.floor(ms / DAY_MS)
+}
+
 export function formatRelative(d: string | null): string {
   if (!d) return 'never'
   const ms = Date.now() - new Date(d).getTime()
