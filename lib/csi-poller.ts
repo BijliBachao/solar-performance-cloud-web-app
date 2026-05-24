@@ -3,6 +3,11 @@ import { Decimal } from '@prisma/client/runtime/library'
 import { CsiClient, CsiDevice, CsiDeviceData, parseRealData } from '@/lib/csi-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
 import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches } from '@/lib/poller-utils'
+import {
+  PLANT_HEALTH_HEALTHY,
+  PLANT_HEALTH_FAULTY,
+  PLANT_HEALTH_DISCONNECTED,
+} from '@/lib/string-health'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
@@ -10,22 +15,41 @@ let lastAlarmSync = 0
 const HOUR_MS = 60 * 60 * 1000
 
 // CSI device status → our health_state. Per docs §6.3 the LABELS are
-// OnLine/OffLine/Alarm/Breakdown/Manual but the numeric encoding is
-// UNVERIFIED — first prod cycle log will tell. Default mapping is the
-// most common convention (1=normal); unrecognised values fall through to
-// disconnected (conservative) and emit a once-per-cycle warning so we
-// can fingerprint the real encoding from production logs.
+// OnLine/OffLine/Alarm/Breakdown/Manual. The numeric encoding is what we've
+// observed but not formally documented by CSI.
+//
+// Key behaviour change (2026-05-24): we don't immediately mark Faulty when CSI
+// reports a non-Online status. CSI tends to report OffLine at nighttime even
+// for perfectly healthy plants. If `lastReportTime` is within the last 24h,
+// the plant is producing on a normal schedule — keep it Healthy. Only mark
+// Faulty/Disconnected when we have NO recent reports (>24h silence).
+const RECENT_REPORT_WINDOW_MS = 24 * 60 * 60 * 1000
 const seenUnknownHealthStates = new Set<number>()
-function mapCsiHealthState(status: number): number {
-  if (status === 1) return 3 // online → healthy
-  if (status === 2 || status === 4) return 2 // alarm/breakdown → faulty
-  if (status === 0 || status === 3) return 1 // offline/unknown → disconnected
-  // Unrecognised — log once per process so we can refine the mapping.
+// Exported for unit tests — function is pure given current time + inputs.
+export function mapCsiHealthState(status: number, lastReportTime: string | null): number {
+  // Online → always Healthy regardless of lastReportTime.
+  if (status === 1) return PLANT_HEALTH_HEALTHY
+
+  // For any non-Online status, check whether the plant has reported recently.
+  // CSI's "OffLine" at night is normal — don't downgrade plants that produced today.
+  const reportedRecently =
+    !!lastReportTime &&
+    Date.now() - new Date(lastReportTime).getTime() < RECENT_REPORT_WINDOW_MS
+
+  if (reportedRecently) {
+    // Plant is in normal nightly idle / brief comms blip — keep Healthy.
+    return PLANT_HEALTH_HEALTHY
+  }
+
+  // Genuine silence (>24h): now we trust CSI's status code.
+  if (status === 2 || status === 4) return PLANT_HEALTH_FAULTY      // alarm/breakdown
+  if (status === 0 || status === 3) return PLANT_HEALTH_DISCONNECTED // offline/unknown
+
   if (!seenUnknownHealthStates.has(status)) {
     seenUnknownHealthStates.add(status)
     console.warn(`[CSI] mapCsiHealthState: unrecognised status=${status} → defaulting to disconnected`)
   }
-  return 1
+  return PLANT_HEALTH_DISCONNECTED
 }
 
 // CSI alert level → our severity. Numeric encoding UNVERIFIED. The API
@@ -106,7 +130,7 @@ async function syncCsiPlants(client: CsiClient): Promise<void> {
           address: p.address,
           latitude: p.latitude !== null ? new Decimal(p.latitude) : null,
           longitude: p.longitude !== null ? new Decimal(p.longitude) : null,
-          health_state: mapCsiHealthState(p.status),
+          health_state: mapCsiHealthState(p.status, p.lastReportTime),
           provider: PROVIDERS.CSI,
           last_synced: new Date(),
         },
@@ -117,7 +141,7 @@ async function syncCsiPlants(client: CsiClient): Promise<void> {
           address: p.address,
           latitude: p.latitude !== null ? new Decimal(p.latitude) : null,
           longitude: p.longitude !== null ? new Decimal(p.longitude) : null,
-          health_state: mapCsiHealthState(p.status),
+          health_state: mapCsiHealthState(p.status, p.lastReportTime),
           provider: PROVIDERS.CSI,
           last_synced: new Date(),
         },
@@ -136,22 +160,21 @@ async function syncCsiPlantHealth(client: CsiClient): Promise<void> {
   if (plants.length === 0) return
 
   // /plant/realtime is the cheapest health signal — batch ≤20 IDs per call.
-  // It returns power but no explicit status, so we infer: power > 0 → healthy,
-  // dayElectric > 0 but power == 0 → idle (still mark healthy), neither → faulty.
-  // This is intentionally lenient pending CSI confirmation of a status field
-  // on /plant/realtime; the per-device health from syncCsiDevices is the
-  // primary signal. The hourly /plant/pageV2 sync via syncCsiPlants reapplies
-  // the authoritative status.
+  // Only UPGRADE to Healthy when we have positive evidence (current power > 0
+  // OR daily energy > 0). Never downgrade from this endpoint: r.power=0 at
+  // night is normal, not faulty — plants that produced today and are now in
+  // nighttime should stay Healthy. The hourly syncCsiPlants() handles real
+  // status transitions via CSI's authoritative p.status field.
   try {
     const realtime = await client.getPlantsRealtime(plants.map((p) => p.id))
     if (realtime.length === 0) return
+    const producing = realtime.filter((r) => r.power > 0 || r.dayElectric > 0)
+    if (producing.length === 0) return
     await prisma.$transaction(
-      realtime.map((r) =>
+      producing.map((r) =>
         prisma.plants.update({
           where: { id: r.plantId },
-          data: {
-            health_state: r.power > 0 || r.dayElectric > 0 ? 3 : 2,
-          },
+          data: { health_state: PLANT_HEALTH_HEALTHY },
         }),
       ),
     )
