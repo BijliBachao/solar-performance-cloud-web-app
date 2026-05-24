@@ -96,6 +96,86 @@ export const PLANT_HEALTH_HEALTHY = 3
 export const PLANT_HEALTH_FAULTY = 2
 export const PLANT_HEALTH_DISCONNECTED = 1
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Algorithm v2 — Self-Referencing Ratio (SR) / Performance-to-Peers (P2P)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Spec: Working/2_Sunday_24_May_2026/STRING-HEALTH-ALGORITHM-V2.md
+// Industry anchor: SolarEdge ±6% mismatch threshold + Buerhop 2023 SR
+// + Alcañiz 2022 P2P.
+
+/**
+ * Default panel count used when string_configs.panel_count is null.
+ * The fleet currently has ~50% of strings without panel_count populated.
+ * The default lets the algorithm work for everyone; the UI surfaces a
+ * "panel count incomplete" badge per inverter so admins know to fill it in.
+ */
+export const PANEL_COUNT_DEFAULT = 16
+
+/** SR/P2P ratio >= this is Healthy. Anchored on SolarEdge ±6% mismatch. */
+export const SR_HEALTHY = 0.94
+/** SR/P2P ratio >= this is Abnormal. Below = Critical. */
+export const SR_ABNORMAL = 0.85
+
+/** Minimum number of peers within an MPPT group before we trust the comparison. */
+export const MIN_PEERS_FOR_MPPT_GROUP = 2
+
+/**
+ * Hour qualifies as "peak production" when the inverter's total hourly power
+ * is at least this fraction of the day's peak. Filters out dawn / dusk / cloudy
+ * periods where comparisons are noisy.
+ */
+export const PEAK_WINDOW_THRESHOLD = 0.5
+
+/**
+ * Per-panel power floor (W) below which we consider production "too low to
+ * meaningfully compare". Avoids dividing by ~0 when a whole MPPT group is in
+ * deep shade.
+ */
+export const MIN_PER_PANEL_W_FOR_COMPARISON = 5
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Algorithm v2 primitives (pure functions; safe in hot loops)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/**
+ * Returns the effective panel count for a string, falling back to
+ * PANEL_COUNT_DEFAULT when admin hasn't populated string_configs.panel_count.
+ * The `isDefault` flag lets callers surface the "panel count incomplete" badge.
+ */
+export function getEffectivePanelCount(
+  panelCount: number | null | undefined,
+): { count: number; isDefault: boolean } {
+  if (panelCount && panelCount > 0 && Number.isFinite(panelCount)) {
+    return { count: panelCount, isDefault: false }
+  }
+  return { count: PANEL_COUNT_DEFAULT, isDefault: true }
+}
+
+/**
+ * Per-panel power in watts. The fundamental normalisation that makes strings
+ * with different panel counts comparable. A 17-panel string and a 16-panel
+ * string at the same irradiance and panel rating have similar per-panel-W —
+ * but very different absolute current and power.
+ */
+export function perPanelPower(power_W: number, panelCount: number): number {
+  return power_W / Math.max(panelCount, 1)
+}
+
+/**
+ * Bucket an SR/P2P ratio into the donut taxonomy.
+ * Returns null when the score is undefined/null (no-data — caller handles).
+ * Same 3-bucket taxonomy as the donut v2 work; this just adds a different
+ * input mapping (SR ratio instead of 0-100 health_score).
+ */
+export function bucketSrScore(
+  sr: number | null | undefined,
+): 'healthy' | 'abnormal' | 'critical' | null {
+  if (sr === null || sr === undefined || !Number.isFinite(sr)) return null
+  if (sr >= SR_HEALTHY) return 'healthy'
+  if (sr >= SR_ABNORMAL) return 'abnormal'
+  return 'critical'
+}
+
 // ── Analysis query constants ────────────────────────────────────────
 /** Maximum date range for analysis queries (days) */
 export const MAX_DATE_RANGE_DAYS = 45
