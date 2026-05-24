@@ -17,11 +17,11 @@ vi.mock('@/lib/donut-data-loader', () => ({
 }))
 
 const mockGetUserFromRequest = vi.fn()
-const mockRequireSuperAdmin = vi.fn()
+const mockRequireRole = vi.fn()
 
 vi.mock('@/lib/api-auth', () => ({
   getUserFromRequest: (...args: any[]) => mockGetUserFromRequest(...args),
-  requireSuperAdmin: (...args: any[]) => mockRequireSuperAdmin(...args),
+  requireRole: (...args: any[]) => mockRequireRole(...args),
   createErrorResponse: (err: any) => new Response(
     JSON.stringify({ error: err.message, code: err.code }),
     { status: err.statusCode, headers: { 'Content-Type': 'application/json' } },
@@ -74,7 +74,7 @@ async function invoke(query: string) {
 beforeEach(() => {
   vi.clearAllMocks()
   mockGetUserFromRequest.mockResolvedValue({ userId: 'u1', role: 'SUPER_ADMIN' })
-  mockRequireSuperAdmin.mockReturnValue(undefined)
+  mockRequireRole.mockReturnValue(undefined)
   mockLoadFleetCounts.mockResolvedValue(sampleCounts)
   mockLoadFleetRows.mockResolvedValue(sampleRows)
   mockLoadOrgList.mockResolvedValue(sampleOrgs)
@@ -107,12 +107,12 @@ describe('GET /api/admin/string-health-donut', () => {
 
   it('returns 403 when caller is not SUPER_ADMIN', async () => {
     const { ApiAuthError } = await import('@/lib/api-auth')
-    mockRequireSuperAdmin.mockImplementationOnce(() => {
-      throw new (ApiAuthError as any)('Super admin required', 403, 'SUPER_ADMIN_REQUIRED')
+    mockRequireRole.mockImplementationOnce(() => {
+      throw new (ApiAuthError as any)('Required roles: SUPER_ADMIN', 403, 'INSUFFICIENT_ROLE')
     })
     const { res, body } = await invoke('?mode=prev-day')
     expect(res.status).toBe(403)
-    expect(body.code).toBe('SUPER_ADMIN_REQUIRED')
+    expect(body.code).toBe('INSUFFICIENT_ROLE')
   })
 
   it('passes org filter through to loaders', async () => {

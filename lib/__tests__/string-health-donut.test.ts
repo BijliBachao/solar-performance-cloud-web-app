@@ -12,19 +12,19 @@ import {
 // taxonomy stays honest under boundary inputs.
 
 describe('bucketDonutStatus — score-only path', () => {
-  it('score >= 90 is Healthy', () => {
+  it('score at or above the Healthy threshold buckets Healthy', () => {
     expect(bucketDonutStatus({ healthScore: 90, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('healthy')
     expect(bucketDonutStatus({ healthScore: 95, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('healthy')
     expect(bucketDonutStatus({ healthScore: 100, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('healthy')
   })
 
-  it('score 50..89.99 is Abnormal', () => {
+  it('score between the Warning and Healthy thresholds buckets Abnormal', () => {
     expect(bucketDonutStatus({ healthScore: 50, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('abnormal')
     expect(bucketDonutStatus({ healthScore: 75, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('abnormal')
     expect(bucketDonutStatus({ healthScore: 89.99, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('abnormal')
   })
 
-  it('score < 50 is Critical', () => {
+  it('score below the Warning threshold buckets Critical', () => {
     expect(bucketDonutStatus({ healthScore: 49.99, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('critical')
     expect(bucketDonutStatus({ healthScore: 25, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('critical')
     expect(bucketDonutStatus({ healthScore: 0, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('critical')

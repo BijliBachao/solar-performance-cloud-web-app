@@ -586,7 +586,8 @@ export async function loadFleetRows(params: LoadFleetRowsParams = {}): Promise<F
       scoreIsNull = false
       break
     case 'abnormal':
-      // Abnormal = (score >= 50 AND score < 90) OR (score IS NULL)
+      // Abnormal bucket = scores in the [HEALTH_WARNING, HEALTH_HEALTHY) range,
+      // OR rows with NULL health_score (no-data).
       scoreMin = HEALTH_WARNING
       scoreMax = HEALTH_HEALTHY
       scoreIsNull = null // see below: special case

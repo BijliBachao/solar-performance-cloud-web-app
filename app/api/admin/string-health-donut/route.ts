@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import {
   getUserFromRequest,
-  requireSuperAdmin,
+  requireRole,
   createErrorResponse,
   ApiAuthError,
 } from '@/lib/api-auth'
@@ -33,7 +33,9 @@ const querySchema = z.object({
 export async function GET(request: NextRequest) {
   try {
     const userContext = await getUserFromRequest()
-    requireSuperAdmin(userContext)
+    // NOC is internal-team only; matches the pattern used by every other
+    // /api/admin/* route in this codebase.
+    requireRole(userContext, ['SUPER_ADMIN'])
 
     const url = new URL(request.url)
     const parsed = querySchema.safeParse({
