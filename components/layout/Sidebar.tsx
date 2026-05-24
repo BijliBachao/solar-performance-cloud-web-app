@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, Building2, Users, Zap,
-  Bell, Settings, Sun, BarChart3,
+  Bell, Settings, Sun, BarChart3, Activity,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -23,6 +23,7 @@ const adminSections = [
       { href: '/admin/organizations',    label: 'Organizations',  icon: Building2 },
       { href: '/admin/users',            label: 'Users',          icon: Users },
       { href: '/admin/plants',           label: 'Plants',         icon: Zap },
+      { href: '/admin/noc',              label: 'NOC',            icon: Activity },
       { href: '/admin/analysis',         label: 'Analysis',       icon: BarChart3 },
     ],
   },

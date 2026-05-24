@@ -211,19 +211,13 @@ export function PlantDetailView({
 
   const allStrings = stringData.flatMap(d => d.strings)
   const liveStrings = allStrings.filter(s => s.status !== 'OPEN_CIRCUIT' && s.status !== 'OFFLINE')
+  // stringSummary still drives the live KPI pill (live healthy %); the donut
+  // below now uses settled window-based data fetched separately.
   const stringSummary = {
     total: liveStrings.length,
     ok: allStrings.filter(s => s.status === 'NORMAL').length,
     warning: allStrings.filter(s => s.status === 'WARNING').length,
     critical: allStrings.filter(s => s.status === 'CRITICAL').length,
-  }
-  // Five-status breakdown for the donut (NORMAL, WARNING, CRITICAL, OPEN_CIRCUIT, OFFLINE)
-  const stringStatusCounts = {
-    healthy: allStrings.filter(s => s.status === 'NORMAL').length,
-    warning: allStrings.filter(s => s.status === 'WARNING').length,
-    critical: allStrings.filter(s => s.status === 'CRITICAL').length,
-    openCircuit: allStrings.filter(s => s.status === 'OPEN_CIRCUIT').length,
-    offline: allStrings.filter(s => s.status === 'OFFLINE').length,
   }
 
   // ─── Plant-level KPIs (computed from live string data) ─────
@@ -340,13 +334,9 @@ export function PlantDetailView({
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-5">
-            {/* String health donut — at-a-glance status breakdown for the whole plant */}
-            <StringHealthDonut
-              counts={stringStatusCounts}
-              title="String Health"
-              subtitle={`${allStrings.length.toLocaleString()} strings · ${plant.devices.length} inverter${plant.devices.length === 1 ? '' : 's'}`}
-              loading={loading}
-            />
+            {/* String health donut — settled (prev-day / last-3h) view, fetched
+                independently from real-time data to avoid dawn/dusk/night noise. */}
+            <StringHealthDonut plantCode={plantCode} />
 
             {/* Per-Inverter Sections */}
             {plant.devices.map((device, index) => {

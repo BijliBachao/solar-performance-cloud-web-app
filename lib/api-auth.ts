@@ -75,6 +75,15 @@ export function requireRole(ctx: UserContext, roles: string[]): void {
     )
 }
 
+export function requireSuperAdmin(ctx: UserContext): void {
+  if (ctx.role !== 'SUPER_ADMIN')
+    throw new ApiAuthError(
+      'Super admin required',
+      403,
+      'SUPER_ADMIN_REQUIRED'
+    )
+}
+
 export function requireOrganization(ctx: UserContext): void {
   if (ctx.status === 'PENDING_ASSIGNMENT' || !ctx.organizationId)
     throw new ApiAuthError(
