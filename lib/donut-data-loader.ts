@@ -433,7 +433,12 @@ export async function loadFleetCounts(orgId?: string): Promise<FleetCountsResult
       FROM string_daily sd
       LEFT JOIN string_configs sc
         ON sc.device_id = sd.device_id AND sc.string_number = sd.string_number
-      JOIN plant_assignments pa ON pa.plant_id = sd.plant_id
+      -- LEFT JOIN so plants with no organization assignment ("orphan" plants)
+      -- still appear in the fleet aggregate. Client requirement: "see all of
+      -- the managed strings in 1 place" — strings exist regardless of admin
+      -- having assigned the plant to an org. The rows query (loadFleetRows)
+      -- uses the same LEFT JOIN so counts and rows stay reconciled.
+      LEFT JOIN plant_assignments pa ON pa.plant_id = sd.plant_id
       WHERE sd.date = ${yesterday}
         AND (${orgFilter}::text IS NULL OR pa.organization_id = ${orgFilter}::text)
     ),
@@ -623,12 +628,12 @@ export async function loadFleetRows(params: LoadFleetRowsParams = {}): Promise<F
   // plant_assignments) and orgFilter is not set.
   const items = await prisma.$queryRaw<FleetRowSql[]>`
     SELECT DISTINCT ON (sd.device_id, sd.string_number)
-      COALESCE(o.id, '')   as org_id,
-      COALESCE(o.name, '') as org_name,
-      p.id                 as plant_code,
-      p.plant_name         as plant_name,
+      o.id           as org_id,
+      o.name         as org_name,
+      p.id           as plant_code,
+      p.plant_name   as plant_name,
       sd.device_id,
-      d.device_name        as inverter_name,
+      d.device_name  as inverter_name,
       sd.string_number,
       sd.health_score
     FROM string_daily sd
@@ -665,9 +670,13 @@ export async function loadFleetRows(params: LoadFleetRowsParams = {}): Promise<F
     total,
     items: items.map((r) => {
       const score = decimalToNumberOrNull(r.health_score)
+      // Plant has no organization assignment → show as Unassigned so the NOC
+      // operator knows the string is real but not yet attached to an org.
+      const orgId = r.org_id ?? ''
+      const orgName = r.org_name ?? 'Unassigned'
       return {
-        orgId: r.org_id,
-        orgName: r.org_name ?? 'Unknown org',
+        orgId,
+        orgName,
         plantCode: r.plant_code,
         plantName: r.plant_name,
         deviceId: r.device_id,
