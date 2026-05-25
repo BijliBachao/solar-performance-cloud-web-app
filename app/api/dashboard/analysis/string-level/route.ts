@@ -97,13 +97,16 @@ export async function GET(request: NextRequest) {
     // a distinct chip; the row stays in the active bucket.
     const adminConfigs = await prisma.string_configs.findMany({
       where: { device_id: { in: deviceIds } },
-      select: { device_id: true, string_number: true, is_used: true, exclude_from_peer_comparison: true },
+      select: { device_id: true, string_number: true, is_used: true, exclude_from_peer_comparison: true, panel_count: true },
     })
     const adminUnusedSet = new Set(
       adminConfigs.filter(c => c.is_used === false).map(c => `${c.device_id}:${c.string_number}`),
     )
     const adminPeerExcludedSet = new Set(
       adminConfigs.filter(c => c.exclude_from_peer_comparison === true).map(c => `${c.device_id}:${c.string_number}`),
+    )
+    const panelCountSet = new Set(
+      adminConfigs.filter(c => c.panel_count != null).map(c => `${c.device_id}:${c.string_number}`),
     )
 
     const activeStringSet = new Set<string>()
@@ -228,6 +231,7 @@ export async function GET(request: NextRequest) {
         scores,
         type,
         peer_excluded: adminPeerExcludedSet.has(key),
+        panel_count_set: panelCountSet.has(key),
       })
     }
 

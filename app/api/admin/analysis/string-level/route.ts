@@ -93,13 +93,18 @@ export async function GET(request: NextRequest) {
     // peer_excluded:true tag exposed for admin UI to render a distinct chip.
     const adminConfigs = await prisma.string_configs.findMany({
       where: { device_id: { in: deviceIds } },
-      select: { device_id: true, string_number: true, is_used: true, exclude_from_peer_comparison: true },
+      select: { device_id: true, string_number: true, is_used: true, exclude_from_peer_comparison: true, panel_count: true },
     })
     const adminUnusedSet = new Set(
       adminConfigs.filter(c => c.is_used === false).map(c => `${c.device_id}:${c.string_number}`),
     )
     const adminPeerExcludedSet = new Set(
       adminConfigs.filter(c => c.exclude_from_peer_comparison === true).map(c => `${c.device_id}:${c.string_number}`),
+    )
+    // Strings with an admin-entered panel_count — used to flag inverters whose
+    // P2P scoring fell back to the default panel count (borderline flags approx).
+    const panelCountSet = new Set(
+      adminConfigs.filter(c => c.panel_count != null).map(c => `${c.device_id}:${c.string_number}`),
     )
 
     // Classify: active / inactive / unused
@@ -268,6 +273,7 @@ export async function GET(request: NextRequest) {
         type,
         unused_source,
         peer_excluded: adminPeerExcludedSet.has(key),
+        panel_count_set: panelCountSet.has(key),
       })
     }
 

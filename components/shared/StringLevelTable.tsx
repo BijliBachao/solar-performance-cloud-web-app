@@ -2,7 +2,7 @@
 
 import { PerformanceCell } from './PerformanceCell'
 import { cn } from '@/lib/utils'
-import { HEALTH_HEALTHY, HEALTH_CAUTION, HEALTH_WARNING } from '@/lib/string-health'
+import { HEALTH_HEALTHY, HEALTH_CAUTION, HEALTH_WARNING, PANEL_COUNT_DEFAULT } from '@/lib/string-health'
 
 interface StringRow {
   plant_id: string
@@ -17,6 +17,8 @@ interface StringRow {
   energy_kwh: number | null
   scores: Record<string, number | null>
   type?: 'active' | 'inactive' | 'unused'
+  /** False when the string has no admin-entered panel_count (scoring used the default). */
+  panel_count_set?: boolean
 }
 
 interface StringLevelTableProps {
@@ -61,6 +63,17 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
   const inactiveRows = rows.filter(r => r.type === 'inactive')
   const unusedRows = rows.filter(r => r.type === 'unused')
 
+  // Per-inverter panel-count completeness. When some strings lack an admin
+  // panel_count, the P2P comparison falls back to the default count, so
+  // borderline flags are approximate — surfaced as a per-inverter badge.
+  const panelByDevice = new Map<string, { missing: number; total: number }>()
+  for (const r of activeRows) {
+    const e = panelByDevice.get(r.device_id) ?? { missing: 0, total: 0 }
+    e.total++
+    if (r.panel_count_set === false) e.missing++
+    panelByDevice.set(r.device_id, e)
+  }
+
   let prevDeviceId = ''
 
   return (
@@ -100,7 +113,11 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
           {/* Active strings */}
           {activeRows.map((row, idx) => {
             const showDivider = row.device_id !== prevDeviceId && idx > 0
+            const isFirstOfDevice = idx === 0 || activeRows[idx - 1].device_id !== row.device_id
             prevDeviceId = row.device_id
+
+            const panelInfo = panelByDevice.get(row.device_id)
+            const showPanelBadge = isFirstOfDevice && !!panelInfo && panelInfo.missing > 0
 
             return (
               <tr
@@ -114,6 +131,16 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
                   <div className="font-medium text-gray-900">{row.device_name}</div>
                   {row.string_number === 1 && (
                     <div className="text-[10px] text-gray-400">{row.plant_name}</div>
+                  )}
+                  {showPanelBadge && (
+                    <div className="mt-0.5">
+                      <span
+                        title={`${panelInfo!.missing} of ${panelInfo!.total} strings have no panel count set — comparison uses the default ${PANEL_COUNT_DEFAULT} panels, so borderline flags are approximate. Set panel counts in string config for precise scoring.`}
+                        className="inline-flex items-center rounded border border-amber-200 bg-amber-50 px-1 py-0.5 text-[9px] font-medium text-amber-700"
+                      >
+                        panel count {panelInfo!.missing}/{panelInfo!.total}
+                      </span>
+                    </div>
                   )}
                 </td>
                 <td className="sticky left-[140px] z-10 bg-white group-hover:bg-blue-50/50 px-2 py-1.5 text-xs text-gray-600 border-r border-gray-200 transition-colors">
