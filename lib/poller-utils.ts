@@ -2,10 +2,11 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import {
   isActive, filterActive, computeGap, classifyAlertSeverity,
-  canCompare, computePerformance, computeAvailability, computeHealthScore,
+  canCompare, computeAvailability, p2pToHealthScore,
   MIN_PEERS_FOR_COMPARISON, MIN_AVG_FOR_COMPARISON,
-  MAX_STRING_CURRENT_A, MAX_STRING_POWER_W,
+  MAX_STRING_CURRENT_A, MAX_STRING_POWER_W, MS_PER_HOUR,
 } from '@/lib/string-health'
+import { scoreDailyP2P, type DailyStringInput } from '@/lib/string-health-daily'
 
 /** Safe parseFloat that returns 0 instead of NaN */
 export function safeFloat(v: any): number {
@@ -133,12 +134,14 @@ function dropSensorFaults<T extends { current: any; power?: any }>(rows: T[]): T
 export interface StringConfigSets {
   unusedSet: Set<number>
   peerExcludedSet: Set<number>
+  /** string_number → admin-entered panel_count (absent when not configured). */
+  panelCountByString: Map<number, number>
 }
 
 export async function loadStringConfigs(deviceId: string): Promise<StringConfigSets> {
   const adminConfigs = await prisma.string_configs.findMany({
     where: { device_id: deviceId },
-    select: { string_number: true, is_used: true, exclude_from_peer_comparison: true },
+    select: { string_number: true, is_used: true, exclude_from_peer_comparison: true, panel_count: true },
   })
   return {
     unusedSet: new Set(
@@ -148,6 +151,11 @@ export async function loadStringConfigs(deviceId: string): Promise<StringConfigS
       adminConfigs
         .filter(c => c.exclude_from_peer_comparison === true)
         .map(c => c.string_number),
+    ),
+    panelCountByString: new Map(
+      adminConfigs
+        .filter(c => c.panel_count != null)
+        .map(c => [c.string_number, c.panel_count as number]),
     ),
   }
 }
@@ -459,7 +467,8 @@ export async function updateDailyAggregates(
 
   // Skip admin-flagged unused strings — keep string_daily clean of induction
   // noise from empty PV ports.
-  const { unusedSet } = configs ?? (await loadStringConfigs(deviceId))
+  const { unusedSet, peerExcludedSet, panelCountByString } =
+    configs ?? (await loadStringConfigs(deviceId))
   const usedRaw = unusedSet.size > 0
     ? rawMeasurements.filter(m => !unusedSet.has(m.string_number))
     : rawMeasurements
@@ -473,10 +482,6 @@ export async function updateDailyAggregates(
   const allMeasurements = dropSensorFaults(usedRaw)
   if (allMeasurements.length === 0) return
 
-  // Compute inverter-wide average current (for performance score)
-  const allCurrents = filterActive(allMeasurements.map((m) => Number(m.current)))
-  const inverterAvgCurrent = avg(allCurrents)
-
   // Group by string_number
   const byString = new Map<number, typeof allMeasurements>()
   for (const m of allMeasurements) {
@@ -488,14 +493,48 @@ export async function updateDailyAggregates(
   // Max measurements any single string has today = "full day" reference for availability
   const maxMeasurements = Math.max(...Array.from(byString.values()).map((m) => m.length))
 
+  // ── Daily Performance-to-Peers (Algorithm v2, spec §4d) ──────────────
+  // health_score / performance now come from the MPPT-grouped, panel-normalised,
+  // peak-window, median-anchored P2P — replacing the legacy 24h string/inverter
+  // current ratio that smeared peak deficits into "healthy". scoreDailyP2P is the
+  // single source of truth; we map its P2P ratio onto the 0-100 health_score scale
+  // (p2pToHealthScore) so every existing consumer (Analysis, donut, dashboard)
+  // buckets it unchanged.
+  const dev = await prisma.devices.findUnique({
+    where: { id: deviceId },
+    select: { model: true, max_strings: true },
+  })
+  const dailyInputs: DailyStringInput[] = Array.from(byString.entries()).map(([sn, ms]) => {
+    const hourBuckets = new Map<number, { sum: number; n: number }>()
+    for (const m of ms) {
+      const hourKey = Math.floor(m.timestamp.getTime() / MS_PER_HOUR)
+      const b = hourBuckets.get(hourKey) ?? { sum: 0, n: 0 }
+      b.sum += Number(m.power)
+      b.n += 1
+      hourBuckets.set(hourKey, b)
+    }
+    return {
+      string_number: sn,
+      panel_count: panelCountByString.get(sn) ?? null,
+      is_used: true, // unused strings already filtered out above
+      exclude_from_peer_comparison: peerExcludedSet.has(sn),
+      hourly: Array.from(hourBuckets.entries()).map(([hour, b]) => ({ hour, avg_power_W: b.sum / b.n })),
+    }
+  })
+  const p2pByString = new Map(
+    scoreDailyP2P(dailyInputs, {
+      deviceId,
+      inverterModel: dev?.model ?? null,
+      inverterMaxStrings: dev?.max_strings ?? null,
+    }).map((r) => [r.string_number, r]),
+  )
+
   // Batch upserts
   const upserts = []
   for (const [stringNumber, measurements] of byString) {
     const voltages = measurements.map((m) => Number(m.voltage)).filter((v) => v > 0)
     const currents = filterActive(measurements.map((m) => Number(m.current)))
     const powers = measurements.map((m) => Number(m.power)).filter((p) => p > 0)
-
-    const stringAvgCurrent = avg(currents)
 
     // Trapezoidal energy integration: ((P_i + P_i+1) / 2) × Δt
     // More accurate than rectangular (P_i × Δt) — validated within 1.3% of inverter meter
@@ -512,10 +551,12 @@ export async function updateDailyAggregates(
     }
     const energyKwh = energyWh / 1000
 
-    // IEC 61724 aligned — from lib/string-health.ts (single source of truth)
-    const perfScore = computePerformance(stringAvgCurrent, inverterAvgCurrent)
+    // Daily P2P (spec §4d) — replaces the legacy current-ratio performance.
+    // performance = P2P × 100; health_score = same ratio mapped onto the 0-100
+    // scale so existing bucketing (90/50) reproduces the P2P bucket exactly.
+    const p2pResult = p2pByString.get(stringNumber)
+    const mappedHealth = p2pToHealthScore(p2pResult?.p2p ?? null)
     const availScore = computeAvailability(measurements.length, maxMeasurements)
-    const healthScore = computeHealthScore(perfScore, availScore)
 
     const data = {
       avg_voltage: new Decimal(avg(voltages).toFixed(2)),
@@ -523,8 +564,8 @@ export async function updateDailyAggregates(
       avg_power: new Decimal(avg(powers).toFixed(2)),
       min_current: safeMin(currents) !== null ? new Decimal(safeMin(currents)!.toFixed(3)) : null,
       max_current: safeMax(currents) !== null ? new Decimal(safeMax(currents)!.toFixed(3)) : null,
-      health_score: healthScore !== null ? new Decimal(healthScore.toFixed(2)) : null,
-      performance: perfScore !== null ? new Decimal(perfScore.toFixed(2)) : null,
+      health_score: mappedHealth !== null ? new Decimal(mappedHealth.toFixed(2)) : null,
+      performance: p2pResult?.score_persisted != null ? new Decimal(p2pResult.score_persisted.toFixed(2)) : null,
       availability: availScore !== null ? new Decimal(availScore.toFixed(2)) : null,
       energy_kwh: energyKwh > 0 ? new Decimal(energyKwh.toFixed(3)) : null,
     }

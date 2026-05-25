@@ -36,6 +36,7 @@ import {
   MIN_PEERS_FOR_MPPT_GROUP,
   MIN_PER_PANEL_W_FOR_COMPARISON,
   PEAK_WINDOW_THRESHOLD,
+  P2P_CAP,
   type StringStatus,
 } from '@/lib/string-health'
 import { getMpptGroupKey } from '@/lib/inverter-topology'
@@ -102,8 +103,6 @@ function median(values: number[]): number {
     ? (sorted[mid - 1] + sorted[mid]) / 2
     : sorted[mid]
 }
-
-const P2P_CAP = 1.5
 
 /**
  * Score every string on a single inverter for one day using the P2P algorithm.

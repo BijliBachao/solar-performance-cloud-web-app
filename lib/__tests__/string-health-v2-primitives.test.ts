@@ -5,9 +5,12 @@ import {
   SR_ABNORMAL,
   MIN_PEERS_FOR_MPPT_GROUP,
   PEAK_WINDOW_THRESHOLD,
+  P2P_CAP,
   getEffectivePanelCount,
   perPanelPower,
   bucketSrScore,
+  bucketHealthScore,
+  p2pToHealthScore,
 } from '@/lib/string-health'
 
 // Algorithm v2 primitives — pure functions. These tests pin down the
@@ -110,5 +113,41 @@ describe('Constants — sanity', () => {
   it('PEAK_WINDOW_THRESHOLD is a sensible fraction (0 to 1)', () => {
     expect(PEAK_WINDOW_THRESHOLD).toBeGreaterThan(0)
     expect(PEAK_WINDOW_THRESHOLD).toBeLessThanOrEqual(1.0)
+  })
+})
+
+describe('p2pToHealthScore — round-trips the P2P bucket through the legacy 0-100 scale', () => {
+  it('maps the bucket boundaries exactly (0.94→90, 0.85→50)', () => {
+    expect(p2pToHealthScore(SR_HEALTHY)).toBeCloseTo(90, 6)
+    expect(p2pToHealthScore(SR_ABNORMAL)).toBeCloseTo(50, 6)
+    expect(p2pToHealthScore(P2P_CAP)).toBeCloseTo(100, 6)
+    expect(p2pToHealthScore(0)).toBe(0)
+  })
+
+  it('null/undefined/NaN → null (preserves no-data)', () => {
+    expect(p2pToHealthScore(null)).toBeNull()
+    expect(p2pToHealthScore(undefined)).toBeNull()
+    expect(p2pToHealthScore(NaN)).toBeNull()
+  })
+
+  it('CRITICAL INVARIANT: bucketHealthScore(map(p2p)) === bucketSrScore(p2p) across the range', () => {
+    // The whole design rests on this: existing consumers bucket the mapped
+    // score (HEALTH_HEALTHY=90 / HEALTH_WARNING=50) and must reproduce the P2P bucket.
+    const srToHealthBucket = { healthy: 'healthy', abnormal: 'warning', critical: 'critical' } as const
+    for (let p2p = 0; p2p <= P2P_CAP + 1e-9; p2p += 0.01) {
+      const mapped = p2pToHealthScore(p2p)!
+      const viaHealth = bucketHealthScore(mapped)
+      const viaSr = bucketSrScore(p2p)!
+      expect(viaHealth).toBe(srToHealthBucket[viaSr])
+    }
+  })
+
+  it('is monotonic non-decreasing', () => {
+    let prev = -1
+    for (let p2p = 0; p2p <= P2P_CAP; p2p += 0.02) {
+      const v = p2pToHealthScore(p2p)!
+      expect(v).toBeGreaterThanOrEqual(prev)
+      prev = v
+    }
   })
 })

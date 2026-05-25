@@ -143,6 +143,10 @@ export const PEAK_WINDOW_THRESHOLD = 0.5
  */
 export const MIN_PER_PANEL_W_FOR_COMPARISON = 5
 
+/** Upper clamp for an SR/P2P ratio — keeps arithmetic stable when a peer pool
+ * has a very weak anchor (a string can read ≥1.5× the group median/max). */
+export const P2P_CAP = 1.5
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Algorithm v2 primitives (pure functions; safe in hot loops)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -184,6 +188,32 @@ export function bucketSrScore(
   if (sr >= SR_HEALTHY) return 'healthy'
   if (sr >= SR_ABNORMAL) return 'abnormal'
   return 'critical'
+}
+
+/**
+ * Map an SR/P2P ratio onto the legacy 0–100 health_score scale so that the
+ * existing `bucketHealthScore` (HEALTH_HEALTHY=90 / HEALTH_WARNING=50) and the
+ * donut SQL (which bucket on the same boundaries) reproduce the P2P buckets
+ * EXACTLY — letting the daily algorithm flow through every existing consumer
+ * (Analysis tab, Prev-day donut, NOC donut, dashboard) with no read-side change.
+ *
+ * Breakpoints are anchored so bucketHealthScore(map(p2p)) === bucketSrScore(p2p):
+ *   p2p ≥ SR_HEALTHY (0.94)  → [90,100]  → healthy
+ *   p2p ≥ SR_ABNORMAL (0.85) → [50,90)   → warning  (== "abnormal")
+ *   p2p <  SR_ABNORMAL       → [0,50)    → critical
+ *   p2p == null              → null      → no_data
+ * Piecewise-linear and monotonic, so averages/sparklines stay meaningful.
+ */
+export function p2pToHealthScore(p2p: number | null | undefined): number | null {
+  if (p2p === null || p2p === undefined || !Number.isFinite(p2p)) return null
+  if (p2p >= SR_HEALTHY) {
+    const frac = Math.min((p2p - SR_HEALTHY) / (P2P_CAP - SR_HEALTHY), 1)
+    return 90 + frac * 10
+  }
+  if (p2p >= SR_ABNORMAL) {
+    return 50 + ((p2p - SR_ABNORMAL) / (SR_HEALTHY - SR_ABNORMAL)) * 40
+  }
+  return Math.max(0, (p2p / SR_ABNORMAL) * 50)
 }
 
 // ── Analysis query constants ────────────────────────────────────────
