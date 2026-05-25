@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getUserFromRequest, requireOrganization, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
+import { getUserFromRequest, requireOrganization, createErrorResponse, ApiAuthError, plantScopeWhere } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 
 function isValidISODate(dateStr: string): boolean {
@@ -82,10 +82,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const where: any = {}
-    if (plantIds.length > 0) {
-      where.plant_id = plantId ? plantId : { in: plantIds }
-    }
+    // Plant scoping via the shared helper: a non-admin with no assignments
+    // gets { in: [] } (matches nothing), never an unfiltered query.
+    const where: any = { ...plantScopeWhere(userContext, plantIds, plantId || null) }
     if (severity) where.severity = severity
     if (resolved === 'true') where.resolved_at = { not: null }
     else if (resolved === 'false') where.resolved_at = null

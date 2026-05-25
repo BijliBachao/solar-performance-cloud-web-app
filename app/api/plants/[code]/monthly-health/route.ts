@@ -351,8 +351,14 @@ export async function GET(
         ? dailyRows.reduce((sum, r) => sum + Number(r.avg_current || 0), 0) / dailyRows.length
         : 0
 
-      const rawHealthScore = dailyRows.length > 0
-        ? dailyRows.reduce((sum, r) => sum + Number(r.health_score || 100), 0) / dailyRows.length
+      // Average only over days that HAVE a score. The v2 P2P algorithm writes
+      // null when a string can't be peer-compared (no peak-window data,
+      // insufficient peers, low-irradiance group, peer-excluded); counting
+      // those as 100 would inflate monthly health toward "healthy" — the exact
+      // bias we're removing. A genuine 0 (dead string) is kept (it's not null).
+      const scoredRows = dailyRows.filter(r => r.health_score !== null && r.health_score !== undefined)
+      const rawHealthScore = scoredRows.length > 0
+        ? scoredRows.reduce((sum, r) => sum + Number(r.health_score), 0) / scoredRows.length
         : avgCurrent < ACTIVE_CURRENT_THRESHOLD ? 0 : 100
       // Cap health score at 100
       const avgHealthScore = Math.min(100, rawHealthScore)

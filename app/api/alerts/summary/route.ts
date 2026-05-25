@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getUserFromRequest, requireOrganization, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
+import { getUserFromRequest, requireOrganization, createErrorResponse, ApiAuthError, plantScopeWhere } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 
 function getPKTDayStartUTC(): Date {
@@ -17,21 +17,18 @@ export async function GET(request: NextRequest) {
 
     const plantId = request.nextUrl.searchParams.get('plant_id') || ''
 
-    let plantWhere: any = {}
+    let plantWhere: { plant_id?: string | { in: string[] } }
     if (userContext.role === 'SUPER_ADMIN') {
-      if (plantId) plantWhere = { plant_id: plantId }
+      plantWhere = plantScopeWhere(userContext, [], plantId || null)
     } else {
       const assignments = await prisma.plant_assignments.findMany({
         where: { organization_id: userContext.organizationId! },
         select: { plant_id: true },
       })
       const plantIds = assignments.map(a => a.plant_id)
-      if (plantId) {
-        if (!plantIds.includes(plantId)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-        plantWhere = { plant_id: plantId }
-      } else {
-        plantWhere = plantIds.length > 0 ? { plant_id: { in: plantIds } } : {}
-      }
+      if (plantId && !plantIds.includes(plantId)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      // Non-admin always scoped to assigned plants; empty ⇒ { in: [] } (matches nothing).
+      plantWhere = plantScopeWhere(userContext, plantIds, plantId || null)
     }
 
     const todayStart = getPKTDayStartUTC()

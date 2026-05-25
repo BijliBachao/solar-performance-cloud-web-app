@@ -110,6 +110,31 @@ export function validateResourceAccess(
     )
 }
 
+/**
+ * Build a Prisma `plant_id` filter fragment scoped to what `ctx` may see.
+ *
+ * SUPER_ADMIN: an optional single-plant filter, otherwise unrestricted (`{}`).
+ * Everyone else: ALWAYS constrained to `assignedPlantIds`. An empty list yields
+ * `{ plant_id: { in: [] } }`, which matches NOTHING — so a non-admin with no
+ * assignments can never fall open to other tenants' rows. (`plantId`, when
+ * given for a non-admin, must already have been validated against
+ * `assignedPlantIds` by the caller, which 404s otherwise.)
+ *
+ * Spread the result into a Prisma `where`. This is the single source of truth
+ * for plant-scoping on list/aggregate endpoints — do not hand-roll the
+ * `plantIds.length > 0 ? {...} : {}` pattern, which falls open when empty.
+ */
+export function plantScopeWhere(
+  ctx: { role: string },
+  assignedPlantIds: string[],
+  plantId?: string | null
+): { plant_id?: string | { in: string[] } } {
+  if (ctx.role === 'SUPER_ADMIN') {
+    return plantId ? { plant_id: plantId } : {}
+  }
+  return { plant_id: plantId ? plantId : { in: assignedPlantIds } }
+}
+
 export function createErrorResponse(error: ApiAuthError) {
   return new Response(
     JSON.stringify({
