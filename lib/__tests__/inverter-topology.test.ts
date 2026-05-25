@@ -29,6 +29,19 @@ describe('getInverterTopology — model-keyed', () => {
       .toMatchObject({ mppts: 10, stringsPerMppt: 2 })
   })
 
+  it('CSI-120K-T4001B-E (client FANZ model, verified live) → 18 MPPTs × 2 strings', () => {
+    // grp_serial_c_{G}_{1|2} field naming proved 2 strings/group; 36 strings = 18 groups
+    const layout = getInverterTopology('CSI-120K-T4001B-E', 36)
+    expect(layout).toMatchObject({ mppts: 18, stringsPerMppt: 2 })
+    // String pairing matches the validation: (1,2),(3,4),(5,6),(9,10)...
+    expect(getMpptForString('CSI-120K-T4001B-E', 36, 1)).toBe(1)
+    expect(getMpptForString('CSI-120K-T4001B-E', 36, 2)).toBe(1)
+    expect(getMpptForString('CSI-120K-T4001B-E', 36, 5)).toBe(3)
+    expect(getMpptForString('CSI-120K-T4001B-E', 36, 6)).toBe(3)
+    expect(getMpptForString('CSI-120K-T4001B-E', 36, 36)).toBe(18)
+    expect(isTopologyHighConfidence('CSI-120K-T4001B-E')).toBe(true)
+  })
+
   it('model match wins even when max_strings would suggest different topology', () => {
     // CSI-110K-T explicitly has 4 strings/MPPT; max_strings=36 would default to 2/MPPT
     const layout = getInverterTopology('CSI-110K-T', 36)

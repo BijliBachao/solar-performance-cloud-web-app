@@ -107,6 +107,23 @@ describe('CsiClient — parseRealData (verified 2026-05-07: lowercase codes, sca
     ])
     expect(result.unrecognisedCodes).toEqual(['INV_T', 'Fac'])
   })
+
+  it('captures inveter_model (CSI typo) into inverterModel; not treated as unrecognised', async () => {
+    const { parseRealData } = await import('@/lib/csi-client')
+    const result = parseRealData([
+      { fieldCode: 'dv1', fieldName: '', fieldUnitName: '', data: 600 },
+      { fieldCode: 'dc1', fieldName: '', fieldUnitName: '', data: 10 },
+      { fieldCode: 'inveter_model', fieldName: 'Device Name', fieldUnitName: '', data: 'CSI-120K-T4001B-E' },
+    ])
+    expect(result.inverterModel).toBe('CSI-120K-T4001B-E')
+    expect(result.unrecognisedCodes).not.toContain('inveter_model')
+  })
+
+  it('inverterModel is null when the field is absent or empty', async () => {
+    const { parseRealData } = await import('@/lib/csi-client')
+    expect(parseRealData([{ fieldCode: 'dv1', fieldName: '', fieldUnitName: '', data: 600 }]).inverterModel).toBeNull()
+    expect(parseRealData([{ fieldCode: 'inveter_model', fieldName: '', fieldUnitName: '', data: '' }]).inverterModel).toBeNull()
+  })
 })
 
 describe('CsiClient.getPlantList — pagination + longitude/latitude coercion (§4.2.1, §8 quirk #4)', () => {

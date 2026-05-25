@@ -429,19 +429,34 @@ export interface ParsedCsiStringMeasurement {
   power: number
 }
 
+// Inverter model name field. CSI's field code carries the vendor's typo
+// "inveter_model" (verified 2026-05-25 live: data = "CSI-120K-T4001B-E").
+// Capturing it lets the topology lookup use the real model instead of the
+// max-strings fallback.
+export const CSI_MODEL_FIELD_CODE = 'inveter_model'
+
 export interface ParsedCsiRealData {
   strings: ParsedCsiStringMeasurement[]
   dailyEnergyKwh: number | null
+  inverterModel: string | null
   unrecognisedCodes: string[]
 }
 
 export function parseRealData(realData: CsiRealDataRow[]): ParsedCsiRealData {
   const byString = new Map<number, Partial<ParsedCsiStringMeasurement>>()
   let dailyEnergyKwh: number | null = null
+  let inverterModel: string | null = null
   const recognised = new Set<string>()
   const unrecognisedCodes: string[] = []
 
   for (const row of realData) {
+    if (row.fieldCode === CSI_MODEL_FIELD_CODE) {
+      if (typeof row.data === 'string' && row.data.trim() !== '') {
+        inverterModel = row.data.trim()
+      }
+      recognised.add(row.fieldCode)
+      continue
+    }
     let match = row.fieldCode.match(CSI_STRING_VOLTAGE_RE)
     if (match) {
       const n = Number(match[1])
@@ -503,5 +518,5 @@ export function parseRealData(realData: CsiRealDataRow[]): ParsedCsiRealData {
   }
   strings.sort((a, b) => a.string_number - b.string_number)
 
-  return { strings, dailyEnergyKwh, unrecognisedCodes }
+  return { strings, dailyEnergyKwh, inverterModel, unrecognisedCodes }
 }

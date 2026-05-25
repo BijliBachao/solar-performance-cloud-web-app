@@ -48,6 +48,11 @@ const TOPOLOGY_BY_MODEL: Record<string, MpptLayout> = {
   'CSI-80KTL-GS':   { mppts: 8,  stringsPerMppt: 2, source: 'CSI-80KTL-GS-E user manual §2.3' },
   'CSI-100KTL-GS':  { mppts: 9,  stringsPerMppt: 2, source: 'CSI-100KTL-GS-E user manual §2.3' },
   'CSI-110K-T':     { mppts: 9,  stringsPerMppt: 4, source: 'CSI-110K-T user manual §2.3 (36 strings total)' },
+  // Verified 2026-05-25 from live API: the client's FANZ inverters report
+  // inveter_model="CSI-120K-T4001B-E" and the realData field naming
+  // grp_serial_c_{GROUP}_{1|2} proves exactly 2 strings per MPPT group,
+  // 18 groups × 2 = 36 strings (matches max_strings).
+  'CSI-120K-T4001B-E': { mppts: 18, stringsPerMppt: 2, source: 'Live API grp_serial_c_{G}_{1|2} field naming, verified 2026-05-25' },
   'CSI-125KTL-GS':  { mppts: 10, stringsPerMppt: 2, source: 'CSI-125KTL-GS-E user manual V1.3 §2.3' },
   'CSI-250-333-350K-T8001AB': { mppts: 18, stringsPerMppt: 2, source: 'CSI commercial 250-350K user manual V1.1' },
 

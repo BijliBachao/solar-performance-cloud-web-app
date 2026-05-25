@@ -253,7 +253,7 @@ async function fetchCsiStringData(client: CsiClient): Promise<void> {
       provider: PROVIDERS.CSI,
       device_type_id: DEVICE_TYPE_IDS.CSI_INVERTER,
     },
-    select: { id: true, plant_id: true, max_strings: true },
+    select: { id: true, plant_id: true, max_strings: true, model: true },
   })
 
   if (devices.length === 0) {
@@ -297,10 +297,10 @@ async function fetchCsiStringData(client: CsiClient): Promise<void> {
 }
 
 async function processCsiDevice(
-  device: { id: string; plant_id: string; max_strings: number | null },
+  device: { id: string; plant_id: string; max_strings: number | null; model: string | null },
   data: CsiDeviceData,
 ): Promise<void> {
-  const { strings, dailyEnergyKwh, unrecognisedCodes } = parseRealData(data.realData)
+  const { strings, dailyEnergyKwh, inverterModel, unrecognisedCodes } = parseRealData(data.realData)
 
   // Surface unknown fieldCodes once per cycle so we can refine the parser
   // without spamming logs every poll. The first run will produce a
@@ -311,15 +311,29 @@ async function processCsiDevice(
     console.log(`[CSI] ${device.id} unrecognised fieldCodes (first 10 of ${unrecognisedCodes.length}): ${sample}`)
   }
 
+  // Capture the inverter model (from the realData `inveter_model` field) so
+  // the MPPT topology lookup uses the real model instead of the max-strings
+  // fallback. Only write on change to avoid churn.
+  const deviceUpdate: { max_strings?: number; model?: string } = {}
+  if (inverterModel && inverterModel !== device.model) {
+    deviceUpdate.model = inverterModel
+  }
+
   if (strings.length === 0) {
+    if (deviceUpdate.model) {
+      await prisma.devices.update({ where: { id: device.id }, data: deviceUpdate })
+    }
     return
   }
 
   const maxStringNumber = strings[strings.length - 1].string_number
   if (device.max_strings === null || device.max_strings < maxStringNumber) {
+    deviceUpdate.max_strings = maxStringNumber
+  }
+  if (Object.keys(deviceUpdate).length > 0) {
     await prisma.devices.update({
       where: { id: device.id },
-      data: { max_strings: maxStringNumber },
+      data: deviceUpdate,
     })
   }
 
