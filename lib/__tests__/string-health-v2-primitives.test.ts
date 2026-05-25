@@ -134,11 +134,28 @@ describe('p2pToHealthScore — round-trips the P2P bucket through the legacy 0-1
     // The whole design rests on this: existing consumers bucket the mapped
     // score (HEALTH_HEALTHY=90 / HEALTH_WARNING=50) and must reproduce the P2P bucket.
     const srToHealthBucket = { healthy: 'healthy', abnormal: 'warning', critical: 'critical' } as const
-    for (let p2p = 0; p2p <= P2P_CAP + 1e-9; p2p += 0.01) {
+    for (let p2p = 0; p2p <= P2P_CAP + 1e-9; p2p += 0.001) {
       const mapped = p2pToHealthScore(p2p)!
       const viaHealth = bucketHealthScore(mapped)
       const viaSr = bucketSrScore(p2p)!
       expect(viaHealth).toBe(srToHealthBucket[viaSr])
+    }
+  })
+
+  it('persisted (floored 2dp) value never rounds UP across a boundary', () => {
+    // Regression for the rounding bug: values just under a threshold must stay
+    // in the lower bucket after 2dp persistence (floor, not round-half-up).
+    expect(p2pToHealthScore(0.8499)).toBeLessThan(50)     // critical, not warning
+    expect(bucketHealthScore(p2pToHealthScore(0.8499))).toBe('critical')
+    expect(p2pToHealthScore(0.9399)).toBeLessThan(90)     // warning, not healthy
+    expect(bucketHealthScore(p2pToHealthScore(0.9399))).toBe('warning')
+    // Exact boundaries land in the upper bucket (>=).
+    expect(bucketHealthScore(p2pToHealthScore(0.85))).toBe('warning')
+    expect(bucketHealthScore(p2pToHealthScore(0.94))).toBe('healthy')
+    // All outputs are already 2dp (persistence is a no-op, no further rounding).
+    for (let p2p = 0.5; p2p <= 1.2; p2p += 0.0007) {
+      const v = p2pToHealthScore(p2p)!
+      expect(Number(v.toFixed(2))).toBe(v)
     }
   })
 

@@ -354,7 +354,7 @@ async function processCsiDevice(
   const stringConfigs = await loadStringConfigs(device.id)
   await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
   await updateHourlyAggregates(device.id, device.plant_id, maxStringNumber, stringConfigs)
-  await updateDailyAggregates(device.id, device.plant_id, maxStringNumber, stringConfigs)
+  await updateDailyAggregates(device.id, device.plant_id, maxStringNumber, stringConfigs, { model: device.model, max_strings: device.max_strings })
 
   if (dailyEnergyKwh !== null && dailyEnergyKwh > 0) {
     await prisma.device_daily.upsert({

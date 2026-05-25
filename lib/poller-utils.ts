@@ -449,6 +449,7 @@ export async function updateDailyAggregates(
   plantId: string,
   _maxStrings: number,
   configs?: StringConfigSets,
+  deviceMeta?: { model: string | null; max_strings: number | null },
 ): Promise<void> {
   const dayStart = getPKTDayStart()
   const pktDate = getPKTDateForDB()
@@ -500,10 +501,13 @@ export async function updateDailyAggregates(
   // single source of truth; we map its P2P ratio onto the 0-100 health_score scale
   // (p2pToHealthScore) so every existing consumer (Analysis, donut, dashboard)
   // buckets it unchanged.
-  const dev = await prisma.devices.findUnique({
+  // Caller passes the device's model/max_strings (it already has them in scope);
+  // fall back to a lookup only if not provided, to avoid a per-cycle query on the
+  // shared RDS.
+  const dev = deviceMeta ?? (await prisma.devices.findUnique({
     where: { id: deviceId },
     select: { model: true, max_strings: true },
-  })
+  }))
   const dailyInputs: DailyStringInput[] = Array.from(byString.entries()).map(([sn, ms]) => {
     const hourBuckets = new Map<number, { sum: number; n: number }>()
     for (const m of ms) {

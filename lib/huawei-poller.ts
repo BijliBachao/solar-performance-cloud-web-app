@@ -333,7 +333,7 @@ async function processHuaweiDeviceData(
     const stringConfigs = await loadStringConfigs(device.id)
     await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
     await updateHourlyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
-    await updateDailyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
+    await updateDailyAggregates(device.id, device.plant_id, maxStrings, stringConfigs, { model: device.model, max_strings: device.max_strings })
   }
 
   // Save hardware daily counter — source of truth for "today's energy" display

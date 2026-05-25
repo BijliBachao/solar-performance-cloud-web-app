@@ -394,7 +394,7 @@ async function processDeviceData(
     const effectiveStrings = maxStrings || strings.length
     await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
     await updateHourlyAggregates(device.id, device.plant_id, effectiveStrings, stringConfigs)
-    await updateDailyAggregates(device.id, device.plant_id, effectiveStrings, stringConfigs)
+    await updateDailyAggregates(device.id, device.plant_id, effectiveStrings, stringConfigs, { model: null, max_strings: device.max_strings })
   }
 
   // Process fault/warning codes → vendor_alarms

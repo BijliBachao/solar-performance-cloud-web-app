@@ -206,14 +206,22 @@ export function bucketSrScore(
  */
 export function p2pToHealthScore(p2p: number | null | undefined): number | null {
   if (p2p === null || p2p === undefined || !Number.isFinite(p2p)) return null
+  let raw: number
   if (p2p >= SR_HEALTHY) {
     const frac = Math.min((p2p - SR_HEALTHY) / (P2P_CAP - SR_HEALTHY), 1)
-    return 90 + frac * 10
+    raw = 90 + frac * 10
+  } else if (p2p >= SR_ABNORMAL) {
+    raw = 50 + ((p2p - SR_ABNORMAL) / (SR_HEALTHY - SR_ABNORMAL)) * 40
+  } else {
+    raw = Math.max(0, (p2p / SR_ABNORMAL) * 50)
   }
-  if (p2p >= SR_ABNORMAL) {
-    return 50 + ((p2p - SR_ABNORMAL) / (SR_HEALTHY - SR_ABNORMAL)) * 40
-  }
-  return Math.max(0, (p2p / SR_ABNORMAL) * 50)
+  // FLOOR to 2 decimals (not round). The result is persisted as Decimal(5,2)
+  // and re-bucketed by consumers at the 90/50 boundaries. Since the band
+  // boundaries map EXACTLY to 90 and 50, rounding-half-up could lift a value
+  // just under a threshold (e.g. p2p 0.9399 → 89.9956 → 90.00 → "healthy"),
+  // silently mis-bucketing the borderline strings this feature exists to flag.
+  // Flooring keeps sub-threshold values below the threshold.
+  return Math.floor(raw * 100) / 100
 }
 
 // ── Analysis query constants ────────────────────────────────────────
