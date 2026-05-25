@@ -22,10 +22,9 @@ import {
 import {
   HEALTH_HEALTHY,
   HEALTH_WARNING,
-  computePerformance,
-  computeAvailability,
-  computeHealthScore,
+  p2pToHealthScore,
 } from '@/lib/string-health'
+import { scoreLiveSr, type LiveStringInput } from '@/lib/string-health-live'
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Public types
@@ -234,9 +233,14 @@ interface PlantLast3hRow {
   device_id: string
   string_number: number
   avg_current: Prisma.Decimal | number | null
+  avg_voltage: Prisma.Decimal | number | null
+  avg_power: Prisma.Decimal | number | null
   hour: Date
   is_used: boolean
   exclude_from_peer_comparison: boolean
+  panel_count: number | null
+  model: string | null
+  max_strings: number | null
 }
 
 export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonutResult> {
@@ -252,12 +256,18 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
         sh.device_id,
         sh.string_number,
         sh.avg_current,
+        sh.avg_voltage,
+        sh.avg_power,
         sh.hour,
         COALESCE(sc.is_used, true) as is_used,
-        COALESCE(sc.exclude_from_peer_comparison, false) as exclude_from_peer_comparison
+        COALESCE(sc.exclude_from_peer_comparison, false) as exclude_from_peer_comparison,
+        sc.panel_count,
+        d.model,
+        d.max_strings
       FROM string_hourly sh
       LEFT JOIN string_configs sc
         ON sc.device_id = sh.device_id AND sc.string_number = sh.string_number
+      JOIN devices d ON d.id = sh.device_id
       WHERE sh.plant_id = ${plantCode}
         AND sh.hour >= ${windowStart}
         AND sh.hour < ${windowEnd}
@@ -277,12 +287,19 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
     return empty
   }
 
-  // Group rows: device → string → list of (hour, avg_current).
-  // Strings with NULL avg_current still get an entry (no-data → Abnormal),
-  // they just don't contribute to the inverter average.
-  type StringSamples = { hours: Set<string>; currents: number[] }
+  // Group rows: device → string → mean V/I/P over the window. We collapse the
+  // 3 hourly samples into one mean reading per string and score it with the SAME
+  // Self-Referencing Ratio used by the live plant-tab chart (Algorithm v2 §4c):
+  // per-panel power, MPPT-grouped, max-anchored. The SR ratio is then mapped onto
+  // the 0-100 health_score scale via p2pToHealthScore, so the donut's existing
+  // 90/50 bucketing reproduces the SR bucket exactly — keeping Last-3h consistent
+  // with the live chart and (in spirit) the Prev-day / Analysis P2P.
+  type StringSamples = {
+    hours: Set<string>; currents: number[]; voltages: number[]; powers: number[]
+    isUsed: boolean; peerExcluded: boolean; panelCount: number | null
+  }
   const byDeviceString = new Map<string, Map<number, StringSamples>>()
-  const flagsByKey = new Map<string, { isUsed: boolean; peerExcluded: boolean }>()
+  const deviceTopology = new Map<string, { model: string | null; maxStrings: number | null }>()
   const allHours = new Set<string>()
   let lastDataAt: Date = new Date(0)
 
@@ -290,6 +307,9 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
     const hourKey = r.hour.toISOString()
     allHours.add(hourKey)
     if (r.hour.getTime() > lastDataAt.getTime()) lastDataAt = r.hour
+    if (!deviceTopology.has(r.device_id)) {
+      deviceTopology.set(r.device_id, { model: r.model, maxStrings: r.max_strings })
+    }
 
     let strMap = byDeviceString.get(r.device_id)
     if (!strMap) {
@@ -298,53 +318,54 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
     }
     let samples = strMap.get(r.string_number)
     if (!samples) {
-      samples = { hours: new Set(), currents: [] }
+      samples = {
+        hours: new Set(), currents: [], voltages: [], powers: [],
+        isUsed: r.is_used, peerExcluded: r.exclude_from_peer_comparison, panelCount: r.panel_count,
+      }
       strMap.set(r.string_number, samples)
     }
     samples.hours.add(hourKey)
     const cur = decimalToNumberOrNull(r.avg_current)
+    const volt = decimalToNumberOrNull(r.avg_voltage)
+    const pow = decimalToNumberOrNull(r.avg_power)
     if (cur !== null) samples.currents.push(cur)
-
-    // Flags are identical across all rows for a given (device, string) since
-    // string_configs is PK'd on (device_id, string_number); setOnce semantics.
-    flagsByKey.set(`${r.device_id}:${r.string_number}`, {
-      isUsed: r.is_used,
-      peerExcluded: r.exclude_from_peer_comparison,
-    })
+    if (volt !== null) samples.voltages.push(volt)
+    if (pow !== null) samples.powers.push(pow)
   }
 
   const hoursCovered = allHours.size
+  const mean = (a: number[]) => (a.length > 0 ? a.reduce((s, n) => s + n, 0) / a.length : 0)
 
-  // Compute per-device inverter avg + max-hours, then per-string scores.
-  // Inverter avg uses the flat mean of all sample currents (matches
-  // updateDailyAggregates semantics in lib/poller-utils.ts so prev-day and
-  // last-3h donuts agree on which strings are "below peer").
+  // Per device: collapse to one mean reading per string, score with scoreLiveSr,
+  // map the SR ratio → 0-100 health_score for the donut's bucketing.
   const inputs: DonutInput[] = []
   for (const [deviceId, stringMap] of byDeviceString) {
-    const allCurrents: number[] = []
-    for (const samples of stringMap.values()) allCurrents.push(...samples.currents)
-    const inverterAvg = allCurrents.length > 0
-      ? allCurrents.reduce((s, n) => s + n, 0) / allCurrents.length
-      : 0
-    const hourCounts = Array.from(stringMap.values()).map((s) => s.hours.size)
-    const maxHours = hourCounts.length > 0 ? Math.max(...hourCounts) : 0
-
-    for (const [strNum, samples] of stringMap) {
-      const flags = flagsByKey.get(`${deviceId}:${strNum}`) ?? { isUsed: true, peerExcluded: false }
-
-      let score: number | null = null
-      if (samples.currents.length > 0 && inverterAvg > 0 && maxHours > 0) {
-        const stringAvg = samples.currents.reduce((s, n) => s + n, 0) / samples.currents.length
-        const perf = computePerformance(stringAvg, inverterAvg)
-        const avail = computeAvailability(samples.hours.size, maxHours)
-        score = computeHealthScore(perf, avail)
-      }
-
+    const topo = deviceTopology.get(deviceId) ?? { model: null, maxStrings: null }
+    const liveInputs: LiveStringInput[] = []
+    for (const [strNum, s] of stringMap) {
+      liveInputs.push({
+        string_number: strNum,
+        voltage: mean(s.voltages),
+        current: mean(s.currents),
+        power: mean(s.powers),
+        panel_count: s.panelCount,
+        is_used: s.isUsed,
+        exclude_from_peer_comparison: s.peerExcluded,
+        stale: false, // window is the last 3 completed hours — recent by construction
+      })
+    }
+    const results = scoreLiveSr(liveInputs, {
+      deviceId,
+      inverterModel: topo.model,
+      inverterMaxStrings: topo.maxStrings,
+    })
+    for (const r of results) {
+      const s = stringMap.get(r.string_number)!
       inputs.push({
-        healthScore: score,
-        isUsed: flags.isUsed,
-        peerExcluded: flags.peerExcluded,
-        openCircuit: false, // v2 deferral — see spec §3c
+        healthScore: r.sr != null ? p2pToHealthScore(r.sr) : null,
+        isUsed: s.isUsed,
+        peerExcluded: s.peerExcluded,
+        openCircuit: r.status === 'OPEN_CIRCUIT',
       })
     }
   }

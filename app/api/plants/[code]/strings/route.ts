@@ -6,9 +6,22 @@ import { Prisma } from '@prisma/client'
 import { Decimal } from '@prisma/client/runtime/library'
 import { INVERTER_DEVICE_TYPE_IDS } from '@/lib/constants'
 import {
-  isStale, classifyRealtime, leaveOneOutAvg, activeAvg,
+  isStale, activeAvg,
   type StringStatus, type StringReading,
 } from '@/lib/string-health'
+import { scoreLiveSr, type LiveStringInput, type LiveStringResult } from '@/lib/string-health-live'
+
+// Map the SR scorer's result to the 5-value StringStatus the UI renders.
+// Physical states (open-circuit / offline) win; otherwise the SR bucket decides.
+// A null bucket (can't fairly compare — peer-excluded, too few peers, whole MPPT
+// in low light) is NOT flagged — we don't show red for what we can't assess.
+function liveDisplayStatus(r: LiveStringResult): StringStatus {
+  if (r.status === 'OPEN_CIRCUIT') return 'OPEN_CIRCUIT'
+  if (r.status === 'OFFLINE') return 'OFFLINE'
+  if (r.bucket === 'critical') return 'CRITICAL'
+  if (r.bucket === 'abnormal') return 'WARNING'
+  return 'NORMAL'
+}
 
 // PKT day start for "today" query
 function getTodayStart(): Date {
@@ -58,7 +71,7 @@ export async function GET(
 
     const devices = await prisma.devices.findMany({
       where: { plant_id: params.code, device_type_id: { in: INVERTER_DEVICE_TYPE_IDS } },
-      select: { id: true, device_name: true, max_strings: true },
+      select: { id: true, device_name: true, max_strings: true, model: true },
     })
 
     // Fetch all string configs for these devices in one query (LEFT JOIN equivalent)
@@ -167,6 +180,31 @@ export async function GET(
       // Display average (active peer-pool strings, self-inclusive — for KPI pill)
       const displayAvg = activeAvg(freshReadings)
 
+      // Live health via the Self-Referencing Ratio (Algorithm v2 §4c): MPPT-grouped,
+      // panel-normalised, max-anchored — the same family as the Analysis tab's daily
+      // P2P (median-anchored). Replaces the legacy raw-current leave-one-out compare,
+      // so the live chart and Analysis tab now agree on what "underperforming" means.
+      const liveInputs: LiveStringInput[] = latestMeasurements.map((m) => {
+        const c = configByKey.get(`${device.id}:${m.string_number}`)
+        return {
+          string_number: m.string_number,
+          voltage: Number(m.voltage),
+          current: Number(m.current),
+          power: Number(m.power),
+          panel_count: c?.panel_count ?? null,
+          is_used: c?.is_used !== false,
+          exclude_from_peer_comparison: c?.exclude_from_peer_comparison === true,
+          stale: isStale(m.timestamp.getTime(), freshestTs),
+        }
+      })
+      const srByString = new Map(
+        scoreLiveSr(liveInputs, {
+          deviceId: device.id,
+          inverterModel: device.model,
+          inverterMaxStrings: device.max_strings,
+        }).map((r) => [r.string_number, r]),
+      )
+
       // Build string data with kWh — exclude admin-flagged unused (those are empty
       // ports, no real energy). Peer-excluded strings DO appear in the response with
       // their real V/A/P/kWh — they're producing energy, just not peer-comparable.
@@ -180,13 +218,14 @@ export async function GET(
           const cfg = configByKey.get(`${device.id}:${m.string_number}`)
           const peerExcluded = cfg?.exclude_from_peer_comparison === true
 
-          // Peer-excluded strings skip peer comparison entirely (peerAvg = null).
-          // classifyRealtime still catches DISCONNECTED / OPEN_CIRCUIT — only the
-          // gap-vs-peers path is silenced. Stale also forces null peerAvg.
-          const peerAvg = (stale || peerExcluded)
-            ? null
-            : leaveOneOutAvg(freshReadings, m.string_number)
-          const { status, gapPercent } = classifyRealtime(current, voltage, peerAvg, stale)
+          // SR-based status + gap. The scorer already handles stale/open-circuit/
+          // peer-excluded/insufficient-peers internally; gap = how far below the
+          // best per-panel peer in this MPPT group (null when not comparable).
+          const sr = srByString.get(m.string_number)
+          const status: StringStatus = sr ? liveDisplayStatus(sr) : (stale ? 'OFFLINE' : 'NORMAL')
+          const gapPercent = sr && sr.sr != null
+            ? Math.max(0, Math.round((1 - sr.sr) * 1000) / 10)
+            : null
 
           // Trapezoidal kWh for this string today
           const stringTodayData = todayByString.get(m.string_number) || []
@@ -201,7 +240,7 @@ export async function GET(
             voltage,
             current,
             power: Number(m.power),
-            gap_percent: peerExcluded ? null : Math.round(gapPercent * 10) / 10,
+            gap_percent: gapPercent,
             status,
             peer_excluded: peerExcluded,
             energy_kwh: Math.round(kwh * 1000) / 1000,

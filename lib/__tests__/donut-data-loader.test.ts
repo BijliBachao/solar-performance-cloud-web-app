@@ -175,6 +175,26 @@ function mockLast3h(hourlyRows: any[], unusedCount: number = 0) {
     .mockResolvedValueOnce([{ unused: BigInt(unusedCount) }])
 }
 
+// Build an hourly row for the SR-based Last-3h donut. power=null → no data.
+// model/max_strings null → device-wide peer pool (max-anchored). 16 panels @ ~600V.
+function hRow(
+  sn: number, hour: string, power: number | null,
+  opts: { is_used?: boolean; exclude?: boolean; panel_count?: number | null } = {},
+) {
+  return {
+    device_id: 'd1', string_number: sn,
+    avg_current: power == null ? null : new Decimal((power / 600).toFixed(3)),
+    avg_voltage: power == null ? null : new Decimal('600'),
+    avg_power: power == null ? null : new Decimal(String(power)),
+    hour: new Date(hour),
+    is_used: opts.is_used ?? true,
+    exclude_from_peer_comparison: opts.exclude ?? false,
+    panel_count: opts.panel_count ?? 16,
+    model: null,
+    max_strings: null,
+  }
+}
+
 describe('loadPlantDonutLast3h', () => {
   it('queries string_hourly for the last 3 completed hours', async () => {
     mockLast3h([])
@@ -194,44 +214,34 @@ describe('loadPlantDonutLast3h', () => {
     expect(interpolated.some((v: any) => v instanceof Date && v.toISOString() === '2026-05-24T05:00:00.000Z')).toBe(true)
   })
 
-  it('computes health score per string from hourly avg currents', async () => {
-    // Two strings on one inverter, each with 3 hours of avg current data
+  it('scores strings by SR over hourly per-panel power; equal strings → Healthy', async () => {
+    // Two strings, equal per-panel power (1600W / 16 panels = 100 W/panel) → SR 1.0 each.
     mockLast3h([
-      { device_id: 'd1', string_number: 1, avg_current: new Decimal('5.0'),  hour: new Date('2026-05-24T02:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 1, avg_current: new Decimal('5.0'),  hour: new Date('2026-05-24T03:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 1, avg_current: new Decimal('5.0'),  hour: new Date('2026-05-24T04:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 2, avg_current: new Decimal('5.0'),  hour: new Date('2026-05-24T02:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 2, avg_current: new Decimal('5.0'),  hour: new Date('2026-05-24T03:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 2, avg_current: new Decimal('5.0'),  hour: new Date('2026-05-24T04:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
+      hRow(1, '2026-05-24T02:00:00Z', 1600), hRow(1, '2026-05-24T03:00:00Z', 1600), hRow(1, '2026-05-24T04:00:00Z', 1600),
+      hRow(2, '2026-05-24T02:00:00Z', 1600), hRow(2, '2026-05-24T03:00:00Z', 1600), hRow(2, '2026-05-24T04:00:00Z', 1600),
     ])
     const { loadPlantDonutLast3h } = await import('@/lib/donut-data-loader')
 
     const result = await loadPlantDonutLast3h('plantX')
 
-    // Both strings have identical performance vs inverter avg → both Healthy
     expect(result.totalStrings).toBe(2)
     expect(result.counts.healthy).toBe(2)
     expect(result.timeBasis.hoursCovered).toBe(3)
   })
 
-  it('one string critically below peers → Critical', async () => {
+  it('one string far below its MPPT peers (per-panel) → Critical', async () => {
+    // s1,s2 = 100 W/panel; s3 = 40 W/panel → SR 0.4 vs best → Critical.
     mockLast3h([
-      { device_id: 'd1', string_number: 1, avg_current: new Decimal('5.0'),  hour: new Date('2026-05-24T02:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 1, avg_current: new Decimal('5.0'),  hour: new Date('2026-05-24T03:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 1, avg_current: new Decimal('5.0'),  hour: new Date('2026-05-24T04:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 2, avg_current: new Decimal('5.0'),  hour: new Date('2026-05-24T02:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 2, avg_current: new Decimal('5.0'),  hour: new Date('2026-05-24T03:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 2, avg_current: new Decimal('5.0'),  hour: new Date('2026-05-24T04:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 3, avg_current: new Decimal('0.5'),  hour: new Date('2026-05-24T02:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 3, avg_current: new Decimal('0.5'),  hour: new Date('2026-05-24T03:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 3, avg_current: new Decimal('0.5'),  hour: new Date('2026-05-24T04:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
+      hRow(1, '2026-05-24T02:00:00Z', 1600), hRow(1, '2026-05-24T03:00:00Z', 1600), hRow(1, '2026-05-24T04:00:00Z', 1600),
+      hRow(2, '2026-05-24T02:00:00Z', 1600), hRow(2, '2026-05-24T03:00:00Z', 1600), hRow(2, '2026-05-24T04:00:00Z', 1600),
+      hRow(3, '2026-05-24T02:00:00Z', 640),  hRow(3, '2026-05-24T03:00:00Z', 640),  hRow(3, '2026-05-24T04:00:00Z', 640),
     ])
     const { loadPlantDonutLast3h } = await import('@/lib/donut-data-loader')
 
     const result = await loadPlantDonutLast3h('plantX')
 
-    // String 3 has 0.5 A vs ~3.5 A inverter avg → performance ~14% → Critical
     expect(result.counts.critical).toBeGreaterThanOrEqual(1)
+    expect(result.counts.healthy).toBe(2)
   })
 
   it('falls back to since-sunrise label when fewer than 3 hours available', async () => {
@@ -258,19 +268,13 @@ describe('loadPlantDonutLast3h', () => {
     expect(result.warnings.some(w => w.code === 'NO_DATA_WINDOW')).toBe(true)
   })
 
-  it('treats NULL avg_current rows as no-data instead of dropping them (C2 regression guard)', async () => {
-    // 3 strings reporting; string #3 has NULL avg_current for all hours.
+  it('treats no-data rows as no-data instead of dropping them (C2 regression guard)', async () => {
+    // 3 strings reporting; string #3 has no power/current for all hours.
     // Should appear as Abnormal/no-data, not vanish.
     mockLast3h([
-      { device_id: 'd1', string_number: 1, avg_current: new Decimal('5.0'), hour: new Date('2026-05-24T02:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 1, avg_current: new Decimal('5.0'), hour: new Date('2026-05-24T03:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 1, avg_current: new Decimal('5.0'), hour: new Date('2026-05-24T04:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 2, avg_current: new Decimal('5.0'), hour: new Date('2026-05-24T02:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 2, avg_current: new Decimal('5.0'), hour: new Date('2026-05-24T03:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 2, avg_current: new Decimal('5.0'), hour: new Date('2026-05-24T04:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 3, avg_current: null,                hour: new Date('2026-05-24T02:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 3, avg_current: null,                hour: new Date('2026-05-24T03:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-      { device_id: 'd1', string_number: 3, avg_current: null,                hour: new Date('2026-05-24T04:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
+      hRow(1, '2026-05-24T02:00:00Z', 1600), hRow(1, '2026-05-24T03:00:00Z', 1600), hRow(1, '2026-05-24T04:00:00Z', 1600),
+      hRow(2, '2026-05-24T02:00:00Z', 1600), hRow(2, '2026-05-24T03:00:00Z', 1600), hRow(2, '2026-05-24T04:00:00Z', 1600),
+      hRow(3, '2026-05-24T02:00:00Z', null), hRow(3, '2026-05-24T03:00:00Z', null), hRow(3, '2026-05-24T04:00:00Z', null),
     ])
     const { loadPlantDonutLast3h } = await import('@/lib/donut-data-loader')
 
