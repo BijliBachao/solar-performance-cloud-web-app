@@ -29,6 +29,7 @@ interface Plant {
   last_reading_at: string | null
   assigned_org: { id: string; name: string } | null
   device_count: number
+  string_count: number
   alerts_today: AlertCounts
   alerts_unresolved: AlertCounts
 }
@@ -425,7 +426,7 @@ export default function AdminPlantsPage() {
                 <SortableHead k="name"         label="Plant" />
                 <SortableHead k="last_reading" label="Status" />
                 <TableHead className="px-4 py-2.5 hidden md:table-cell">Issues</TableHead>
-                <SortableHead k="capacity"     label="Devices · Capacity" className="hidden md:table-cell" />
+                <SortableHead k="capacity"     label="Devices · Strings · Capacity" className="hidden md:table-cell" />
                 <SortableHead k="assigned"     label="Organization"       className="hidden lg:table-cell" />
                 <SortableHead k="provider"     label="Provider"           className="hidden md:table-cell" />
                 <TableHead className="px-4 py-2.5 w-px">
@@ -469,6 +470,8 @@ export default function AdminPlantsPage() {
                               </>
                             )}
                             {plant.device_count} dev
+                            <span className="mx-1 text-slate-300">·</span>
+                            {plant.string_count} str
                             {plant.capacity_kw && (
                               <>
                                 <span className="mx-1 text-slate-300">·</span>
@@ -517,6 +520,8 @@ export default function AdminPlantsPage() {
                       {/* Capacity — mono, right-aligned-feeling via tabular-nums */}
                       <TableCell className="px-4 py-2.5 hidden md:table-cell text-sm text-slate-600 font-mono tabular-nums whitespace-nowrap">
                         {plant.device_count} <span className="text-slate-400">dev</span>
+                        <span className="text-slate-300 mx-1.5">·</span>
+                        {plant.string_count} <span className="text-slate-400">str</span>
                         {plant.capacity_kw && (
                           <>
                             <span className="text-slate-300 mx-1.5">·</span>

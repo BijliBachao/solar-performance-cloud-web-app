@@ -38,8 +38,12 @@ export async function GET(request: NextRequest) {
     const plantIds = plants.map(p => p.id)
     const allDeviceIds = plants.flatMap(p => p.devices.map(d => d.id))
     const todayStart = new Date(new Date().setHours(0, 0, 0, 0))
+    // Active strings = distinct (device, string) producing in the last 14 days.
+    // string_daily already excludes admin-flagged-unused ports, so this is the
+    // count of real, monitored strings per plant.
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
 
-    const [unresolvedByPlant, todayByPlant, lastReadingByDevice] = await Promise.all([
+    const [unresolvedByPlant, todayByPlant, lastReadingByDevice, activeStrings] = await Promise.all([
       prisma.alerts.groupBy({
         by: ['plant_id', 'severity'],
         where: { plant_id: { in: plantIds }, resolved_at: null },
@@ -67,7 +71,19 @@ export async function GET(request: NextRequest) {
             },
             _max: { timestamp: true },
           }),
+      plantIds.length === 0
+        ? Promise.resolve([] as Array<{ plant_id: string }>)
+        : prisma.string_daily.groupBy({
+            by: ['plant_id', 'device_id', 'string_number'],
+            where: { plant_id: { in: plantIds }, date: { gte: fourteenDaysAgo } },
+          }),
     ])
+
+    // One groupBy row per distinct (plant, device, string) → tally per plant.
+    const stringCountByPlant = new Map<string, number>()
+    for (const r of activeStrings) {
+      stringCountByPlant.set(r.plant_id, (stringCountByPlant.get(r.plant_id) ?? 0) + 1)
+    }
 
     // Per-device latest timestamp → per-plant max via the plants→devices map.
     const lastReadingByDeviceMap = new Map<string, Date>()
@@ -110,6 +126,7 @@ export async function GET(request: NextRequest) {
         ...rest,
         assigned_org: p.plant_assignments[0]?.organizations || null,
         device_count: p._count.devices,
+        string_count: stringCountByPlant.get(p.id) ?? 0,
         alerts_today: todayMap.get(p.id) || emptyAlerts,
         alerts_unresolved: unresolvedMap.get(p.id) || emptyAlerts,
         last_reading_at: lastReadingByPlant.get(p.id)?.toISOString() ?? null,
