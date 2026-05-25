@@ -68,6 +68,19 @@ describe('CsiClient — parseRealData (verified 2026-05-07: lowercase codes, sca
     expect(result.strings[0]).toMatchObject({ voltage: 500, current: 10, power: 5000 })
   })
 
+  it('IGNORES vendor dp{N} and always uses V×I (CSI dp proven unreliable, up to 6.74× off)', async () => {
+    const { parseRealData } = await import('@/lib/csi-client')
+    const result = parseRealData([
+      { fieldCode: 'dv1', fieldName: '', fieldUnitName: '', data: 590 },
+      { fieldCode: 'dc1', fieldName: '', fieldUnitName: '', data: 12 },
+      { fieldCode: 'dp1', fieldName: '', fieldUnitName: '', data: 13085 }, // inflated vendor power (real PV1 case)
+    ])
+    // Must be V×I = 7080, NOT the vendor's 13085
+    expect(result.strings[0].power).toBeCloseTo(7080, 0)
+    // dp1 still recognised (not logged as unrecognised noise)
+    expect(result.unrecognisedCodes).not.toContain('dp1')
+  })
+
   it('skips voltage-only strings (no current → no fault detection possible)', async () => {
     const { parseRealData } = await import('@/lib/csi-client')
     const result = parseRealData([

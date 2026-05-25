@@ -504,8 +504,15 @@ export function parseRealData(realData: CsiRealDataRow[]): ParsedCsiRealData {
     }
   }
 
-  // Only emit measurements where we have at least V + I (power computed if
-  // missing; voltage-only rows are useless for fault detection).
+  // Only emit measurements where we have at least V + I (voltage-only rows
+  // are useless for fault detection).
+  //
+  // Power is ALWAYS computed as V×I — we do NOT trust CSI's dp{N} field.
+  // Verified 2026-05-25 on raw same-timestamp data: dp{N} is unreliable on
+  // ~22% of rows (ratios 0.62×–6.74× vs V×I; e.g. PV1 reported 13,085W where
+  // V×I=7,080W, PV4 reported 17W while producing 6.2kW). All four other
+  // providers reconcile at exactly 1.00, so this is CSI-specific; V×I
+  // reconciles by physics. See PROVIDER-DATA-INTEGRITY-AUDIT.md §2 P1.
   const strings: ParsedCsiStringMeasurement[] = []
   for (const [, slot] of byString) {
     if (typeof slot.voltage !== 'number' || typeof slot.current !== 'number') continue
@@ -513,7 +520,7 @@ export function parseRealData(realData: CsiRealDataRow[]): ParsedCsiRealData {
       string_number: slot.string_number!,
       voltage: slot.voltage,
       current: slot.current,
-      power: typeof slot.power === 'number' ? slot.power : slot.voltage * slot.current,
+      power: slot.voltage * slot.current,
     })
   }
   strings.sort((a, b) => a.string_number - b.string_number)
