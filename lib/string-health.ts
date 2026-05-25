@@ -96,6 +96,16 @@ export const PLANT_HEALTH_HEALTHY = 3
 export const PLANT_HEALTH_FAULTY = 2
 export const PLANT_HEALTH_DISCONNECTED = 1
 
+/**
+ * Plant connectivity recency window. A plant that has reported within this
+ * window is "connected" regardless of a stale/lagging vendor status flag —
+ * vendor plant-status fields routinely report Offline/Waiting at sunrise and
+ * overnight even while data is streaming (confirmed live 2026-05-24/25:
+ * 9 of 11 Growatt plants flagged "disconnected" had reported within 6 min).
+ * Only genuine silence (> this window) is treated as disconnected.
+ */
+export const RECENT_REPORT_WINDOW_MS = 24 * 60 * 60 * 1000
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Algorithm v2 — Self-Referencing Ratio (SR) / Performance-to-Peers (P2P)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

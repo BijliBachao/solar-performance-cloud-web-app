@@ -3,6 +3,12 @@ import { Decimal } from '@prisma/client/runtime/library'
 import { GrowattClient } from '@/lib/growatt-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
 import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches } from '@/lib/poller-utils'
+import {
+  PLANT_HEALTH_HEALTHY,
+  PLANT_HEALTH_FAULTY,
+  PLANT_HEALTH_DISCONNECTED,
+  RECENT_REPORT_WINDOW_MS,
+} from '@/lib/string-health'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
@@ -10,14 +16,36 @@ const HOUR_MS = 60 * 60 * 1000
 const warnedUnmappedDevices = new Set<string>()
 const MAX_WARNED_DEVICES = 500
 
-// Growatt plant status -> our DB health_state
+// Growatt plant status -> our DB health_state, with a recency override.
 // Growatt: 1=online, 3=bat online (SPH-S), 0=waiting, 4=offline, 2=fault
 // Our DB: 1=disconnected, 2=faulty, 3=healthy
-function mapGrowattPlantHealth(status: number): number {
-  if (status === 1) return 3  // Online → Healthy
-  if (status === 3) return 3  // Bat Online (SPH-S) → Healthy
-  if (status === 2) return 2  // Fault → Faulty
-  return 1                    // 0 (Waiting), 4 (Offline), unknown → Disconnected
+//
+// Growatt's plant-level `status` lags the real data feed — it reports
+// Waiting(0)/Offline(4) at sunrise and overnight even while string data is
+// still streaming (confirmed live 2026-05-25 06:59 PKT: 9 of 11 plants flagged
+// "disconnected" had reported within 6 minutes). So a bare 0/4 is NOT enough
+// to call a plant disconnected. We trust our own measurements: a plant that
+// reported within RECENT_REPORT_WINDOW_MS is connected. Fault(2) is always
+// respected; only genuine silence is treated as disconnected.
+// Exported pure for unit tests.
+export function resolveGrowattPlantHealth(status: number, reportedRecently: boolean): number {
+  if (status === 2) return PLANT_HEALTH_FAULTY                  // real fault — always respected
+  if (status === 1 || status === 3) return PLANT_HEALTH_HEALTHY // online / bat online
+  // status 0 (waiting), 4 (offline), or unknown:
+  if (reportedRecently) return PLANT_HEALTH_HEALTHY             // data is flowing → vendor status lag
+  return PLANT_HEALTH_DISCONNECTED                              // genuine silence
+}
+
+// Plants (by id) that reported string data within the recency window.
+async function fetchRecentlyReportedPlantIds(plantIds: string[]): Promise<Set<string>> {
+  if (plantIds.length === 0) return new Set()
+  const cutoff = new Date(Date.now() - RECENT_REPORT_WINDOW_MS)
+  const rows = await prisma.string_measurements.findMany({
+    where: { plant_id: { in: plantIds }, timestamp: { gte: cutoff } },
+    select: { plant_id: true },
+    distinct: ['plant_id'],
+  })
+  return new Set(rows.map((r) => r.plant_id))
 }
 
 // Growatt device status -> our DB health_state
@@ -78,17 +106,19 @@ export async function pollGrowatt(): Promise<void> {
 async function syncPlants(client: GrowattClient): Promise<void> {
   console.log('[Growatt] Syncing plants...')
   const plants = await client.getPlantList()
+  const recentlyReported = await fetchRecentlyReportedPlantIds(plants.map((p) => String(p.plant_id)))
 
   await prisma.$transaction(
     plants.map((plant) => {
       const plantId = String(plant.plant_id)
+      const health = resolveGrowattPlantHealth(plant.status, recentlyReported.has(plantId))
       return prisma.plants.upsert({
         where: { id: plantId },
         update: {
           plant_name: plant.name,
           capacity_kw: plant.peak_power ? new Decimal(plant.peak_power) : null,
           address: plant.city || null,
-          health_state: mapGrowattPlantHealth(plant.status),
+          health_state: health,
           provider: PROVIDERS.GROWATT,
           last_synced: new Date(),
         },
@@ -97,7 +127,7 @@ async function syncPlants(client: GrowattClient): Promise<void> {
           plant_name: plant.name,
           capacity_kw: plant.peak_power ? new Decimal(plant.peak_power) : null,
           address: plant.city || null,
-          health_state: mapGrowattPlantHealth(plant.status),
+          health_state: health,
           provider: PROVIDERS.GROWATT,
           last_synced: new Date(),
         },
@@ -202,15 +232,18 @@ async function syncPlantHealth(client: GrowattClient): Promise<void> {
   if (plants.length === 0) return
 
   try {
-    // Plant health comes from the plant list (status field)
+    // Plant health comes from the plant list (status field), reconciled
+    // against our own recent measurements so a lagging vendor status doesn't
+    // false-flag an actively-reporting plant as disconnected.
     const apiPlants = await client.getPlantList()
     if (apiPlants.length > 0) {
+      const recentlyReported = await fetchRecentlyReportedPlantIds(apiPlants.map((p) => String(p.plant_id)))
       await prisma.$transaction(
         apiPlants.map((plant) => {
           const plantId = String(plant.plant_id)
           return prisma.plants.update({
             where: { id: plantId },
-            data: { health_state: mapGrowattPlantHealth(plant.status) },
+            data: { health_state: resolveGrowattPlantHealth(plant.status, recentlyReported.has(plantId)) },
           })
         })
       )

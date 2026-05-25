@@ -114,3 +114,40 @@ describe('pollGrowatt — degraded-path resilience', () => {
     expect(clientInstance.getPlantList).not.toHaveBeenCalled()
   })
 })
+
+describe('resolveGrowattPlantHealth — recency override (fixes false night/sunrise disconnects)', () => {
+  it('Online (1) / Bat-Online (3) → Healthy regardless of recency', async () => {
+    const { resolveGrowattPlantHealth } = await import('@/lib/growatt-poller')
+    const { PLANT_HEALTH_HEALTHY } = await import('@/lib/string-health')
+    expect(resolveGrowattPlantHealth(1, false)).toBe(PLANT_HEALTH_HEALTHY)
+    expect(resolveGrowattPlantHealth(3, false)).toBe(PLANT_HEALTH_HEALTHY)
+  })
+
+  it('Fault (2) → Faulty even if reporting recently (real fault never masked)', async () => {
+    const { resolveGrowattPlantHealth } = await import('@/lib/growatt-poller')
+    const { PLANT_HEALTH_FAULTY } = await import('@/lib/string-health')
+    expect(resolveGrowattPlantHealth(2, true)).toBe(PLANT_HEALTH_FAULTY)
+    expect(resolveGrowattPlantHealth(2, false)).toBe(PLANT_HEALTH_FAULTY)
+  })
+
+  it('Waiting (0) / Offline (4) but reported recently → Healthy (the 9-of-11 live case)', async () => {
+    const { resolveGrowattPlantHealth } = await import('@/lib/growatt-poller')
+    const { PLANT_HEALTH_HEALTHY } = await import('@/lib/string-health')
+    expect(resolveGrowattPlantHealth(0, true)).toBe(PLANT_HEALTH_HEALTHY)
+    expect(resolveGrowattPlantHealth(4, true)).toBe(PLANT_HEALTH_HEALTHY)
+  })
+
+  it('Waiting (0) / Offline (4) with NO recent data → Disconnected (genuine silence)', async () => {
+    const { resolveGrowattPlantHealth } = await import('@/lib/growatt-poller')
+    const { PLANT_HEALTH_DISCONNECTED } = await import('@/lib/string-health')
+    expect(resolveGrowattPlantHealth(0, false)).toBe(PLANT_HEALTH_DISCONNECTED)
+    expect(resolveGrowattPlantHealth(4, false)).toBe(PLANT_HEALTH_DISCONNECTED)
+  })
+
+  it('unknown status with recent data → Healthy; without → Disconnected', async () => {
+    const { resolveGrowattPlantHealth } = await import('@/lib/growatt-poller')
+    const { PLANT_HEALTH_HEALTHY, PLANT_HEALTH_DISCONNECTED } = await import('@/lib/string-health')
+    expect(resolveGrowattPlantHealth(99, true)).toBe(PLANT_HEALTH_HEALTHY)
+    expect(resolveGrowattPlantHealth(99, false)).toBe(PLANT_HEALTH_DISCONNECTED)
+  })
+})

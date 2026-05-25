@@ -7,6 +7,7 @@ import {
   PLANT_HEALTH_HEALTHY,
   PLANT_HEALTH_FAULTY,
   PLANT_HEALTH_DISCONNECTED,
+  RECENT_REPORT_WINDOW_MS,
 } from '@/lib/string-health'
 
 let lastPlantSync = 0
@@ -23,7 +24,7 @@ const HOUR_MS = 60 * 60 * 1000
 // for perfectly healthy plants. If `lastReportTime` is within the last 24h,
 // the plant is producing on a normal schedule — keep it Healthy. Only mark
 // Faulty/Disconnected when we have NO recent reports (>24h silence).
-const RECENT_REPORT_WINDOW_MS = 24 * 60 * 60 * 1000
+// RECENT_REPORT_WINDOW_MS is centralized in string-health.ts (shared with Growatt).
 const seenUnknownHealthStates = new Set<number>()
 // Exported for unit tests — function is pure given current time + inputs.
 export function mapCsiHealthState(status: number, lastReportTime: string | null): number {
