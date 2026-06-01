@@ -106,6 +106,44 @@ export const PLANT_HEALTH_DISCONNECTED = 1
  */
 export const RECENT_REPORT_WINDOW_MS = 24 * 60 * 60 * 1000
 
+/**
+ * Vendor-feed staleness threshold. If the inverter's `lastReportTime` (as
+ * reported by the vendor cloud's realtime endpoint) is older than this, the
+ * cloud is serving a cached snapshot and the poller MUST skip writes —
+ * otherwise the same frozen V/I/P payload gets re-written every cycle and
+ * every string looks "dead" against itself.
+ *
+ * Confirmed live 2026-06-01 via direct probe of /open-api/device/data: all
+ * 5 CSI inverters had identical lastReportTime in a 10-min window on
+ * 2026-05-25, returning the same cached realData on every poll for 6+ days.
+ * 26 spurious CRITICAL alerts had accumulated before the gate landed.
+ *
+ * 2 h is a defensive ceiling — healthy vendors update every 5–10 min, and a
+ * 2 h gap during operational hours is real silence, not jitter. Tighter
+ * thresholds (e.g. 30 min) would false-positive on legitimate vendor blips.
+ */
+export const VENDOR_FEED_STALE_MS = 2 * 60 * 60 * 1000
+
+/**
+ * Pure check: is the vendor's `lastReportTime` older than VENDOR_FEED_STALE_MS?
+ * Returns true for null/undefined/empty/unparseable values (we cannot prove
+ * freshness → treat as stale, fail-safe). CSI returns "2026-05-25 14:17:28"
+ * without TZ marker — `new Date(str)` parses as UTC on EC2 (UTC host),
+ * matching the existing mapCsiHealthState convention.
+ */
+export function isVendorFeedStale(
+  lastReportTime: string | Date | null | undefined,
+  nowMs: number = Date.now(),
+): boolean {
+  if (!lastReportTime) return true
+  const ts =
+    lastReportTime instanceof Date
+      ? lastReportTime.getTime()
+      : new Date(lastReportTime).getTime()
+  if (!Number.isFinite(ts)) return true
+  return nowMs - ts > VENDOR_FEED_STALE_MS
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Algorithm v2 — Self-Referencing Ratio (SR) / Performance-to-Peers (P2P)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

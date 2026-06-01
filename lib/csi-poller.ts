@@ -8,7 +8,12 @@ import {
   PLANT_HEALTH_FAULTY,
   PLANT_HEALTH_DISCONNECTED,
   RECENT_REPORT_WINDOW_MS,
+  isVendorFeedStale,
 } from '@/lib/string-health'
+
+// Per-process dedup so we log a single warning per stale-feed event per
+// device, not once per minute. Cleared the moment the feed recovers.
+const staleFeedLogged = new Set<string>()
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
@@ -301,6 +306,27 @@ async function processCsiDevice(
   device: { id: string; plant_id: string; max_strings: number | null; model: string | null },
   data: CsiDeviceData,
 ): Promise<void> {
+  // Stale-feed gate (2026-06-01). When the CSI/SolarMAN cloud serves a
+  // cached snapshot — confirmed lastReportTime stuck for 6+ days on all 5
+  // J-series inverters — every poll would write the same frozen V/I/P and
+  // every string would look dead. Skip writes entirely, downgrade the plant
+  // to DISCONNECTED so the operator sees the truth. Log once per device per
+  // stall (cleared the moment the feed recovers below).
+  if (isVendorFeedStale(data.lastReportTime)) {
+    if (!staleFeedLogged.has(device.id)) {
+      staleFeedLogged.add(device.id)
+      console.warn(`[CSI] ${device.id} vendor feed stale (lastReportTime=${data.lastReportTime || 'null'}) — pausing writes, plant set DISCONNECTED`)
+    }
+    await prisma.plants.update({
+      where: { id: device.plant_id },
+      data: { health_state: PLANT_HEALTH_DISCONNECTED, last_synced: new Date() },
+    })
+    return
+  }
+  if (staleFeedLogged.delete(device.id)) {
+    console.log(`[CSI] ${device.id} vendor feed recovered (lastReportTime=${data.lastReportTime}) — resuming writes`)
+  }
+
   const { strings, dailyEnergyKwh, inverterModel, unrecognisedCodes } = parseRealData(data.realData)
 
   // Surface unknown fieldCodes once per cycle so we can refine the parser
