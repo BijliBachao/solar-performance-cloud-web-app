@@ -24,14 +24,18 @@
 
 BEGIN;
 
+-- Date-only filter (created_at is timestamp-without-tz, the AT TIME ZONE
+-- gymnastics in the original WHERE silently no-matched on 2026-06-01).
+-- Scope: any unresolved alert on a CSI device created on 2026-05-25.
+-- That maps 1:1 to the stale-feed incident — no other alerts fired on
+-- those devices that day (confirmed live before applying).
 WITH affected AS (
   SELECT a.id
   FROM alerts a
   JOIN devices d ON d.id = a.device_id
   WHERE a.resolved_at IS NULL
     AND d.provider = 'csi'
-    AND a.created_at >= '2026-05-25 01:00:00'::timestamp
-    AND a.created_at <  '2026-05-25 05:00:00'::timestamp
+    AND a.created_at::date = DATE '2026-05-25'
 )
 UPDATE alerts
 SET resolved_at = NOW(),
