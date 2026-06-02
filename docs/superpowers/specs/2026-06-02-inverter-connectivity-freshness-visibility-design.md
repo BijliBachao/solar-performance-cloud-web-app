@@ -41,87 +41,128 @@ visible to any operator on the plant page and the NOC — without a DB query.
 
 ## 3. Status model (single source of truth)
 
-Add one pure function to `lib/string-health.ts` (the centralization rule requires
-all classification logic to live there):
+**Why two signals, not one (verified by live probe 2026-06-02):** only 3 of 5
+providers expose a vendor data-timestamp. Huawei (our biggest fleet, 16 inverters)
+and Sungrow expose **none** — their realtime endpoints return only the reading map.
+Relying on the vendor timestamp alone would leave a frozen Huawei/Sungrow feed
+showing "live" — the exact blind spot this feature exists to kill. So freshness is
+driven by **value-change detection** (works for all 5), with the vendor timestamp
+used additively where available (for display + as a second freshness signal).
+
+Provider timestamp findings (probe, 2026-06-02):
+
+| Provider | Vendor data-time field | Notes |
+|---|---|---|
+| CSI | `lastReportTime` (`"YYYY-MM-DD HH:MM:SS"`) | parsed as UTC on the UTC host (existing convention) |
+| Solis | `dataTimestamp` (ms epoch, UTC) | already captured on `SolisInverterDetail` |
+| Growatt | `time` (`"YYYY-MM-DD HH:MM:SS"`, **account-local = PKT**) | parse as **PKT (+05:00)**. The sibling `calendar` epoch is timezone-shifted ~3 h and is NOT used. |
+| Huawei | **none** (`getDeviceRealtimeData` → only `devId` + `dataItemMap`) | value-change only |
+| Sungrow | **none** (`getDeviceRealTimeData` → only `device_point`) | value-change only |
+
+### 3.1 Per-device signals (persisted on `devices`)
+- `vendor_last_data_at` (DateTime?, nullable): vendor's own data time — CSI/Solis/Growatt; null for Huawei/Sungrow. **Display + secondary freshness.**
+- `reading_changed_at` (DateTime?, nullable): the last poll time (our clock) at which the device's reading **signature changed**. **Primary freshness signal, all providers.**
+- `last_reading_sig` (String?, nullable): short signature of the most recent reading (e.g. SHA-1 hex of the sorted `s:V:I:P` tuples, 2-dp rounded). Persisted so value-change survives a poller restart.
+
+The poller computes the signature each cycle; if it differs from `devices.last_reading_sig`, it sets `reading_changed_at = now` and stores the new sig. Identical signature → leave both (the feed is frozen). Restart-safe because the prior sig lives in the DB.
+
+### 3.2 Classification (pure function in `lib/string-health.ts`)
 
 ```
 type ConnectivityStatus = 'live' | 'frozen' | 'offline' | 'idle'
 
 classifyConnectivity(
-  vendorLastDataAtMs: number | null,   // devices.vendor_last_data_at (epoch ms) or null
-  sunUp: boolean,                      // from lib/solar-geometry.ts for the plant lat/long
+  effectiveFreshAtMs: number | null,  // max(vendor_last_data_at, reading_changed_at); newest evidence of genuinely-new data
+  lastWriteAtMs: number | null,       // MAX(string_measurements.timestamp) for the device — when WE last wrote a row
+  sunUp: boolean,                     // from lib/solar-geometry.ts for the plant lat/long
   nowMs: number = Date.now(),
 ): ConnectivityStatus
 ```
 
-Rules (evaluated in order):
+Rules (in order):
 
 | Result | Condition | Meaning |
 |---|---|---|
-| `live` | `vendorLastDataAtMs != null && nowMs - vendorLastDataAtMs < VENDOR_FEED_STALE_MS` | vendor data is fresh (< 2 h) |
-| `idle` | not live **and** `!sunUp` | night / no sun — no data is expected, not an alarm |
-| `frozen` | not live **and** `sunUp` **and** `vendorLastDataAtMs != null` | we HAD data but it stalled ≥ 2 h ago during daylight (the CSI case) |
-| `offline` | not live **and** `sunUp` **and** `vendorLastDataAtMs == null` | no vendor data at all during daylight (never reported / disconnected) |
+| `idle` | `!sunUp` | night — no data expected, not an alarm |
+| `live` | `effectiveFreshAtMs != null && nowMs - effectiveFreshAtMs < VENDOR_FEED_STALE_MS` | genuinely new data within 2 h |
+| `frozen` | not live, day, **and** `lastWriteAtMs != null && nowMs - lastWriteAtMs < STALE_MS` | we ARE still receiving rows but the values haven't changed for ≥ 2 h (stuck-but-responding — non-gated Huawei/Growatt/Sungrow case) |
+| `offline` | not live, day, otherwise | we're not even writing rows (no response, or gated provider that stopped writing on its stale gate — the CSI datalogger-dead case) |
 
-- **Threshold = `VENDOR_FEED_STALE_MS` (2 h)** — reuse the existing constant, the same
-  one the write-gate uses. Keeps "frozen" consistent everywhere and avoids
-  false-positives on slow-but-live feeds (e.g. the Solis inverter that advances its
-  `dataTimestamp` only every ~15–45 min stays **live**).
-- **Sun gate** uses the existing `lib/solar-geometry.ts` with the plant's lat/long.
-  Without it the whole fleet would read "offline" every night.
-- Pure, deterministic, fully unit-testable. No DB or clock coupling beyond the
-  injectable `nowMs`.
+- **Frozen threshold = `VENDOR_FEED_STALE_MS` (2 h)** — reuse the existing constant; avoids false-positives on slow-but-live feeds (the Solis inverter that advances every ~15–45 min stays `live` via either signal).
+- **Offline uses `STALE_MS` (15 min)** on `lastWriteAtMs` — 3 missed 5-min polls = genuinely not receiving.
+- **Sun gate** uses the existing `lib/solar-geometry.ts` with the plant's lat/long — without it the fleet reads "offline" every night.
+- Note: a true freeze shows as `frozen` on non-gated providers (we keep writing dupes) and as `offline` on gated providers (CSI/Solis stop writing) — both honestly describe what's happening at our layer and both surface "no fresh data since X".
+- Pure, deterministic, unit-testable; only clock coupling is the injectable `nowMs`.
 
 ## 4. Data model
 
-Additive, safe for `prisma db push` (nullable column, no default backfill needed):
+Additive, safe for `prisma db push` (all nullable, no backfill needed):
 
 ```prisma
 model devices {
   ...
-  vendor_last_data_at  DateTime?   // vendor's own "data as of" time (epoch from API)
+  vendor_last_data_at  DateTime?   // vendor's own "data as of" time (CSI/Solis/Growatt); null for Huawei/Sungrow
+  reading_changed_at   DateTime?   // last poll time the reading signature changed (all providers)
+  last_reading_sig     String?     @db.VarChar(64)  // signature of the latest reading (for restart-safe value-change)
 }
 ```
 
-- Nullable: existing rows start `null` → classified `offline` during day / `idle` at
-  night until the next poll populates it. Self-heals within one cycle.
+- All nullable: existing rows start `null`. First poll after deploy populates `last_reading_sig` + `reading_changed_at`; until then a device classifies `offline` (day) / `idle` (night). Self-heals within one cycle.
 - No data migration required.
 
 ## 5. Poller changes (write path)
 
-Each poller persists `vendor_last_data_at` from the vendor's own field, **as early as
-possible — before any freshness gate's early-return** — so a *frozen* inverter still
-records its true (stale) last-data time and the UI can show "frozen since HH:MM".
+Two responsibilities added to each poller's per-device processing, computed
+**before any freshness-gate early-return** so a frozen device still records the truth:
 
-| Provider | Vendor field | Status |
+**(a) Value-change signature (all 5 providers).** A shared helper computes a signature
+from the parsed strings, e.g.:
+
+```
+readingSignature(strings: {string_number:number; voltage:number; current:number; power:number}[]): string
+// sha1 hex of strings.sort(by string_number).map(s => `${s.string_number}:${V.toFixed(2)}:${I.toFixed(3)}:${P.toFixed(2)}`).join('|')
+```
+
+Then: read `devices.last_reading_sig`; if the new sig differs, set
+`reading_changed_at = new Date()` and `last_reading_sig = newSig`; else leave both.
+
+**(b) Vendor data-timestamp (where available).** Parse the vendor field to a `Date`
+and store in `vendor_last_data_at`:
+
+| Provider | Field | Parse |
 |---|---|---|
-| CSI | `lastReportTime` (`"YYYY-MM-DD HH:MM:SS"`, also seen `+08:00` suffixed) | already read in `processCsiDevice` |
-| Solis | `dataTimestamp` (ms epoch) | already captured on `SolisInverterDetail` |
-| Growatt | `last_update_time` / `lastUpdateTime` | **client does not extract yet — add** |
-| Huawei | real-time KPI `collectTime` (ms epoch) — **verify exact field during impl** | TBD-verify |
-| Sungrow | device real-time time field — **verify exact field during impl** | TBD-verify |
+| CSI | `data.lastReportTime` | `new Date("YYYY-MM-DDTHH:MM:SSZ")` (UTC host convention) |
+| Solis | `detail.dataTimestamp` | ms epoch → `new Date(ms)` (already captured) |
+| Growatt | `deviceData.time` | **PKT**: `new Date(time.replace(' ','T') + '+05:00')`. Do NOT use `calendar` (tz-shifted). |
+| Huawei | — | leave `null` (no field; freshness from value-change) |
+| Sungrow | — | leave `null` (no field; freshness from value-change) |
 
 Implementation notes:
-- Parse to a `Date`; store via a single `prisma.devices.update`. Where a poller already
-  issues a device update (CSI model/max_strings), fold `vendor_last_data_at` into it to
-  avoid an extra write; otherwise issue a small dedicated update.
-- For CSI/Solis the value comes from the same response the freshness gate inspects, so
-  record it in the same place the gate reads it (even on the stale/duplicate branch, so
-  the stored value reflects the real last-data time).
-- Huawei/Sungrow exact field names are verified by a live probe in the implementation
-  plan (same approach used to confirm Solis `dataTimestamp`). If a provider truly
-  exposes no per-device data timestamp, fall back to `last_synced` and document it.
+- Fold both writes into the per-device `prisma.devices.update` each poller already
+  performs (CSI/Solis update model/max_strings; Growatt/Huawei/Sungrow add a small
+  update). At most one extra `devices.update` per device per cycle (70 devices /5 min — negligible).
+- CSI/Solis: record `vendor_last_data_at` even on the freshness-gate stale/duplicate
+  branch, so the stored value reflects the real last-data time during a freeze.
+- The signature uses the SAME parsed strings the poller already builds for
+  `string_measurements` — no extra vendor call.
 
 ## 6. API changes
 
-- **`/api/plants/[code]`** (`route.ts`): include `vendor_last_data_at` in the per-device
-  payload (it already returns devices with `provider`, `model`, `last_synced`). Compute
-  and return `connectivity` per device using `classifyConnectivity` + the plant's
-  sun state. Plant-level `last_data_at` is already returned.
+A shared helper computes per-device connectivity so the plant API and NOC agree:
+`deviceConnectivity(device, lastWriteAtMs, sunUp, now)` →
+`{status, vendorLastDataAt, readingChangedAt, effectiveFreshAt}`, where
+`effectiveFreshAt = max(vendor_last_data_at, reading_changed_at)` and `status =
+classifyConnectivity(effectiveFreshAt, lastWriteAtMs, sunUp, now)`.
+
+- **`/api/plants/[code]`** (`route.ts`): per device add `vendor_last_data_at`,
+  `reading_changed_at`, and computed `connectivity` (it already returns `provider`,
+  `model`, `last_synced`; `last_data_at` per device = `MAX(string_measurements.timestamp)`).
+  Sun state from the plant's lat/long. Plant-level `last_data_at` already returned.
 - **`/api/admin/string-health-donut`** (NOC): add a fleet connectivity rollup —
-  per-inverter `{deviceId, plantCode, inverterName, provider, vendor_last_data_at,
-  connectivity}` and aggregate counts `{live, frozen, offline, idle}`. Reuse the
-  existing devices join already present in the donut loader.
+  per-inverter `{deviceId, plantCode, inverterName, provider, connectivity,
+  effectiveFreshAt}` and aggregate counts `{live, frozen, offline, idle}`. Reuse the
+  devices join already in the donut loader; needs per-device `lastWriteAt` +
+  `reading_changed_at` + `vendor_last_data_at` + the plant lat/long for the sun gate.
 
 ## 7. UI changes
 
@@ -143,16 +184,20 @@ Implementation notes:
 
 ## 8. Testing
 
-- **Unit (`lib/__tests__`):** `classifyConnectivity` — live, frozen, offline, idle; the
-  2 h boundary (strict `<`); night-vs-day; null vendor timestamp; the slow-Solis case
-  (15–45 min old → still live).
-- **Poller tests:** assert each poller writes `vendor_last_data_at` from the mocked
-  vendor field, including on the stale/duplicate gate branch (CSI/Solis).
+- **Unit — `classifyConnectivity`:** live (via vendor ts OR reading-change), frozen
+  (stuck values + still writing), offline (not writing / gated-stopped), idle (night);
+  the 2 h boundary (strict `<`); the 15 min offline boundary; the slow-Solis case
+  (15–45 min old → live).
+- **Unit — `readingSignature`:** stable for identical readings, changes when any
+  string's V/I/P changes, order-independent (sorted by string_number).
+- **Poller tests:** each poller sets `reading_changed_at`/`last_reading_sig` only when
+  the signature changes; CSI/Solis/Growatt also set `vendor_last_data_at` (Growatt from
+  `time` as PKT); a repeated identical reading does NOT advance `reading_changed_at`.
 - **API tests:** `/api/plants/[code]` returns per-device `connectivity`; NOC rollup
-  counts are correct.
-- **Live validation post-deploy:** confirm `vendor_last_data_at` populates for all 5
-  providers; the previously-frozen CSI window (if it recurs) reads "frozen"; healthy
-  inverters read "live"; night reads "idle".
+  counts `{live,frozen,offline,idle}` are correct.
+- **Live validation post-deploy:** all 5 providers populate `reading_changed_at`;
+  CSI/Solis/Growatt populate `vendor_last_data_at`; a producing inverter reads `live`;
+  a deliberately-checked stuck feed reads `frozen`/`offline`; night reads `idle`.
 
 ## 9. Rollout
 
