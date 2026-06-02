@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // See lib/string-health.ts VENDOR_FEED_STALE_MS comment for the 2026-05-25
 // incident that this gate was built to catch.
 
-import { isVendorFeedStale, VENDOR_FEED_STALE_MS } from '../string-health'
+import { isVendorFeedStale, classifyVendorFeed, VENDOR_FEED_STALE_MS } from '../string-health'
 
 const NOW = new Date('2026-06-01T06:44:00Z')
 
@@ -84,5 +84,49 @@ describe('isVendorFeedStale — vendor timestamp formats', () => {
     const t0 = new Date('2026-01-01T00:00:00Z')
     expect(isVendorFeedStale(t0.toISOString(), t0.getTime() + 60 * 60_000)).toBe(false)
     expect(isVendorFeedStale(t0.toISOString(), t0.getTime() + 3 * 60 * 60_000)).toBe(true)
+  })
+})
+
+describe('classifyVendorFeed — three-way feed action (Solis dataTimestamp)', () => {
+  const NOW_MS = NOW.getTime()
+  const minsAgoMs = (m: number) => NOW_MS - m * 60_000
+
+  it('fresh: new vendor timestamp, no prior write → write it', () => {
+    expect(classifyVendorFeed(minsAgoMs(5), undefined, NOW_MS)).toBe('fresh')
+    expect(classifyVendorFeed(minsAgoMs(5), null, NOW_MS)).toBe('fresh')
+  })
+
+  it('fresh: vendor advanced since last write → write the new sample', () => {
+    const prev = minsAgoMs(20)
+    const now = minsAgoMs(5)
+    expect(classifyVendorFeed(now, prev, NOW_MS)).toBe('fresh')
+  })
+
+  it('duplicate: vendor timestamp unchanged since last write → skip (slow feed)', () => {
+    const ts = minsAgoMs(15) // the live Solis case: 15-min-old, repeated across polls
+    expect(classifyVendorFeed(ts, ts, NOW_MS)).toBe('duplicate')
+  })
+
+  it('stale: vendor timestamp older than 2h → hard freeze (CSI-style)', () => {
+    expect(classifyVendorFeed(minsAgoMs(121), minsAgoMs(121), NOW_MS)).toBe('stale')
+    expect(classifyVendorFeed(minsAgoMs(60 * 24 * 6), undefined, NOW_MS)).toBe('stale')
+  })
+
+  it('stale wins over duplicate: a frozen-for-2h+ feed is stale even if unchanged', () => {
+    const old = minsAgoMs(180)
+    expect(classifyVendorFeed(old, old, NOW_MS)).toBe('stale')
+  })
+
+  it('boundary: exactly 2h is fresh (strict >), 2h+1ms is stale', () => {
+    expect(classifyVendorFeed(NOW_MS - VENDOR_FEED_STALE_MS, undefined, NOW_MS)).toBe('fresh')
+    expect(classifyVendorFeed(NOW_MS - VENDOR_FEED_STALE_MS - 1, undefined, NOW_MS)).toBe('stale')
+  })
+
+  it('fail-open: missing/unparseable/zero timestamp → fresh (never blacks out a working feed)', () => {
+    expect(classifyVendorFeed(null, minsAgoMs(5), NOW_MS)).toBe('fresh')
+    expect(classifyVendorFeed(undefined, minsAgoMs(5), NOW_MS)).toBe('fresh')
+    expect(classifyVendorFeed(NaN, minsAgoMs(5), NOW_MS)).toBe('fresh')
+    expect(classifyVendorFeed(0, minsAgoMs(5), NOW_MS)).toBe('fresh')
+    expect(classifyVendorFeed(-1, minsAgoMs(5), NOW_MS)).toBe('fresh')
   })
 })

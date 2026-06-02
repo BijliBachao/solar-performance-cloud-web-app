@@ -144,6 +144,42 @@ export function isVendorFeedStale(
   return nowMs - ts > VENDOR_FEED_STALE_MS
 }
 
+/**
+ * Action a poller should take for one device given the vendor's own
+ * "last data update" epoch (ms) and the epoch we last wrote for that device.
+ *
+ *  - 'stale'     → vendor timestamp is older than VENDOR_FEED_STALE_MS: a true
+ *                  multi-hour freeze (datalogger offline / cloud serving a dead
+ *                  cache). Skip writes, downgrade the plant. Same failure mode
+ *                  as CSI 2026-05-25.
+ *  - 'duplicate' → vendor timestamp is fresh but UNCHANGED since our last write:
+ *                  the vendor publishes slower than we poll (verified live on
+ *                  Solis 2026-06-02 — device 1308675217950504187 advanced its
+ *                  dataTimestamp only every ~10-30 min while we poll every 5).
+ *                  Writing again would store a duplicate physical reading,
+ *                  inflating sample counts and skewing aggregates. Skip the
+ *                  write, but DO NOT downgrade — the inverter is alive.
+ *  - 'fresh'     → new vendor sample since last write: record and proceed.
+ *
+ * MISSING/UNPARSEABLE timestamp → 'fresh' (FAIL-OPEN). Unlike isVendorFeedStale
+ * (which fails safe for CSI's only freshness signal), this helper guards a feed
+ * we KNOW reliably carries a timestamp; a transient missing field must not
+ * black out an otherwise-working provider. Callers should log the anomaly.
+ */
+export type VendorFeedAction = 'fresh' | 'duplicate' | 'stale'
+export function classifyVendorFeed(
+  dataTimestampMs: number | null | undefined,
+  lastSeenMs: number | null | undefined,
+  nowMs: number = Date.now(),
+): VendorFeedAction {
+  if (dataTimestampMs == null || !Number.isFinite(dataTimestampMs) || dataTimestampMs <= 0) {
+    return 'fresh' // fail-open: cannot judge → let the write through
+  }
+  if (nowMs - dataTimestampMs > VENDOR_FEED_STALE_MS) return 'stale'
+  if (lastSeenMs != null && dataTimestampMs === lastSeenMs) return 'duplicate'
+  return 'fresh'
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Algorithm v2 — Self-Referencing Ratio (SR) / Performance-to-Peers (P2P)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

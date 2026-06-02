@@ -3,11 +3,22 @@ import { Decimal } from '@prisma/client/runtime/library'
 import { SolisClient } from '@/lib/solis-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
 import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches } from '@/lib/poller-utils'
+import { classifyVendorFeed, PLANT_HEALTH_DISCONNECTED } from '@/lib/string-health'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
 let lastAlarmSync = 0
 const HOUR_MS = 60 * 60 * 1000
+
+// Vendor-feed freshness tracking (per poller process).
+//  - lastSeenDataTs: the vendor dataTimestamp (ms epoch) we last WROTE for a
+//    device. SolisCloud publishes new data slower than our 5-min poll for some
+//    inverters (verified live 2026-06-02), so we dedup on it to avoid storing
+//    the same physical reading repeatedly and skewing aggregates.
+//  - staleFeedLogged: dedup the "feed stale" warning to once per stall, cleared
+//    on recovery. Mirrors the CSI gate (csi-poller.ts).
+const lastSeenDataTs = new Map<string, number>()
+const staleFeedLogged = new Set<string>()
 
 // Solis health state → our DB health_state
 // Solis: 1=online, 2=offline, 3=alarm
@@ -203,6 +214,38 @@ async function processSolisDevice(
   device: { id: string; plant_id: string; max_strings: number | null },
 ): Promise<void> {
   const detail = await client.getInverterDetail(device.id)
+
+  // ── Vendor-feed freshness gate (2026-06-02) ───────────────────────────
+  // Two failure modes, both keyed off the vendor's own dataTimestamp:
+  //   stale     → multi-hour freeze (CSI-style): skip writes, downgrade plant.
+  //   duplicate → vendor publishes slower than we poll: skip the write to avoid
+  //               storing the same physical reading twice (don't downgrade).
+  // Missing/unparseable dataTimestamp → 'fresh' (fail-open) so a transient
+  // missing field never blacks out the whole provider.
+  const feedAction = classifyVendorFeed(detail.dataTimestamp, lastSeenDataTs.get(device.id))
+  if (feedAction === 'stale') {
+    if (!staleFeedLogged.has(device.id)) {
+      staleFeedLogged.add(device.id)
+      const ts = detail.dataTimestamp ? new Date(detail.dataTimestamp).toISOString() : 'null'
+      console.warn(`[Solis] ${device.id} vendor feed stale (dataTimestamp=${ts}) — pausing writes, plant set DISCONNECTED`)
+    }
+    await prisma.plants.update({
+      where: { id: device.plant_id },
+      data: { health_state: PLANT_HEALTH_DISCONNECTED, last_synced: new Date() },
+    })
+    return
+  }
+  if (staleFeedLogged.delete(device.id)) {
+    console.log(`[Solis] ${device.id} vendor feed recovered (dataTimestamp=${detail.dataTimestamp ? new Date(detail.dataTimestamp).toISOString() : 'null'}) — resuming writes`)
+  }
+  if (feedAction === 'duplicate') {
+    // Vendor hasn't published a new sample since our last write — nothing new
+    // to record. Aggregates are recomputed from stored rows on the next fresh
+    // sample, so skipping is safe (and keeps string_measurements honest).
+    return
+  }
+  if (detail.dataTimestamp != null) lastSeenDataTs.set(device.id, detail.dataTimestamp)
+
   const maxStrings = device.max_strings || (detail.dcInputType ?? 0) + 1
 
   if (maxStrings > 0 && !device.max_strings) {

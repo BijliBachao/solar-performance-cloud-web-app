@@ -32,6 +32,7 @@ export interface SolisInverterDetail {
   eTotal: number
   dcInputType: number
   state: number
+  dataTimestamp: number | null // vendor "last data update" (ms epoch); used for stale/duplicate feed detection
   [key: string]: any // uPv1..uPv32, iPv1..iPv32, pow1..pow32
 }
 
@@ -195,6 +196,10 @@ export class SolisClient {
       id,
       sn: '',
     })
+    // dataTimestamp is a ms-epoch string ("1780398915947") per
+    // SOLISCLOUD_API_REFERENCE.md §3.2. Normalise to a finite number or null.
+    // Placed AFTER ...data so the normalised value wins over the raw string.
+    const tsNum = Number(data.dataTimestamp)
     return {
       id: String(data.id),
       sn: data.sn,
@@ -204,6 +209,7 @@ export class SolisClient {
       dcInputType: data.dcInputType ?? 0,
       state: data.state,
       ...data, // includes uPv1..uPv32, iPv1..iPv32, pow1..pow32
+      dataTimestamp: Number.isFinite(tsNum) && tsNum > 0 ? tsNum : null,
     }
   }
 
