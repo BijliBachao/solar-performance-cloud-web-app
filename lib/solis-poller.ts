@@ -3,7 +3,7 @@ import { Decimal } from '@prisma/client/runtime/library'
 import { SolisClient } from '@/lib/solis-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
 import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches } from '@/lib/poller-utils'
-import { classifyVendorFeed, PLANT_HEALTH_DISCONNECTED } from '@/lib/string-health'
+import { classifyVendorFeed } from '@/lib/string-health'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
@@ -15,8 +15,11 @@ const HOUR_MS = 60 * 60 * 1000
 //    device. SolisCloud publishes new data slower than our 5-min poll for some
 //    inverters (verified live 2026-06-02), so we dedup on it to avoid storing
 //    the same physical reading repeatedly and skewing aggregates.
+//    NOTE: process-memory only — the first poll after a poller restart may
+//    write one duplicate sample if the vendor hasn't advanced since the last
+//    pre-restart write. Tolerable (one row); not worth persisting.
 //  - staleFeedLogged: dedup the "feed stale" warning to once per stall, cleared
-//    on recovery. Mirrors the CSI gate (csi-poller.ts).
+//    on recovery.
 const lastSeenDataTs = new Map<string, number>()
 const staleFeedLogged = new Set<string>()
 
@@ -216,10 +219,18 @@ async function processSolisDevice(
   const detail = await client.getInverterDetail(device.id)
 
   // ── Vendor-feed freshness gate (2026-06-02) ───────────────────────────
+  // Purely a DATA-INTEGRITY guard — it never touches plant.health_state.
+  // Plant health is managed every cycle by syncSolisPlantHealth() from the
+  // vendor's authoritative station `state` (bidirectional), so a per-device
+  // downgrade here would (a) black out a multi-inverter plant on one stale
+  // inverter and (b) flap against syncSolisPlantHealth every 5 min. This is
+  // the key difference from the CSI gate: CSI's syncCsiPlantHealth only
+  // *upgrades*, so CSI needs the gate to downgrade; Solis does not.
+  //
   // Two failure modes, both keyed off the vendor's own dataTimestamp:
-  //   stale     → multi-hour freeze (CSI-style): skip writes, downgrade plant.
+  //   stale     → multi-hour freeze (CSI-style): skip writes (no fresh data).
   //   duplicate → vendor publishes slower than we poll: skip the write to avoid
-  //               storing the same physical reading twice (don't downgrade).
+  //               storing the same physical reading twice and skewing aggregates.
   // Missing/unparseable dataTimestamp → 'fresh' (fail-open) so a transient
   // missing field never blacks out the whole provider.
   const feedAction = classifyVendorFeed(detail.dataTimestamp, lastSeenDataTs.get(device.id))
@@ -227,12 +238,8 @@ async function processSolisDevice(
     if (!staleFeedLogged.has(device.id)) {
       staleFeedLogged.add(device.id)
       const ts = detail.dataTimestamp ? new Date(detail.dataTimestamp).toISOString() : 'null'
-      console.warn(`[Solis] ${device.id} vendor feed stale (dataTimestamp=${ts}) — pausing writes, plant set DISCONNECTED`)
+      console.warn(`[Solis] ${device.id} vendor feed stale (dataTimestamp=${ts}) — pausing writes until it advances`)
     }
-    await prisma.plants.update({
-      where: { id: device.plant_id },
-      data: { health_state: PLANT_HEALTH_DISCONNECTED, last_synced: new Date() },
-    })
     return
   }
   if (staleFeedLogged.delete(device.id)) {
