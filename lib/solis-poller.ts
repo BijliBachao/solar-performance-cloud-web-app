@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { SolisClient } from '@/lib/solis-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness } from '@/lib/poller-utils'
 import { classifyVendorFeed } from '@/lib/string-health'
 
 let lastPlantSync = 0
@@ -194,6 +194,7 @@ async function fetchSolisStringData(client: SolisClient): Promise<void> {
       id: true,
       plant_id: true,
       max_strings: true,
+      last_reading_sig: true,
     },
   })
 
@@ -214,9 +215,11 @@ async function fetchSolisStringData(client: SolisClient): Promise<void> {
 
 async function processSolisDevice(
   client: SolisClient,
-  device: { id: string; plant_id: string; max_strings: number | null },
+  device: { id: string; plant_id: string; max_strings: number | null; last_reading_sig: string | null },
 ): Promise<void> {
   const detail = await client.getInverterDetail(device.id)
+  // Vendor data-time (ms epoch) for the connectivity "vendor last data" display.
+  const vendorTs = detail.dataTimestamp != null ? new Date(detail.dataTimestamp) : null
 
   // ── Vendor-feed freshness gate (2026-06-02) ───────────────────────────
   // Purely a DATA-INTEGRITY guard — it never touches plant.health_state.
@@ -240,6 +243,9 @@ async function processSolisDevice(
       const ts = detail.dataTimestamp ? new Date(detail.dataTimestamp).toISOString() : 'null'
       console.warn(`[Solis] ${device.id} vendor feed stale (dataTimestamp=${ts}) — pausing writes until it advances`)
     }
+    // Record the (stuck) vendor time so the connectivity UI shows "frozen since
+    // HH:MM" — restart-safe. No fresh strings here, so don't touch the signature.
+    if (vendorTs) await prisma.devices.update({ where: { id: device.id }, data: { vendor_last_data_at: vendorTs } })
     return
   }
   if (staleFeedLogged.delete(device.id)) {
@@ -303,6 +309,10 @@ async function processSolisDevice(
     await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
     await updateHourlyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
     await updateDailyAggregates(device.id, device.plant_id, maxStrings, stringConfigs, { model: null, max_strings: device.max_strings })
+    // Connectivity freshness: vendor time + value-change signature.
+    await recordDeviceFreshness(device.id, measurements.map((m) => ({
+      string_number: m.string_number, voltage: Number(m.voltage), current: Number(m.current), power: Number(m.power),
+    })), vendorTs, device.last_reading_sig)
   }
 
   // Save hardware daily counter — source of truth for "today's energy" display
