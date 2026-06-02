@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { CsiClient, CsiDevice, CsiDeviceData, parseRealData } from '@/lib/csi-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness } from '@/lib/poller-utils'
 import {
   PLANT_HEALTH_HEALTHY,
   PLANT_HEALTH_FAULTY,
@@ -259,7 +259,7 @@ async function fetchCsiStringData(client: CsiClient): Promise<void> {
       provider: PROVIDERS.CSI,
       device_type_id: DEVICE_TYPE_IDS.CSI_INVERTER,
     },
-    select: { id: true, plant_id: true, max_strings: true, model: true },
+    select: { id: true, plant_id: true, max_strings: true, model: true, last_reading_sig: true },
   })
 
   if (devices.length === 0) {
@@ -303,9 +303,17 @@ async function fetchCsiStringData(client: CsiClient): Promise<void> {
 }
 
 async function processCsiDevice(
-  device: { id: string; plant_id: string; max_strings: number | null; model: string | null },
+  device: { id: string; plant_id: string; max_strings: number | null; model: string | null; last_reading_sig: string | null },
   data: CsiDeviceData,
 ): Promise<void> {
+  // Vendor data-time: CSI returns "YYYY-MM-DD HH:MM:SS" (no TZ) — treat as UTC
+  // on our UTC host (same convention as isVendorFeedStale). Used for the
+  // connectivity "vendor last data" display, recorded even during a freeze.
+  const csiTs = data.lastReportTime
+    ? new Date(String(data.lastReportTime).replace(' ', 'T') + (/[Z+]/.test(String(data.lastReportTime)) ? '' : 'Z'))
+    : null
+  const vendorTs = csiTs && !isNaN(csiTs.getTime()) ? csiTs : null
+
   // Stale-feed gate (2026-06-01). When the CSI/SolarMAN cloud serves a
   // cached snapshot — confirmed lastReportTime stuck for 6+ days on all 5
   // J-series inverters — every poll would write the same frozen V/I/P and
@@ -321,6 +329,12 @@ async function processCsiDevice(
       where: { id: device.plant_id },
       data: { health_state: PLANT_HEALTH_DISCONNECTED, last_synced: new Date() },
     })
+    // Record the (stuck) vendor time so the UI shows "frozen since HH:MM".
+    // Direct update — do NOT call recordDeviceFreshness here (we have no fresh
+    // strings; an empty-signature would wrongly reset reading_changed_at).
+    if (vendorTs) {
+      await prisma.devices.update({ where: { id: device.id }, data: { vendor_last_data_at: vendorTs } })
+    }
     return
   }
   if (staleFeedLogged.delete(device.id)) {
@@ -376,6 +390,10 @@ async function processCsiDevice(
   await prisma.string_measurements.createMany({
     data: measurements.map((m) => ({ ...m, timestamp: new Date() })),
   })
+
+  // Connectivity freshness: vendor time + value-change signature (all from the
+  // strings we just parsed — no extra vendor call).
+  await recordDeviceFreshness(device.id, strings, vendorTs, device.last_reading_sig)
 
   const stringConfigs = await loadStringConfigs(device.id)
   await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
