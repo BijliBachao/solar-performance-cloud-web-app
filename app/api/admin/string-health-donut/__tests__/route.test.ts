@@ -9,11 +9,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 const mockLoadFleetCounts = vi.fn()
 const mockLoadFleetRows = vi.fn()
 const mockLoadOrgList = vi.fn()
+const mockLoadFleetConnectivity = vi.fn()
 
 vi.mock('@/lib/donut-data-loader', () => ({
   loadFleetCounts: (...args: any[]) => mockLoadFleetCounts(...args),
   loadFleetRows: (...args: any[]) => mockLoadFleetRows(...args),
   loadOrgList: (...args: any[]) => mockLoadOrgList(...args),
+  loadFleetConnectivity: (...args: any[]) => mockLoadFleetConnectivity(...args),
 }))
 
 const mockGetUserFromRequest = vi.fn()
@@ -60,6 +62,13 @@ const sampleOrgs = [
   { id: 'o2', name: 'Beta', stringCount: 50 },
 ]
 
+const sampleConnectivity = {
+  counts: { live: 3, frozen: 1, offline: 1, idle: 0 },
+  devices: [
+    { deviceId: 'd1', plantCode: 'p1', inverterName: 'INV-1', provider: 'csi', status: 'frozen' as const, effectiveFreshAt: new Date('2026-05-24').toISOString() },
+  ],
+}
+
 function makeRequest(query: string = ''): any {
   return { url: `http://localhost:3001/api/admin/string-health-donut${query}` }
 }
@@ -78,6 +87,7 @@ beforeEach(() => {
   mockLoadFleetCounts.mockResolvedValue(sampleCounts)
   mockLoadFleetRows.mockResolvedValue(sampleRows)
   mockLoadOrgList.mockResolvedValue(sampleOrgs)
+  mockLoadFleetConnectivity.mockResolvedValue(sampleConnectivity)
 })
 
 afterEach(() => {
@@ -91,6 +101,7 @@ describe('GET /api/admin/string-health-donut', () => {
     expect(body.totalStrings).toBe(100)
     expect(body.rows.items).toHaveLength(2)
     expect(body.orgs).toHaveLength(2)
+    expect(body.connectivity.counts).toEqual({ live: 3, frozen: 1, offline: 1, idle: 0 })
   })
 
   it('returns 400 when mode is missing', async () => {
@@ -158,26 +169,29 @@ describe('GET /api/admin/string-health-donut', () => {
     expect(body.code).toBe('INTERNAL_ERROR')
   })
 
-  it('parallelises the three loader calls (counts, rows, orgs)', async () => {
-    let countsResolve: any, rowsResolve: any, orgsResolve: any
+  it('parallelises the loader calls (counts, rows, orgs, connectivity)', async () => {
+    let countsResolve: any, rowsResolve: any, orgsResolve: any, connResolve: any
     mockLoadFleetCounts.mockReturnValueOnce(new Promise((r) => { countsResolve = r }))
     mockLoadFleetRows.mockReturnValueOnce(new Promise((r) => { rowsResolve = r }))
     mockLoadOrgList.mockReturnValueOnce(new Promise((r) => { orgsResolve = r }))
+    mockLoadFleetConnectivity.mockReturnValueOnce(new Promise((r) => { connResolve = r }))
 
     const pending = invoke('?mode=prev-day')
 
     // Yield enough microtasks for the dynamic import + auth + Zod chain to
-    // reach Promise.all. After that point all three loaders must have been
-    // invoked before any of them resolves — that's the contract.
+    // reach Promise.all. After that point all loaders must have been invoked
+    // before any of them resolves — that's the parallelisation contract.
     await new Promise((r) => setTimeout(r, 0))
 
     expect(mockLoadFleetCounts).toHaveBeenCalledTimes(1)
     expect(mockLoadFleetRows).toHaveBeenCalledTimes(1)
     expect(mockLoadOrgList).toHaveBeenCalledTimes(1)
+    expect(mockLoadFleetConnectivity).toHaveBeenCalledTimes(1)
 
     countsResolve(sampleCounts)
     rowsResolve(sampleRows)
     orgsResolve(sampleOrgs)
+    connResolve(sampleConnectivity)
     await pending
   })
 })

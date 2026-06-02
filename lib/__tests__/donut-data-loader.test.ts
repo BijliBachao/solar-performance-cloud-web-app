@@ -368,6 +368,47 @@ describe('loadFleetRows', () => {
   })
 })
 
+describe('loadFleetConnectivity', () => {
+  it('produces live/frozen/offline/idle counts from per-device signals', async () => {
+    // Fixed clock = 2026-05-24T05:00:00Z (see PKT_NOW_UTC).
+    const now = PKT_NOW_UTC.getTime()
+    const minAgo = (m: number) => new Date(now - m * 60 * 1000)
+    const hAgo = (h: number) => new Date(now - h * 60 * 60 * 1000)
+
+    // null lat/long → isDaylight() returns true (can't gate ⇒ treat as sun up),
+    // so live/frozen/offline are exercised independent of solar geometry.
+    mockPrisma.$queryRaw.mockResolvedValue([
+      // live: vendor data 5 min ago (< 2h) → live
+      { device_id: 'd-live', plant_code: 'p1', inverter_name: 'INV-LIVE', provider: 'huawei',
+        vendor_last_data_at: minAgo(5), reading_changed_at: null, last_write_at: minAgo(5),
+        latitude: null, longitude: null },
+      // frozen: vendor data 3h old (stale) but we wrote a row 5 min ago (< 15m) → frozen
+      { device_id: 'd-frozen', plant_code: 'p1', inverter_name: 'INV-FROZEN', provider: 'solis',
+        vendor_last_data_at: hAgo(3), reading_changed_at: null, last_write_at: minAgo(5),
+        latitude: null, longitude: null },
+      // offline: vendor data old and last write 1h ago (≥ 15m) → offline
+      { device_id: 'd-offline', plant_code: 'p2', inverter_name: 'INV-OFF', provider: 'sungrow',
+        vendor_last_data_at: hAgo(6), reading_changed_at: null, last_write_at: hAgo(1),
+        latitude: null, longitude: null },
+      // idle: sun down at this instant for lat 40 / lng -75 (≈ midnight local) → idle
+      { device_id: 'd-idle', plant_code: 'p3', inverter_name: 'INV-IDLE', provider: 'huawei',
+        vendor_last_data_at: hAgo(8), reading_changed_at: null, last_write_at: hAgo(8),
+        latitude: new Decimal('40'), longitude: new Decimal('-75') },
+    ])
+
+    const { loadFleetConnectivity } = await import('@/lib/donut-data-loader')
+
+    const result = await loadFleetConnectivity()
+
+    expect(result.counts).toEqual({ live: 1, frozen: 1, offline: 1, idle: 1 })
+    expect(result.devices).toHaveLength(4)
+    const live = result.devices.find((d) => d.deviceId === 'd-live')
+    expect(live?.status).toBe('live')
+    expect(live?.inverterName).toBe('INV-LIVE')
+    expect(live?.effectiveFreshAt).toBe(minAgo(5).toISOString())
+  })
+})
+
 describe('loadOrgList', () => {
   it('returns ordered list with string counts', async () => {
     mockPrisma.$queryRaw.mockResolvedValue([

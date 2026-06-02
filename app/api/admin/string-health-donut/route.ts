@@ -9,6 +9,7 @@ import {
 import {
   loadFleetCounts,
   loadFleetRows,
+  loadFleetConnectivity,
   loadOrgList,
 } from '@/lib/donut-data-loader'
 
@@ -54,15 +55,16 @@ export async function GET(request: NextRequest) {
 
     const { mode, org, bucket, page } = parsed.data
 
-    // Parallel: counts (donut), rows (table), orgs (filter dropdown)
-    const [counts, rows, orgs] = await Promise.all([
+    // Parallel: counts (donut), rows (table), connectivity rollup, orgs (filter dropdown)
+    const [counts, rows, connectivity, orgs] = await Promise.all([
       loadFleetCounts(org),
       loadFleetRows({ orgId: org, bucket, page }),
+      loadFleetConnectivity(org),
       loadOrgList(),
     ])
 
     return new Response(
-      JSON.stringify({ mode, ...counts, rows, orgs }),
+      JSON.stringify({ mode, ...counts, rows, connectivity, orgs }),
       {
         status: 200,
         headers: {

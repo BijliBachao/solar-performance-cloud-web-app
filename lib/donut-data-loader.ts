@@ -25,6 +25,9 @@ import {
   p2pToHealthScore,
 } from '@/lib/string-health'
 import { scoreLiveSr, type LiveStringInput } from '@/lib/string-health-live'
+import { deviceConnectivity } from '@/lib/connectivity'
+import { isDaylight } from '@/lib/solar-geometry'
+import type { ConnectivityStatus } from '@/lib/string-health'
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Public types
@@ -76,6 +79,20 @@ export interface FleetRowsPage {
   pageSize: number
   total: number
   items: PerStringRow[]
+}
+
+export interface FleetConnectivityDevice {
+  deviceId: string
+  plantCode: string
+  inverterName: string
+  provider: string
+  status: ConnectivityStatus
+  effectiveFreshAt: string | null
+}
+
+export interface FleetConnectivity {
+  counts: { live: number; frozen: number; offline: number; idle: number }
+  devices: FleetConnectivityDevice[]
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -708,6 +725,84 @@ export async function loadFleetRows(params: LoadFleetRowsParams = {}): Promise<F
       }
     }),
   }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Fleet: inverter connectivity rollup (live / frozen / offline / idle)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Same Live/Frozen/Offline/Idle classification as the per-plant API
+// (app/api/plants/[code]/route.ts), rolled up across the whole fleet for the
+// NOC. Per device we combine three signals: the vendor's data timestamp and
+// our value-change timestamp (effectiveFreshAt = max of the two), MAX(
+// string_measurements.timestamp) for when WE last wrote a row, and the sun
+// gate (isDaylight) from the device's plant lat/long.
+
+interface FleetConnectivityRow {
+  device_id: string
+  plant_code: string
+  inverter_name: string | null
+  provider: string
+  vendor_last_data_at: Date | null
+  reading_changed_at: Date | null
+  last_write_at: Date | null
+  latitude: Prisma.Decimal | number | null
+  longitude: Prisma.Decimal | number | null
+}
+
+export async function loadFleetConnectivity(orgId?: string): Promise<FleetConnectivity> {
+  const orgFilter = orgId ?? null
+  const now = Date.now()
+
+  // One row per device. last_write_at = MAX(string_measurements.timestamp) via
+  // a correlated subquery (index: string_measurements(device_id, timestamp DESC)).
+  // DISTINCT so a plant assigned to multiple orgs isn't double-counted when no
+  // org filter is set; LEFT JOIN plant_assignments so orphan plants still show.
+  const rows = await prisma.$queryRaw<FleetConnectivityRow[]>`
+    SELECT DISTINCT
+      d.id              AS device_id,
+      d.plant_id        AS plant_code,
+      d.device_name     AS inverter_name,
+      d.provider        AS provider,
+      d.vendor_last_data_at,
+      d.reading_changed_at,
+      (
+        SELECT MAX(sm.timestamp)
+        FROM string_measurements sm
+        WHERE sm.device_id = d.id
+      )                 AS last_write_at,
+      p.latitude        AS latitude,
+      p.longitude       AS longitude
+    FROM devices d
+    JOIN plants p ON p.id = d.plant_id
+    LEFT JOIN plant_assignments pa ON pa.plant_id = d.plant_id
+    WHERE (${orgFilter}::text IS NULL OR pa.organization_id = ${orgFilter}::text)
+  `
+
+  const counts = { live: 0, frozen: 0, offline: 0, idle: 0 }
+  const devices: FleetConnectivityDevice[] = rows.map((r) => {
+    const sunUp = isDaylight(
+      r.latitude != null ? Number(r.latitude) : NaN,
+      r.longitude != null ? Number(r.longitude) : NaN,
+      new Date(now),
+    )
+    const conn = deviceConnectivity(
+      { vendor_last_data_at: r.vendor_last_data_at, reading_changed_at: r.reading_changed_at },
+      r.last_write_at?.getTime() ?? null,
+      sunUp,
+      now,
+    )
+    counts[conn.status] += 1
+    return {
+      deviceId: r.device_id,
+      plantCode: r.plant_code,
+      inverterName: r.inverter_name ?? r.device_id,
+      provider: r.provider,
+      status: conn.status,
+      effectiveFreshAt: conn.effectiveFreshAt ? conn.effectiveFreshAt.toISOString() : null,
+    }
+  })
+
+  return { counts, devices }
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
