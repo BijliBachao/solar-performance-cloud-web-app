@@ -2,11 +2,38 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import {
   isActive, filterActive, computeGap, classifyAlertSeverity,
-  canCompare, computeAvailability, p2pToHealthScore,
+  canCompare, computeAvailability, p2pToHealthScore, readingSignature,
   MIN_PEERS_FOR_COMPARISON, MIN_AVG_FOR_COMPARISON,
   MAX_STRING_CURRENT_A, MAX_STRING_POWER_W, MS_PER_HOUR,
 } from '@/lib/string-health'
 import { scoreDailyP2P, type DailyStringInput } from '@/lib/string-health-daily'
+
+/**
+ * Persist per-device freshness signals (for connectivity status on the plant
+ * page + NOC). Computes the reading signature; if it changed vs prevSig, stamps
+ * reading_changed_at=now + stores the new sig. Always stores vendor_last_data_at
+ * when provided. Issues AT MOST ONE devices.update, and NONE when nothing changed
+ * (a frozen feed produces no write churn after its first stall cycle).
+ *
+ * prevSig is passed in by the caller (pollers already select the device row) to
+ * avoid an extra read. Restart-safe because the prior sig lives in the DB.
+ */
+export async function recordDeviceFreshness(
+  deviceId: string,
+  strings: { string_number: number; voltage: number; current: number; power: number }[],
+  vendorLastDataAt: Date | null,
+  prevSig: string | null,
+): Promise<void> {
+  const sig = readingSignature(strings)
+  const data: { vendor_last_data_at?: Date; reading_changed_at?: Date; last_reading_sig?: string } = {}
+  if (vendorLastDataAt) data.vendor_last_data_at = vendorLastDataAt
+  if (sig !== prevSig) {
+    data.reading_changed_at = new Date()
+    data.last_reading_sig = sig
+  }
+  if (Object.keys(data).length === 0) return
+  await prisma.devices.update({ where: { id: deviceId }, data })
+}
 
 /** Safe parseFloat that returns 0 instead of NaN */
 export function safeFloat(v: any): number {
