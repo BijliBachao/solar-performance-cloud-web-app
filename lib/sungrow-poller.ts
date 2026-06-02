@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { SungrowClient } from '@/lib/sungrow-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, safeObject, getPKTDateForDB, loadStringConfigs, processInBatches } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, safeObject, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness } from '@/lib/poller-utils'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
@@ -210,6 +210,7 @@ async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
       id: true,       // device_sn
       plant_id: true,
       max_strings: true,
+      last_reading_sig: true,
     },
   })
 
@@ -230,7 +231,7 @@ async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
 
 async function processSungrowDevice(
   client: SungrowClient,
-  device: { id: string; plant_id: string; max_strings: number | null },
+  device: { id: string; plant_id: string; max_strings: number | null; last_reading_sig: string | null },
 ): Promise<void> {
   const results = await client.getDeviceRealTimeData(
     [device.id], // device_sn
@@ -309,6 +310,21 @@ async function processSungrowDevice(
         timestamp: new Date(),
       })),
     })
+
+    // Connectivity freshness: value-change signature from the strings we just
+    // parsed. Sungrow's getDeviceRealTimeData has no data-timestamp, so pass null.
+    await recordDeviceFreshness(
+      device.id,
+      measurements.map((m) => ({
+        string_number: m.string_number,
+        voltage: Number(m.voltage),
+        current: Number(m.current),
+        power: Number(m.power),
+      })),
+      null,
+      device.last_reading_sig,
+    )
+
     const stringConfigs = await loadStringConfigs(device.id)
     await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
     await updateHourlyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)

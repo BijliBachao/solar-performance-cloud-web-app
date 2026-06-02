@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { huaweiClient } from '@/lib/huawei-client'
 import { Decimal } from '@prisma/client/runtime/library'
 import { PROVIDERS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches, safeArray, safeObject, safeFloat } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches, safeArray, safeObject, safeFloat, recordDeviceFreshness } from '@/lib/poller-utils'
 import { ACTIVE_CURRENT_THRESHOLD } from '@/lib/string-health'
 import { getHuaweiMaxStrings } from '@/lib/huawei-model-strings'
 
@@ -206,6 +206,9 @@ async function fetchStringData(): Promise<void> {
       // Needed so processHuaweiDeviceData can prefer the model-based lookup
       // (authoritative) over the runtime detection (heuristic).
       model: true,
+      // Prior reading signature — recordDeviceFreshness only bumps
+      // reading_changed_at when the new signature differs from this.
+      last_reading_sig: true,
     },
   })
 
@@ -255,7 +258,7 @@ async function fetchStringData(): Promise<void> {
 }
 
 async function processHuaweiDeviceData(
-  device: { id: string; plant_id: string; device_type_id: number; max_strings: number | null; model: string | null },
+  device: { id: string; plant_id: string; device_type_id: number; max_strings: number | null; model: string | null; last_reading_sig: string | null },
   data: any,
 ): Promise<void> {
   // Guard against Huawei returning a device with no dataItemMap at all
@@ -330,6 +333,20 @@ async function processHuaweiDeviceData(
         timestamp: new Date(),
       })),
     })
+    // Connectivity freshness: value-change signature from the strings we just
+    // wrote. Huawei stores V/I/P as Decimal, so map to plain numbers. Huawei's
+    // getDeviceRealtimeData returns no usable data-timestamp, so vendor time is null.
+    await recordDeviceFreshness(
+      device.id,
+      measurements.map((m) => ({
+        string_number: m.string_number,
+        voltage: Number(m.voltage),
+        current: Number(m.current),
+        power: Number(m.power),
+      })),
+      null,
+      device.last_reading_sig,
+    )
     const stringConfigs = await loadStringConfigs(device.id)
     await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
     await updateHourlyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)

@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { GrowattClient } from '@/lib/growatt-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness } from '@/lib/poller-utils'
 import {
   PLANT_HEALTH_HEALTHY,
   PLANT_HEALTH_FAULTY,
@@ -267,6 +267,7 @@ async function fetchStringData(client: GrowattClient): Promise<void> {
       plant_id: true,
       device_type_id: true,
       max_strings: true,
+      last_reading_sig: true,
     },
   })
 
@@ -343,7 +344,7 @@ async function fetchStringData(client: GrowattClient): Promise<void> {
 }
 
 async function processDeviceData(
-  device: { id: string; plant_id: string; device_type_id: number; max_strings: number | null },
+  device: { id: string; plant_id: string; device_type_id: number; max_strings: number | null; last_reading_sig: string | null },
   deviceData: any,
   deviceType: string
 ): Promise<void> {
@@ -387,6 +388,27 @@ async function processDeviceData(
         timestamp: new Date(),
       })),
     })
+
+    // Vendor data-time: deviceData.time is "YYYY-MM-DD HH:MM:SS" in PKT
+    // (account-local). NOT deviceData.calendar — that field is timezone-shifted
+    // ~3h and wrong (verified).
+    const gt = (deviceData as any)?.time
+    const _g = typeof gt === 'string' ? new Date(gt.replace(' ', 'T') + '+05:00') : null
+    const vendorTs = _g && !isNaN(_g.getTime()) ? _g : null
+
+    // Connectivity freshness: vendor time + value-change signature, from the
+    // strings we just wrote. Only on the path where strings were written.
+    await recordDeviceFreshness(
+      device.id,
+      strings.map((s) => ({
+        string_number: Number(s.string_number),
+        voltage: Number(s.voltage),
+        current: Number(s.current),
+        power: Number(s.power),
+      })),
+      vendorTs,
+      device.last_reading_sig,
+    )
   }
 
   if (measurements.length > 0) {
