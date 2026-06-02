@@ -181,6 +181,68 @@ export function classifyVendorFeed(
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Inverter connectivity / data-freshness (plant page + NOC)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Spec: docs/superpowers/specs/2026-06-02-inverter-connectivity-freshness-visibility-design.md
+// Two signals make a freeze visible on ALL providers (verified 2026-06-02:
+// Huawei/Sungrow expose no vendor data-timestamp): the vendor's own data-time
+// where available, plus value-change detection via a reading signature.
+
+export type ConnectivityStatus = 'live' | 'frozen' | 'offline' | 'idle'
+
+/**
+ * Stable, order-independent signature of a device's strings. Identical readings
+ * → identical signature; any V/I/P change → different signature. Pure JS hash
+ * (no node:crypto) so this module stays safe to import from any bundle. Persist
+ * to devices.last_reading_sig for restart-safe value-change detection.
+ */
+export function readingSignature(
+  strings: { string_number: number; voltage: number; current: number; power: number }[],
+): string {
+  const body = [...strings]
+    .sort((a, b) => a.string_number - b.string_number)
+    .map((s) => `${s.string_number}:${s.voltage.toFixed(2)}:${s.current.toFixed(3)}:${s.power.toFixed(2)}`)
+    .join('|')
+  // Two independent FNV-1a passes (different offsets) → 16 hex chars. Collision
+  // risk is negligible for consecutive-reading comparison of one device.
+  const fnv = (str: string, seed: number): string => {
+    let h = seed >>> 0
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i)
+      h = Math.imul(h, 0x01000193) >>> 0
+    }
+    return h.toString(16).padStart(8, '0')
+  }
+  return fnv(body, 0x811c9dc5) + fnv(body, 0x9e3779b1)
+}
+
+/**
+ * Inverter connectivity status.
+ * @param effectiveFreshAtMs newest evidence of genuinely-new data
+ *   = max(vendor_last_data_at, reading_changed_at) in epoch ms, or null.
+ * @param lastWriteAtMs MAX(string_measurements.timestamp) — when WE last wrote, or null.
+ * @param sunUp from lib/solar-geometry.ts isDaylight() for the plant lat/long.
+ *
+ *   idle    — sun down: no data expected, not an alarm.
+ *   live    — fresh data within VENDOR_FEED_STALE_MS (2h).
+ *   frozen  — stale data ≥2h but still receiving rows (<STALE_MS): stuck-but-responding.
+ *   offline — stale data and not receiving rows (or never any): no response / gated-stopped.
+ */
+export function classifyConnectivity(
+  effectiveFreshAtMs: number | null,
+  lastWriteAtMs: number | null,
+  sunUp: boolean,
+  nowMs: number = Date.now(),
+): ConnectivityStatus {
+  if (!sunUp) return 'idle'
+  // age <= 2h is "live" — matches isVendorFeedStale's `age > 2h` staleness cutoff
+  // (a feed the gate calls fresh is live here; one it calls stale is not).
+  if (effectiveFreshAtMs != null && nowMs - effectiveFreshAtMs <= VENDOR_FEED_STALE_MS) return 'live'
+  if (lastWriteAtMs != null && nowMs - lastWriteAtMs < STALE_MS) return 'frozen'
+  return 'offline'
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Algorithm v2 — Self-Referencing Ratio (SR) / Performance-to-Peers (P2P)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Spec: Working/2_Sunday_24_May_2026/STRING-HEALTH-ALGORITHM-V2.md
