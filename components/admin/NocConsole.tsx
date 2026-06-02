@@ -412,6 +412,7 @@ const DOT_CLASS_HEX: Record<string, string> = {
   'bg-emerald-500': '#10b981', // live  (healthy)
   'bg-orange-500': '#f97316',  // frozen
   'bg-slate-400': '#94a3b8',   // offline
+  'bg-slate-300': '#cbd5e1',   // idle (night) — excluded from slices, mapped for completeness
 }
 
 function connectivityHex(status: ConnectivityStatus): string {
