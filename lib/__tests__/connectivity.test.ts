@@ -32,9 +32,12 @@ describe('readingSignature', () => {
 })
 
 describe('classifyConnectivity', () => {
-  it('idle at night regardless of data', () => {
-    expect(classifyConnectivity(minsAgo(1), minsAgo(1), false, NOW)).toBe('idle')
+  it('idle at night ONLY when no fresh data (no data + sun down)', () => {
     expect(classifyConnectivity(null, null, false, NOW)).toBe('idle')
+    expect(classifyConnectivity(minsAgo(200), minsAgo(200), false, NOW)).toBe('idle')
+  })
+  it('live wins over idle when data is fresh even if sun-gate says night (robust to bad coords)', () => {
+    expect(classifyConnectivity(minsAgo(1), minsAgo(1), false, NOW)).toBe('live')
   })
   it('live when fresh data within 2h (day)', () => {
     expect(classifyConnectivity(minsAgo(5), minsAgo(5), true, NOW)).toBe('live')

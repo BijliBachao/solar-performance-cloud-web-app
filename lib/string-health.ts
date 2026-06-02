@@ -234,10 +234,16 @@ export function classifyConnectivity(
   sunUp: boolean,
   nowMs: number = Date.now(),
 ): ConnectivityStatus {
-  if (!sunUp) return 'idle'
-  // age <= 2h is "live" — matches isVendorFeedStale's `age > 2h` staleness cutoff
-  // (a feed the gate calls fresh is live here; one it calls stale is not).
+  // 'live' is checked BEFORE 'idle': fresh data is empirical proof the inverter
+  // is alive, which must win over the sun-elevation calc. This keeps the status
+  // robust to wrong plant coordinates (vendor APIs sometimes return default
+  // coords, e.g. Beijing 39.9/116.4, which would otherwise mis-gate a producing
+  // daytime plant to 'idle'). age <= 2h is "live" — matches isVendorFeedStale's
+  // `age > 2h` staleness cutoff (a feed the gate calls fresh is live here).
   if (effectiveFreshAtMs != null && nowMs - effectiveFreshAtMs <= VENDOR_FEED_STALE_MS) return 'live'
+  // No fresh data + sun down → expected dark, not an alarm.
+  if (!sunUp) return 'idle'
+  // Sun up, no fresh data: still receiving rows (stuck values) = frozen, else offline.
   if (lastWriteAtMs != null && nowMs - lastWriteAtMs < STALE_MS) return 'frozen'
   return 'offline'
 }
