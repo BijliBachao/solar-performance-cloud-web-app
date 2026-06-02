@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import {
   type StringStatus,
+  type ConnectivityStatus,
   STANDBY_POWER_FLOOR_KW,
   classifyPlantLive,
   HEALTH_HEALTHY,
@@ -20,6 +21,33 @@ import { StringHealthDonut } from '@/components/shared/StringHealthDonut'
 import {
   AlertTriangle, RefreshCw, ArrowLeft, Activity, ClipboardList,
 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+
+// ─── Helpers ────────────────────────────────────────────────────
+
+/** Compact relative time: "Just now", "2 min ago", "3 h ago", "6 d ago". */
+function relativeTime(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const date = new Date(iso)
+  if (isNaN(date.getTime())) return '—'
+  const diffMin = Math.floor((Date.now() - date.getTime()) / 60000)
+  if (diffMin < 1) return 'Just now'
+  if (diffMin < 60) return `${diffMin} min ago`
+  const diffH = Math.floor(diffMin / 60)
+  if (diffH < 48) return `${diffH} h ago`
+  return `${Math.floor(diffH / 24)} d ago`
+}
+
+/** Freshness color for plant-level last_data_at: normal <15m, amber 15m–2h, red >2h. */
+function freshnessColor(iso: string | null | undefined): string {
+  if (!iso) return 'text-slate-400'
+  const date = new Date(iso)
+  if (isNaN(date.getTime())) return 'text-slate-400'
+  const diffMin = (Date.now() - date.getTime()) / 60000
+  if (diffMin < 15) return 'text-slate-700'
+  if (diffMin < 120) return 'text-amber-700'
+  return 'text-red-700'
+}
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -39,6 +67,11 @@ interface PlantData {
     model: string | null
     max_strings: number | null
     last_synced: string | null
+    provider?: 'csi' | 'solis' | 'growatt' | 'huawei' | 'sungrow' | string | null
+    vendor_last_data_at?: string | null
+    reading_changed_at?: string | null
+    connectivity?: ConnectivityStatus
+    effective_fresh_at?: string | null
   }>
 }
 
@@ -318,6 +351,17 @@ export function PlantDetailView({
         totalStringCount={allStrings.length}
         sparkline24h={plantPower24h}
       />
+
+      {/* Plant-level data freshness — colored by age of last_data_at
+          (normal <15m, amber 15m–2h, red >2h). */}
+      <div className="px-4 sm:px-6 max-w-[1440px] mx-auto">
+        <div className="text-[11px] text-slate-500">
+          Data last received{' '}
+          <span className={cn('font-mono font-semibold', freshnessColor(plant.last_data_at))}>
+            {relativeTime(plant.last_data_at)}
+          </span>
+        </div>
+      </div>
 
       <div className="px-4 sm:px-6 py-5 max-w-[1440px] mx-auto">
         <Tabs defaultValue="overview" className="w-full">

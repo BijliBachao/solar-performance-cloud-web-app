@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import {
   ACTIVE_CURRENT_THRESHOLD,
   type StringStatus,
+  type ConnectivityStatus,
   classifyPlantLive,
   MAX_STRING_CURRENT_A,
   MAX_STRING_POWER_W,
@@ -23,7 +24,20 @@ import {
   TrendingUp, TrendingDown, CalendarDays,
   ChevronDown, ChevronRight, Cpu, AlertTriangle, Table2, Stethoscope,
 } from 'lucide-react'
-import { STATUS_STYLES, providerBadge } from '@/lib/design-tokens'
+import { STATUS_STYLES, providerBadge, statusKeyFromConnectivity } from '@/lib/design-tokens'
+
+// Compact relative time: "Just now", "2 min ago", "3 h ago", "6 d ago".
+function relativeTime(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const date = new Date(iso)
+  if (isNaN(date.getTime())) return '—'
+  const diffMin = Math.floor((Date.now() - date.getTime()) / 60000)
+  if (diffMin < 1) return 'Just now'
+  if (diffMin < 60) return `${diffMin} min ago`
+  const diffH = Math.floor(diffMin / 60)
+  if (diffH < 48) return `${diffH} h ago`
+  return `${Math.floor(diffH / 24)} d ago`
+}
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -72,6 +86,14 @@ interface DeviceInfo {
   device_name: string | null
   model: string | null
   max_strings: number | null
+  /** Per-device provider code (preferred over the plant-level provider prop). */
+  provider?: 'csi' | 'solis' | 'growatt' | 'huawei' | 'sungrow' | string | null
+  /** Vendor's own "last data" timestamp. Null for providers that don't expose it (Huawei/Sungrow). */
+  vendor_last_data_at?: string | null
+  /** Connectivity verdict from the API (live/frozen/offline/idle). */
+  connectivity?: ConnectivityStatus
+  /** Newest evidence of genuinely-new data (max of vendor_last_data_at, reading_changed_at). */
+  effective_fresh_at?: string | null
 }
 
 interface InverterDetailSectionProps {
@@ -195,7 +217,11 @@ export function InverterDetailSection({
   nativeKwhToday,
 }: InverterDetailSectionProps) {
   const color = INVERTER_COLORS[colorIndex % INVERTER_COLORS.length]
-  const providerMeta = providerBadge(provider)
+  // Prefer the per-device provider; fall back to the plant-level prop.
+  const providerMeta = providerBadge(device.provider ?? provider)
+  // Connectivity chip + freshness line (data from /api/plants/[code]).
+  const connectivity = device.connectivity
+  const connStyle = connectivity ? STATUS_STYLES[statusKeyFromConnectivity(connectivity)] : null
 
   const [trendPeriod, setTrendPeriod] = useState<TrendPeriod>('24h')
   const [trendData, setTrendData] = useState<any[]>(dummyTrendData || [])
@@ -430,6 +456,19 @@ export function InverterDetailSection({
                     {providerMeta.label}
                   </span>
                 )}
+                {connStyle && (
+                  <span
+                    className={cn(
+                      'inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest px-1.5 py-0 rounded-sm border',
+                      connStyle.bg,
+                      connStyle.fg,
+                      connStyle.border,
+                    )}
+                  >
+                    <span className={cn('w-1.5 h-1.5 rounded-full', connStyle.dot)} />
+                    {connStyle.label}
+                  </span>
+                )}
                 {totalStrings > 0 && (
                   <>
                     <span className="text-slate-300">·</span>
@@ -442,6 +481,36 @@ export function InverterDetailSection({
                   </>
                 )}
               </p>
+
+              {/* Data-freshness line — frozen feed warning, or vendor/reading
+                  last-data timestamp. Wording depends on connectivity + whether
+                  the provider exposes a vendor "last data" timestamp. */}
+              {connectivity && (
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  {connectivity === 'frozen' ? (
+                    <span className={STATUS_STYLES.frozen.fg}>
+                      feed stalled — last data{' '}
+                      <span className="font-mono font-semibold">
+                        {relativeTime(device.effective_fresh_at)}
+                      </span>
+                    </span>
+                  ) : device.vendor_last_data_at != null ? (
+                    <>
+                      vendor last data{' '}
+                      <span className="font-mono font-semibold text-slate-500">
+                        {relativeTime(device.vendor_last_data_at)}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      last reading change{' '}
+                      <span className="font-mono font-semibold text-slate-500">
+                        {relativeTime(device.effective_fresh_at)}
+                      </span>
+                    </>
+                  )}
+                </p>
+              )}
             </div>
           </div>
           {alerts.length > 0 && (
