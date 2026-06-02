@@ -45,6 +45,17 @@ export interface DonutCoreProps {
   legendOrientation?: 'right' | 'bottom'
   /** For ARIA — describes the chart contents */
   ariaLabel?: string
+  /**
+   * Optional per-slice overrides for re-purposing the primitive onto a
+   * different 3-bucket taxonomy (e.g. the NOC connectivity donut maps
+   * live→healthy, frozen→abnormal, offline→critical). Colors MUST still
+   * come from a design-token lookup, never hardcoded at the call site.
+   * Unset keys fall back to the default String-Health hex/labels/unit.
+   */
+  colors?: Partial<Record<DonutBucket, string>>
+  labels?: Partial<Record<DonutBucket, string>>
+  /** Noun used in the tooltip (default "string" / "strings"). */
+  unit?: { singular: string; plural: string }
 }
 
 // ─── Static config ───────────────────────────────────────────────────
@@ -77,6 +88,7 @@ interface SegmentPayload {
   color: string
   total: number
   breakdown?: DonutBreakdown
+  unit?: { singular: string; plural: string }
 }
 
 function DonutTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload?: SegmentPayload }> }) {
@@ -117,7 +129,11 @@ function DonutTooltip({ active, payload }: { active?: boolean; payload?: Array<{
         <span className="font-bold text-slate-900">{p.label}</span>
       </div>
       <div className="text-slate-600 font-mono tabular-nums">
-        {p.value.toLocaleString()} <span className="text-slate-400">string{p.value === 1 ? '' : 's'}</span> · {pct}%
+        {p.value.toLocaleString()}{' '}
+        <span className="text-slate-400">
+          {p.value === 1 ? (p.unit?.singular ?? 'string') : (p.unit?.plural ?? 'strings')}
+        </span>{' '}
+        · {pct}%
       </div>
       {detail && (
         <div className="text-[10px] text-slate-500 mt-0.5 font-mono">{detail}</div>
@@ -142,6 +158,9 @@ export function DonutCore({
   showLegend = true,
   legendOrientation = 'right',
   ariaLabel,
+  colors,
+  labels,
+  unit,
 }: DonutCoreProps) {
   const [uncontrolledHover, setUncontrolledHover] = useState<DonutBucket | null>(null)
   const hoverKey = controlledHover !== undefined ? controlledHover : uncontrolledHover
@@ -154,11 +173,16 @@ export function DonutCore({
     // Descending order so the largest slice starts at 12 o'clock
     const buckets: DonutBucket[] = ['healthy', 'abnormal', 'critical']
     return buckets
-      .map((b) => ({ key: b, value: counts[b], label: BUCKET_LABEL[b], color: BUCKET_HEX[b] }))
+      .map((b) => ({
+        key: b,
+        value: counts[b],
+        label: labels?.[b] ?? BUCKET_LABEL[b],
+        color: colors?.[b] ?? BUCKET_HEX[b],
+      }))
       .sort((a, b) => b.value - a.value)
-  }, [counts])
+  }, [counts, colors, labels])
 
-  const chartData: SegmentPayload[] = segments.map((s) => ({ ...s, total, breakdown }))
+  const chartData: SegmentPayload[] = segments.map((s) => ({ ...s, total, breakdown, unit }))
   const dim = SIZE_PX[size]
   const isInteractive = Boolean(onClickBucket)
 

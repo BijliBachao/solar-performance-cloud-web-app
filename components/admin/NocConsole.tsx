@@ -14,9 +14,11 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
-import { AlertTriangle, RefreshCw, Info, ExternalLink, Activity } from 'lucide-react'
+import { AlertTriangle, RefreshCw, Info, ExternalLink, Activity, Wifi } from 'lucide-react'
 import { DonutCore } from '@/components/shared/DonutCore'
 import { cn } from '@/lib/utils'
+import { STATUS_STYLES, statusKeyFromConnectivity } from '@/lib/design-tokens'
+import type { ConnectivityStatus } from '@/lib/string-health'
 import type { DonutAggregate, DonutBucket } from '@/lib/string-health-donut'
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -33,6 +35,20 @@ interface PerStringRow {
   bucket: DonutBucket
 }
 
+interface ConnectivityDevice {
+  deviceId: string
+  plantCode: string
+  inverterName: string
+  provider: string
+  status: ConnectivityStatus
+  effectiveFreshAt: string | null
+}
+
+interface FleetConnectivity {
+  counts: { live: number; frozen: number; offline: number; idle: number }
+  devices: ConnectivityDevice[]
+}
+
 interface NocApiResponse extends DonutAggregate {
   mode: 'prev-day'
   timeBasis: { label: string; startsAt: string; endsAt: string }
@@ -44,6 +60,7 @@ interface NocApiResponse extends DonutAggregate {
     total: number
     items: PerStringRow[]
   }
+  connectivity: FleetConnectivity
   warnings: Array<{ code: string; message: string }>
 }
 
@@ -202,7 +219,7 @@ export function NocConsole() {
       {/* Body: split pane */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,420px)_1fr] gap-4">
         {/* Donut pane (left, sticky on lg+) */}
-        <div className="lg:sticky lg:top-4 self-start">
+        <div className="lg:sticky lg:top-4 self-start space-y-4">
           <div className="bg-white border border-slate-200 rounded-sm p-5 shadow-card">
             {isLoading && !data ? (
               <SkeletonDonut />
@@ -212,6 +229,13 @@ export function NocConsole() {
                 selectedBucket={bucket ?? null}
                 onBucketClick={handleBucketClick}
               />
+            ) : null}
+          </div>
+          <div className="bg-white border border-slate-200 rounded-sm p-5 shadow-card">
+            {isLoading && !data ? (
+              <SkeletonDonut />
+            ) : data ? (
+              <ConnectivityDonut connectivity={data.connectivity} />
             ) : null}
           </div>
         </div>
@@ -361,6 +385,79 @@ function FleetDonut({
           <Info className="w-3 h-3 text-slate-400" strokeWidth={2} />
           {data.excluded.unused + data.excluded.nonStandard} string
           {data.excluded.unused + data.excluded.nonStandard === 1 ? '' : 's'} excluded from view
+        </p>
+      )}
+    </div>
+  )
+}
+
+// Fleet connectivity donut. Re-purposes DonutCore's 3-bucket primitive by
+// mapping connectivity → its slots: live→healthy, frozen→abnormal,
+// offline→critical. Colors come from STATUS_STYLES (never hardcoded): we
+// resolve each status to its design token, read the token's `dot` Tailwind
+// class, and translate it to the matching hex Recharts needs for <Cell fill>.
+// `idle` is shown as a caption below — it is "expected at night", not a fault,
+// so it is excluded from the 3 slices (matches the API which keeps it separate).
+//
+// Click-to-filter is intentionally NOT wired here: the table to the right is
+// per-STRING and filtered by health bucket via the API's ?bucket param. The
+// connectivity rollup is per-DEVICE and the NOC API exposes no device-level row
+// filter, so there is no reusable URL-state/row mechanism to hook into. Adding
+// one would require new API + table surfaces beyond this UI task, so we render
+// the donut + counts + idle caption only.
+
+// STATUS_STYLES[...].dot Tailwind class → hex for Recharts <Cell fill>.
+// Keeping this map adjacent to the tokens it mirrors makes drift obvious.
+const DOT_CLASS_HEX: Record<string, string> = {
+  'bg-emerald-500': '#10b981', // live  (healthy)
+  'bg-orange-500': '#f97316',  // frozen
+  'bg-slate-400': '#94a3b8',   // offline
+}
+
+function connectivityHex(status: ConnectivityStatus): string {
+  const dot = STATUS_STYLES[statusKeyFromConnectivity(status)].dot
+  return DOT_CLASS_HEX[dot] ?? '#94a3b8'
+}
+
+function ConnectivityDonut({ connectivity }: { connectivity: FleetConnectivity }) {
+  const { live, frozen, offline, idle } = connectivity.counts
+  const total = live + frozen + offline // idle excluded from the 3 slices
+  const livePct = total > 0 ? (live / total) * 100 : 0
+  return (
+    <div className="flex flex-col items-center gap-4">
+      <div className="self-start flex items-center gap-2 mb-1">
+        <Wifi className="w-4 h-4 text-slate-400" strokeWidth={2} />
+        <h2 className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
+          Inverter Connectivity
+        </h2>
+      </div>
+      <DonutCore
+        // Slot mapping: live→healthy, frozen→abnormal, offline→critical.
+        counts={{ healthy: live, abnormal: frozen, critical: offline }}
+        total={total}
+        size="lg"
+        legendOrientation="bottom"
+        centerMetric={{ value: total.toLocaleString(), label: 'inverters' }}
+        centerSubline={total > 0 ? `${livePct.toFixed(1)}% live` : undefined}
+        colors={{
+          healthy: connectivityHex('live'),
+          abnormal: connectivityHex('frozen'),
+          critical: connectivityHex('offline'),
+        }}
+        // Connectivity-specific slice names. (Colors stay token-driven above;
+        // labels differ because the live slot reuses the green "healthy" token,
+        // whose label "Healthy" would be wrong for a connectivity view.)
+        labels={{ healthy: 'Live', abnormal: 'Frozen', critical: 'Offline' }}
+        unit={{ singular: 'inverter', plural: 'inverters' }}
+        ariaLabel={`Inverter connectivity: ${live} live, ${frozen} frozen, ${offline} offline (${total} reporting), ${idle} idle`}
+      />
+      {idle > 0 && (
+        <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
+          <span
+            className={cn('w-2 h-2 rounded-full', STATUS_STYLES[statusKeyFromConnectivity('idle')].dot)}
+            aria-hidden="true"
+          />
+          {idle.toLocaleString()} idle — night
         </p>
       )}
     </div>
