@@ -86,6 +86,9 @@ model devices {
   max_strings         Int?
   provider            String                @default("huawei") @db.VarChar(20)
   last_synced         DateTime?
+  vendor_last_data_at DateTime?
+  reading_changed_at  DateTime?
+  last_reading_sig    String?               @db.VarChar(64)
   created_at          DateTime              @default(now())
   plants              plants                @relation(fields: [plant_id], references: [id])
   string_measurements string_measurements[]
