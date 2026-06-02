@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
 import { requirePlantAccess } from '@/lib/api-access'
 import { prisma } from '@/lib/prisma'
+import { deviceConnectivity } from '@/lib/connectivity'
+import { isDaylight } from '@/lib/solar-geometry'
 
 export async function GET(
   request: NextRequest,
@@ -19,9 +21,12 @@ export async function GET(
             id: true,
             device_name: true,
             device_type_id: true,
+            provider: true,
             model: true,
             max_strings: true,
             last_synced: true,
+            vendor_last_data_at: true,
+            reading_changed_at: true,
           },
         },
       },
@@ -38,8 +43,36 @@ export async function GET(
       select: { timestamp: true },
     })
 
+    // Per-device last-write time = MAX(string_measurements.timestamp). Combined
+    // with the freshness columns + the sun gate, this yields each inverter's
+    // connectivity status (live/frozen/offline/idle) for the plant UI.
+    const lastWriteRows = await prisma.string_measurements.groupBy({
+      by: ['device_id'],
+      where: { plant_id: params.code },
+      _max: { timestamp: true },
+    })
+    const lastWriteByDevice = new Map(
+      lastWriteRows.map((r) => [r.device_id, r._max.timestamp?.getTime() ?? null]),
+    )
+    const now = Date.now()
+    const sunUp = isDaylight(
+      plant.latitude != null ? Number(plant.latitude) : NaN,
+      plant.longitude != null ? Number(plant.longitude) : NaN,
+      new Date(now),
+    )
+    const devicesWithConnectivity = plant.devices.map((d) => {
+      const conn = deviceConnectivity(
+        { vendor_last_data_at: d.vendor_last_data_at, reading_changed_at: d.reading_changed_at },
+        lastWriteByDevice.get(d.id) ?? null,
+        sunUp,
+        now,
+      )
+      return { ...d, connectivity: conn.status, effective_fresh_at: conn.effectiveFreshAt }
+    })
+
     return NextResponse.json({
       ...plant,
+      devices: devicesWithConnectivity,
       last_data_at: latestMeasurement?.timestamp || null,
     })
   } catch (error) {
