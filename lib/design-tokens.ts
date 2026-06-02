@@ -22,6 +22,7 @@ import {
   HEALTH_SEVERE,
   type StringStatus,
   type AlertSeverity,
+  type ConnectivityStatus,
 } from '@/lib/string-health'
 
 // ━━━ STATUS STYLES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -36,6 +37,8 @@ export type StatusKey =
   | 'open-circuit'
   | 'info'
   | 'peer-excluded'
+  | 'frozen'
+  | 'idle'
 
 export interface StatusStyle {
   fg: string // text + icon color
@@ -132,6 +135,43 @@ export const STATUS_STYLES: Record<StatusKey, StatusStyle> = {
     fullDesc: 'Admin has flagged this string as a non-standard install (wall mount, east/west tilt, partial shade). Lower output is expected by design, so it is removed from the peer-comparison pool. Hardware alarms, dead-string detection, and stale-data detection remain active. Peer-relative scoring resumes when Performance Ratio (Phase 2) lands.',
     whatToCheck: 'No action needed for the peer flag. Verify any underlying alarms (vendor codes, OPEN_CIRCUIT, OFFLINE) separately.',
   },
+  // Orange — distinct from warning's amber. Inverter is still "connected" but the
+  // vendor's data has not advanced for 2h+ during daylight: the feed is stalled
+  // (the CSI 2026-05-25 failure mode). Connectivity status, not a panel issue.
+  frozen: {
+    fg: 'text-orange-700',
+    bg: 'bg-orange-50',
+    border: 'border-orange-200',
+    solid: 'bg-orange-600 text-white',
+    dot: 'bg-orange-500',
+    label: 'Frozen',
+    shortDesc: 'Data feed stalled — no new readings for 2h+ during daylight.',
+    fullDesc: 'The inverter is still reachable but its data stopped advancing — we are receiving the same readings every poll. Usually a datalogger or vendor-cloud problem (the logger lost its uplink, or the monitoring portal is serving a cached snapshot), not a panel or string fault.',
+    whatToCheck: 'Check the datalogger / WiFi stick at the site (power + network LEDs). If the logger looks healthy, the vendor monitoring portal may be stalled — open a ticket with the vendor quoting the "last data" time.',
+  },
+  // Muted slate — calmer than offline. No data, but the sun is down, so this is
+  // expected and not an alarm.
+  idle: {
+    fg: 'text-slate-400',
+    bg: 'bg-slate-50',
+    border: 'border-slate-200',
+    solid: 'bg-slate-400 text-white',
+    dot: 'bg-slate-300',
+    label: 'Idle (night)',
+    shortDesc: 'No data — sun is down. Expected; not a fault.',
+    fullDesc: 'The sun is below the production threshold for this plant, so the inverter is not generating and not reporting. This is normal overnight behaviour and is not an alarm.',
+    whatToCheck: 'No action needed. Connectivity is re-evaluated automatically after sunrise.',
+  },
+}
+
+/** Connectivity status → StatusKey. live reuses the green "healthy" style. */
+export function statusKeyFromConnectivity(c: ConnectivityStatus): StatusKey {
+  switch (c) {
+    case 'live': return 'healthy'
+    case 'frozen': return 'frozen'
+    case 'offline': return 'offline'
+    case 'idle': return 'idle'
+  }
 }
 
 // ━━━ MAPPERS: domain state → StatusKey ━━━━━━━━━━━━━━━━━━━━━━━━━━
