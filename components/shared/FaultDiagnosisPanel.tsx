@@ -144,6 +144,8 @@ const LEFT_BORDER_BY_KEY: Record<StatusKey, string> = {
   offline: 'border-l-slate-500',
   'open-circuit': 'border-l-rose-600',
   'peer-excluded': 'border-l-indigo-600',
+  frozen: 'border-l-orange-600',
+  idle: 'border-l-slate-400',
 }
 
 const SEVERITY_LABEL: Record<DiagSeverity, string> = {
