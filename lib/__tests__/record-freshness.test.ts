@@ -50,3 +50,13 @@ describe('recordDeviceFreshness', () => {
     expect(arg.data.last_reading_sig).toBe(readingSignature(strings))
   })
 })
+
+describe('recordDeviceFreshness — future vendor ts rejection', () => {
+  it('does not store a vendor ts beyond future clock-skew tolerance (sig still updates)', async () => {
+    const farFuture = new Date(Date.now() + 113 * 60_000)
+    await recordDeviceFreshness('dev1', strings, farFuture, 'oldsig')
+    const arg = (prisma.devices.update as any).mock.calls[0][0]
+    expect(arg.data.vendor_last_data_at).toBeUndefined()
+    expect(arg.data.reading_changed_at).toBeInstanceOf(Date)
+  })
+})

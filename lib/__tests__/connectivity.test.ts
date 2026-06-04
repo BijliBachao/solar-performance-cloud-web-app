@@ -73,3 +73,22 @@ describe('deviceConnectivity', () => {
     expect(r.effectiveFreshAt).toBeNull()
   })
 })
+
+describe('deviceConnectivity — future vendor ts (fast logger clock)', () => {
+  it('ignores a vendor ts >10min in the future; falls back to reading_changed_at', () => {
+    const futureV = new Date(NOW + 113 * 60_000) // the live EEL9E41056 case
+    const r = deviceConnectivity(
+      { vendor_last_data_at: futureV, reading_changed_at: new Date(minsAgo(300)) },
+      minsAgo(300), false, NOW,
+    )
+    // reading 5h old + night → idle, NOT live-forever
+    expect(r.status).toBe('idle')
+    expect(r.effectiveFreshAt?.getTime()).toBe(minsAgo(300))
+  })
+  it('tolerates small clock skew (<10min ahead) as live', () => {
+    const slightlyAhead = new Date(NOW + 5 * 60_000)
+    const r = deviceConnectivity(
+      { vendor_last_data_at: slightlyAhead, reading_changed_at: null }, minsAgo(1), true, NOW)
+    expect(r.status).toBe('live')
+  })
+})

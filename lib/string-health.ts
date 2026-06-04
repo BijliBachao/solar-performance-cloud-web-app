@@ -203,6 +203,16 @@ export const FLEET_DEFAULT_LAT = 31.5
 export const FLEET_DEFAULT_LNG = 74.3
 
 /**
+ * Max tolerated FUTURE skew on a vendor data-timestamp. Found live 2026-06-04:
+ * Growatt EEL9E41056's logger clock runs ~2h fast, making its vendor ts land in
+ * the future — which would classify the device "live" forever (a dead device
+ * would never go offline). Beyond this tolerance the vendor ts is garbage:
+ * ignore it (don't persist, don't classify on it) and let reading_changed_at —
+ * stamped with OUR clock — drive freshness honestly.
+ */
+export const VENDOR_TS_MAX_FUTURE_SKEW_MS = 10 * 60 * 1000
+
+/**
  * Stable, order-independent signature of a device's strings. Identical readings
  * → identical signature; any V/I/P change → different signature. Pure JS hash
  * (no node:crypto) so this module stays safe to import from any bundle. Persist

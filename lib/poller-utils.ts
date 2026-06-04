@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import {
   isActive, filterActive, computeGap, classifyAlertSeverity,
-  canCompare, computeAvailability, p2pToHealthScore, readingSignature,
+  canCompare, computeAvailability, p2pToHealthScore, readingSignature, VENDOR_TS_MAX_FUTURE_SKEW_MS,
   MIN_PEERS_FOR_COMPARISON, MIN_AVG_FOR_COMPARISON,
   MAX_STRING_CURRENT_A, MAX_STRING_POWER_W, MS_PER_HOUR,
 } from '@/lib/string-health'
@@ -11,9 +11,11 @@ import { scoreDailyP2P, type DailyStringInput } from '@/lib/string-health-daily'
 /**
  * Persist per-device freshness signals (for connectivity status on the plant
  * page + NOC). Computes the reading signature; if it changed vs prevSig, stamps
- * reading_changed_at=now + stores the new sig. Always stores vendor_last_data_at
- * when provided. Issues AT MOST ONE devices.update, and NONE when nothing changed
- * (a frozen feed produces no write churn after its first stall cycle).
+ * reading_changed_at=now + stores the new sig. Stores vendor_last_data_at when
+ * provided AND not future-skewed beyond tolerance (fast logger clocks are
+ * garbage — see VENDOR_TS_MAX_FUTURE_SKEW_MS). Issues AT MOST ONE
+ * devices.update, and NONE when nothing changed (a frozen feed produces no
+ * write churn after its first stall cycle).
  *
  * prevSig is passed in by the caller (pollers already select the device row) to
  * avoid an extra read. Restart-safe because the prior sig lives in the DB.
@@ -26,7 +28,12 @@ export async function recordDeviceFreshness(
 ): Promise<void> {
   const sig = readingSignature(strings)
   const data: { vendor_last_data_at?: Date; reading_changed_at?: Date; last_reading_sig?: string } = {}
-  if (vendorLastDataAt) data.vendor_last_data_at = vendorLastDataAt
+  // Reject vendor timestamps in the future beyond clock-skew tolerance — a
+  // fast logger clock (seen live: Growatt ~2h ahead) would otherwise pin the
+  // device "live" forever. reading_changed_at (our clock) stays the honest signal.
+  if (vendorLastDataAt && vendorLastDataAt.getTime() <= Date.now() + VENDOR_TS_MAX_FUTURE_SKEW_MS) {
+    data.vendor_last_data_at = vendorLastDataAt
+  }
   if (sig !== prevSig) {
     data.reading_changed_at = new Date()
     data.last_reading_sig = sig
