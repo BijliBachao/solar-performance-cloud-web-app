@@ -422,7 +422,26 @@ export function InverterDetailSection({
                 <h3 className="text-sm font-bold text-slate-900 font-mono truncate">
                   {device.device_name || device.id}
                 </h3>
-                {liveStatus === 'PRODUCING' ? (
+                {/* THE status chip — driven by the unified connectivity
+                    engine, NOT by summing stale stored watts. The old
+                    power-floor pill called an 8-hours-asleep inverter "LIVE"
+                    because 669 W of dusk leftovers cleared the producing
+                    floor — it had no clock (found live on NE=86133226,
+                    2026-06-05 04:00 PKT). Falls back to the power-floor pill
+                    only when connectivity isn't provided (preview pages). */}
+                {connStyle ? (
+                  <span className={cn('flex items-center gap-1 text-[10px] font-bold shrink-0', connStyle.fg)}>
+                    {connectivity === 'live' ? (
+                      <span className="relative flex h-1.5 w-1.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                      </span>
+                    ) : (
+                      <span className={cn('w-1.5 h-1.5 rounded-full', connStyle.dot)} />
+                    )}
+                    {connStyle.label.toUpperCase()}
+                  </span>
+                ) : liveStatus === 'PRODUCING' ? (
                   <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 shrink-0">
                     <span className="relative flex h-1.5 w-1.5">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
@@ -456,20 +475,9 @@ export function InverterDetailSection({
                     {providerMeta.label}
                   </span>
                 )}
-                {connStyle && (
-                  <span
-                    className={cn(
-                      'inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest px-1.5 py-0 rounded-sm border',
-                      connStyle.bg,
-                      connStyle.fg,
-                      connStyle.border,
-                    )}
-                  >
-                    <span className={cn('w-1.5 h-1.5 rounded-full', connStyle.dot)} />
-                    {connStyle.label}
-                  </span>
-                )}
-                {totalStrings > 0 && (
+                {/* (the duplicate connectivity badge that used to sit here is
+                    gone — the chip next to the inverter name IS the status) */}
+                {totalStrings > 0 && connectivity !== 'idle' && (
                   <>
                     <span className="text-slate-300">·</span>
                     <span>
@@ -560,9 +568,16 @@ export function InverterDetailSection({
           </div>
         )}
 
-        {/* ZONE 2 — Inline KPI one-liner (compact, no cell borders) */}
+        {/* ZONE 2 — Inline KPI one-liner (compact, no cell borders).
+            Night-aware: totalPower is summed from the LAST STORED readings —
+            at night those are dusk leftovers (e.g. 669 W, 8 h old), not live
+            production. Show "—" while idle instead of stale watts. */}
         <div className="flex items-center gap-2 flex-wrap text-[13px] font-mono font-semibold text-slate-900">
-          <span>{formatPower(totalPower)}</span>
+          {connectivity === 'idle' ? (
+            <span className="text-slate-400">— <span className="text-[11px] font-semibold">W</span></span>
+          ) : (
+            <span>{formatPower(totalPower)}</span>
+          )}
           <span className="text-slate-300">·</span>
           {nativeKwhToday != null && nativeKwhToday > 0 ? (
             <span>
@@ -578,7 +593,7 @@ export function InverterDetailSection({
             <span className="text-slate-400">— kWh today</span>
           )}
           <span className="text-slate-300">·</span>
-          {avgCurrent > 0 ? (
+          {avgCurrent > 0 && connectivity !== 'idle' ? (
             <span>
               {avgCurrent.toFixed(2)}
               <span className="text-[11px] font-semibold text-slate-500 ml-0.5">A avg</span>
