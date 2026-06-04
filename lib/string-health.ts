@@ -271,6 +271,17 @@ export function readingSignature(
  *  Above this with the sun down, the snapshot is a replayed daytime reading. */
 export const NIGHT_MAX_PHANTOM_W = 50
 
+/** Night-phantom requires REPLAY-CLASS current too. Found by adversarial
+ *  wind-tunnel (2026-06-05 04:45 PKT): a real night leak whose V sensor
+ *  reads residual string voltage (V=620, I=0.8A → "496W") would have been
+ *  eaten by the power-only check — violating the never-drop-a-real-signal
+ *  promise. Physics: every observed daytime replay carries multi-amp
+ *  production currents (2.4–13A); real night anomalies are sub-amp leakage
+ *  (positive) or backfeed (negative). Requiring BOTH power > 50W AND
+ *  current > 1A keeps 100% of replay blocking while guaranteeing every
+ *  sub-amp night event is stored and surfaced. */
+export const NIGHT_PHANTOM_MIN_CURRENT_A = 1.0
+
 /** Daily P2P scores need at least this many distinct productive hours before
  *  they mean anything — also prevents a brand-new PKT day from being scored
  *  off its first scraps of (possibly garbage) data. */
@@ -306,7 +317,16 @@ export function classifyDeviceWrite(
   sunUp: boolean,
 ): DeviceWriteAction {
   if (strings.length > 0 && readingSignature(strings) === prevSig) return 'skip_duplicate'
-  if (!sunUp && strings.some((s) => s.power > NIGHT_MAX_PHANTOM_W)) return 'skip_night_phantom'
+  // Night phantom = production-class POWER *and* production-class CURRENT.
+  // Power alone could eat a real leak with a quirky high-V sensor reading;
+  // current alone could eat nothing real either way — together they match
+  // exactly (and only) replayed daytime frames. See NIGHT_PHANTOM_MIN_CURRENT_A.
+  if (
+    !sunUp &&
+    strings.some((s) => s.power > NIGHT_MAX_PHANTOM_W && s.current > NIGHT_PHANTOM_MIN_CURRENT_A)
+  ) {
+    return 'skip_night_phantom'
+  }
   return 'write'
 }
 

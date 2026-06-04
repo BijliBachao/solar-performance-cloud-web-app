@@ -44,15 +44,31 @@ describe('classifyDeviceWrite', () => {
     expect(classifyDeviceWrite(s, readingSignature(s), false)).toBe('skip_duplicate')
   })
 
-  it('skip_night_phantom when sun is down but a string claims real production', () => {
+  it('skip_night_phantom when sun is down but a string claims real production (multi-amp + >50W)', () => {
     expect(classifyDeviceWrite(strings(), 'different-sig', false)).toBe('skip_night_phantom')
-    // single phantom string among zeros is enough
+    // single phantom string among zeros is enough (fixture current = 5.1A)
     expect(classifyDeviceWrite(strings({ p1: 0, p2: NIGHT_MAX_PHANTOM_W + 1 }), null, false)).toBe('skip_night_phantom')
   })
 
   it('write for honest night zeros / noise below the phantom floor', () => {
     expect(classifyDeviceWrite(strings({ p1: 0, p2: 0 }), 'different-sig', false)).toBe('write')
     expect(classifyDeviceWrite(strings({ p1: 12, p2: 0 }), null, false)).toBe('write')
+  })
+
+  it('NEVER drops a real night event — wind-tunnel regressions (2026-06-05)', () => {
+    // Real leak, physical: darkness collapses V → tiny power
+    const leak = [{ string_number: 1, voltage: 8, current: 0.8, power: 6.4 }]
+    expect(classifyDeviceWrite(leak, 'different-sig', false)).toBe('write')
+    // ADVERSARIAL (the found flaw): leak + quirky high-V sensor → "496W" but
+    // sub-amp current. Power-only gating ate this; the current criterion saves it.
+    const leakHighV = [{ string_number: 1, voltage: 620, current: 0.8, power: 496 }]
+    expect(classifyDeviceWrite(leakHighV, 'different-sig', false)).toBe('write')
+    // Reverse current (failed bypass diode backfeed) — negative power, must store
+    const reverse = [{ string_number: 1, voltage: 15, current: -1.4, power: -21 }]
+    expect(classifyDeviceWrite(reverse, 'different-sig', false)).toBe('write')
+    // …while a varying daytime replay (multi-amp) is STILL caught
+    const replay = [{ string_number: 1, voltage: 872, current: 2.4, power: 2092 }]
+    expect(classifyDeviceWrite(replay, 'different-sig', false)).toBe('skip_night_phantom')
   })
 
   it('write for changing daytime production', () => {
