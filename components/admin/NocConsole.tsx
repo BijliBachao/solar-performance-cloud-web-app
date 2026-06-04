@@ -220,8 +220,9 @@ export function NocConsole() {
 
   const { data, error, isLoading, isValidating, mutate } = useSWR<NocApiResponse>(apiUrl, fetcher, {
     // Live triage console: 60 s background poll (pauses when the tab is
-    // hidden — SWR's "smart" polling), refresh on operator return.
-    refreshInterval: 60_000,
+    // hidden — SWR's "smart" polling), refresh on operator return. Settled
+    // (Yesterday) data never changes intraday — no poll, manual/focus only.
+    refreshInterval: filters.mode === 'today' ? 60_000 : 0,
     revalidateOnFocus: true,
     // Filter changes change the SWR key — keep the old rows visible (dimmed)
     // instead of blanking the table.
@@ -467,7 +468,7 @@ function NocHeader({
           />
         </div>
         <OrgFilter org={org} orgs={orgs} onChange={onOrgChange} />
-        <UpdatedAgo dataAt={dataAt} isRefreshing={isRefreshing} />
+        <UpdatedAgo dataAt={dataAt} isRefreshing={isRefreshing} autoRefresh={mode === 'today'} />
         <button
           type="button"
           onClick={onRefresh}
@@ -515,7 +516,7 @@ function ModeToggle({ mode, onChange }: { mode: NocMode; onChange: (m: NocMode) 
 
 /** "Updated 12s ago" with a 1 s tick — the unobtrusive background-refresh
  *  indicator (data updates in place; this is the only always-visible signal). */
-function UpdatedAgo({ dataAt, isRefreshing }: { dataAt: number | null; isRefreshing: boolean }) {
+function UpdatedAgo({ dataAt, isRefreshing, autoRefresh }: { dataAt: number | null; isRefreshing: boolean; autoRefresh: boolean }) {
   const [, force] = useState(0)
   useEffect(() => {
     const t = setInterval(() => force((n) => n + 1), 1000)
@@ -527,9 +528,12 @@ function UpdatedAgo({ dataAt, isRefreshing }: { dataAt: number | null; isRefresh
     label = s < 5 ? 'just now' : s < 60 ? `${s}s ago` : `${Math.floor(s / 60)}m ago`
   }
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] font-mono tabular-nums text-slate-500" title="Auto-refreshes every 60s">
+    <span
+      className="inline-flex items-center gap-1.5 text-[11px] font-mono tabular-nums text-slate-500"
+      title={autoRefresh ? 'Auto-refreshes every 60s' : 'Settled view — refresh manually if needed'}
+    >
       <span className={cn('w-1.5 h-1.5 rounded-full', isRefreshing ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300')} aria-hidden="true" />
-      Updated {label} · 60s
+      Updated {label}{autoRefresh ? ' · 60s' : ' · settled'}
     </span>
   )
 }

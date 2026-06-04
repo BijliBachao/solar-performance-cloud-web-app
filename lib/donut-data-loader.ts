@@ -481,6 +481,10 @@ export interface FleetCountsFacets {
 
 export async function loadFleetCounts(orgId?: string, facets: FleetCountsFacets = {}): Promise<FleetCountsResult> {
   const date = facets.date ?? getPktYesterdayDate()
+  // Re-derived here (not threaded from the route): if PKT midnight rolls over
+  // between the route computing `date` and this line, isToday flips — but the
+  // SQL already binds the route's date, so only the LABEL/warning-code would
+  // read "Yesterday" for that single request. Data is never wrong.
   const isToday = date.getTime() === getPktTodayDate().getTime()
 
   // Plants↔orgs is a many-to-many via plant_assignments (no organization_id on
@@ -1052,6 +1056,10 @@ interface OrgListRow {
 }
 
 export async function loadOrgList(date?: Date): Promise<Array<{ id: string; name: string; stringCount: number }>> {
+  // The dropdown count is "strings with scores on the page's date" — scoped to
+  // the SAME time basis as everything else (one basis per screen, by design).
+  // In Today mode before sunrise this reads (0) for every org; the page-level
+  // NO_DATA_TODAY warning explains why, so the zeros are coherent, not broken.
   const scoreDate = date ?? getPktYesterdayDate()
 
   // Walk organizations → plant_assignments → string_daily. M2M join means a
