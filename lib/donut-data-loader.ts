@@ -84,6 +84,7 @@ export interface FleetRowsPage {
 export interface FleetConnectivityDevice {
   deviceId: string
   plantCode: string
+  plantName: string
   inverterName: string
   provider: string
   status: ConnectivityStatus
@@ -452,13 +453,27 @@ interface FleetCountsRow {
   excluded_nonstandard: bigint
 }
 
-export async function loadFleetCounts(orgId?: string): Promise<FleetCountsResult> {
+export interface FleetCountsFacets {
+  /** Case-insensitive match on plant name / plant code / inverter name. */
+  q?: string
+  /** Restrict to these devices (the connectivity facet's matching devices).
+   *  Pass an EMPTY array to match nothing; undefined = no device filter. */
+  deviceIds?: string[]
+}
+
+export async function loadFleetCounts(orgId?: string, facets: FleetCountsFacets = {}): Promise<FleetCountsResult> {
   const yesterday = getPktYesterdayDate()
 
   // Plants↔orgs is a many-to-many via plant_assignments (no organization_id on
   // plants directly). DISTINCT on (device_id, string_number) so a plant
   // assigned to multiple orgs isn't double-counted when no org filter is set.
   const orgFilter = orgId ?? null
+  // NOC v3 cross-facet scope: the health donut recomputes under the
+  // connectivity selection + search (AND across facets), but NOT under its own
+  // bucket selection — a facet always shows all of its own values.
+  const qLike = facets.q && facets.q.trim() !== '' ? `%${facets.q.trim()}%` : null
+  const useDeviceFilter = facets.deviceIds != null
+  const deviceIdsArr = facets.deviceIds ?? []
 
   const rows = await prisma.$queryRaw<FleetCountsRow[]>`
     WITH scoped AS (
@@ -471,6 +486,8 @@ export async function loadFleetCounts(orgId?: string): Promise<FleetCountsResult
       FROM string_daily sd
       LEFT JOIN string_configs sc
         ON sc.device_id = sd.device_id AND sc.string_number = sd.string_number
+      JOIN plants p ON p.id = sd.plant_id
+      JOIN devices d ON d.id = sd.device_id
       -- LEFT JOIN so plants with no organization assignment ("orphan" plants)
       -- still appear in the fleet aggregate. Client requirement: "see all of
       -- the managed strings in 1 place" — strings exist regardless of admin
@@ -479,6 +496,8 @@ export async function loadFleetCounts(orgId?: string): Promise<FleetCountsResult
       LEFT JOIN plant_assignments pa ON pa.plant_id = sd.plant_id
       WHERE sd.date = ${yesterday}
         AND (${orgFilter}::text IS NULL OR pa.organization_id = ${orgFilter}::text)
+        AND (${useDeviceFilter}::bool = false OR sd.device_id = ANY(${deviceIdsArr}))
+        AND (${qLike}::text IS NULL OR p.plant_name ILIKE ${qLike} OR p.id ILIKE ${qLike} OR d.device_name ILIKE ${qLike})
     ),
     excluded_from_configs AS (
       -- excluded_unused is counted from string_configs directly. The poller
@@ -602,43 +621,67 @@ interface FleetRowCountSql {
 
 export interface LoadFleetRowsParams {
   orgId?: string
+  /** Back-compat single bucket (NOC v2). Superseded by `buckets`. */
   bucket?: DonutBucket
+  /** OR-set within the health facet (NOC v3). */
+  buckets?: DonutBucket[]
+  /** Restrict rows to these devices (computed from the connectivity facet). */
+  deviceIds?: string[]
+  /** Case-insensitive match on plant name / plant code / inverter name. */
+  q?: string
   page?: number
+}
+
+/** One health bucket → its score predicate (shared by rows + facet helpers). */
+function bucketCondition(bucket: DonutBucket): Prisma.Sql {
+  switch (bucket) {
+    case 'healthy':
+      return Prisma.sql`(sd.health_score IS NOT NULL AND sd.health_score >= ${HEALTH_HEALTHY})`
+    case 'critical':
+      return Prisma.sql`(sd.health_score IS NOT NULL AND sd.health_score < ${HEALTH_WARNING})`
+    case 'abnormal':
+      // Abnormal = [HEALTH_WARNING, HEALTH_HEALTHY) OR NULL health_score (no-data).
+      return Prisma.sql`(
+        (sd.health_score IS NOT NULL AND sd.health_score >= ${HEALTH_WARNING} AND sd.health_score < ${HEALTH_HEALTHY})
+        OR sd.health_score IS NULL
+      )`
+  }
+}
+
+/** Shared facet WHERE fragments (NOC v3 faceted filtering: AND across facets,
+ *  OR within the health facet). Used by rows, counts, and facet helpers so the
+ *  donuts and the table always agree. */
+function fleetFacetWheres(params: {
+  orgId?: string
+  buckets?: DonutBucket[]
+  deviceIds?: string[]
+  q?: string
+}): Prisma.Sql[] {
+  const wheres: Prisma.Sql[] = []
+  if (params.orgId != null) {
+    wheres.push(Prisma.sql`pa.organization_id = ${params.orgId}`)
+  }
+  if (params.buckets && params.buckets.length > 0) {
+    wheres.push(Prisma.sql`(${Prisma.join(params.buckets.map(bucketCondition), ' OR ')})`)
+  }
+  if (params.deviceIds) {
+    // Empty list = the connectivity facet matched nothing → match no rows.
+    wheres.push(Prisma.sql`sd.device_id = ANY(${params.deviceIds})`)
+  }
+  if (params.q && params.q.trim() !== '') {
+    const like = `%${params.q.trim()}%`
+    wheres.push(Prisma.sql`(p.plant_name ILIKE ${like} OR p.id ILIKE ${like} OR d.device_name ILIKE ${like})`)
+  }
+  return wheres
 }
 
 export async function loadFleetRows(params: LoadFleetRowsParams = {}): Promise<FleetRowsPage> {
   const yesterday = getPktYesterdayDate()
   const page = Math.max(1, params.page ?? 1)
   const offset = (page - 1) * FLEET_PAGE_SIZE
-  const orgFilter = params.orgId ?? null
 
-  // Bucket filter expressed via score range. We use named values so the
-  // SQL planner can use the index on (date, health_score) effectively.
-  let scoreMin: number | null = null
-  let scoreMax: number | null = null
-  let scoreIsNull: boolean | null = null
-  switch (params.bucket) {
-    case 'healthy':
-      scoreMin = HEALTH_HEALTHY
-      scoreMax = null
-      scoreIsNull = false
-      break
-    case 'critical':
-      scoreMin = null
-      scoreMax = HEALTH_WARNING
-      scoreIsNull = false
-      break
-    case 'abnormal':
-      // Abnormal bucket = scores in the [HEALTH_WARNING, HEALTH_HEALTHY) range,
-      // OR rows with NULL health_score (no-data).
-      scoreMin = HEALTH_WARNING
-      scoreMax = HEALTH_HEALTHY
-      scoreIsNull = null // see below: special case
-      break
-    default:
-      // no bucket filter — all
-      break
-  }
+  // Back-compat: single `bucket` (NOC v2) folds into the OR-set.
+  const buckets = params.buckets ?? (params.bucket ? [params.bucket] : undefined)
 
   // Build the WHERE clause via Prisma.sql composition for safe parameterization.
   // Note: org filtering goes through plant_assignments (M2M); see schema.prisma.
@@ -646,43 +689,37 @@ export async function loadFleetRows(params: LoadFleetRowsParams = {}): Promise<F
     Prisma.sql`sd.date = ${yesterday}`,
     Prisma.sql`COALESCE(sc.is_used, true) = true`,
     Prisma.sql`COALESCE(sc.exclude_from_peer_comparison, false) = false`,
+    ...fleetFacetWheres({ orgId: params.orgId, buckets, deviceIds: params.deviceIds, q: params.q }),
   ]
-  if (orgFilter !== null) {
-    wheres.push(Prisma.sql`pa.organization_id = ${orgFilter}`)
-  }
-  if (params.bucket === 'healthy') {
-    wheres.push(Prisma.sql`sd.health_score IS NOT NULL AND sd.health_score >= ${HEALTH_HEALTHY}`)
-  } else if (params.bucket === 'critical') {
-    wheres.push(Prisma.sql`sd.health_score IS NOT NULL AND sd.health_score < ${HEALTH_WARNING}`)
-  } else if (params.bucket === 'abnormal') {
-    wheres.push(Prisma.sql`(
-      (sd.health_score IS NOT NULL AND sd.health_score >= ${HEALTH_WARNING} AND sd.health_score < ${HEALTH_HEALTHY})
-      OR sd.health_score IS NULL
-    )`)
-  }
   const where = Prisma.sql`WHERE ${Prisma.join(wheres, ' AND ')}`
 
-  // DISTINCT ON to dedupe rows when a plant belongs to multiple orgs (M2M via
-  // plant_assignments) and orgFilter is not set.
+  // Inner DISTINCT ON dedupes rows when a plant belongs to multiple orgs (M2M
+  // via plant_assignments) and orgFilter is not set; the outer SELECT re-sorts
+  // worst-first (lowest score first; no-data after scored criticals) — the
+  // triage default per the NOC v3 spec. DISTINCT ON requires its own ORDER BY
+  // to lead with the distinct keys, hence the two-layer query.
   const items = await prisma.$queryRaw<FleetRowSql[]>`
-    SELECT DISTINCT ON (sd.device_id, sd.string_number)
-      o.id           as org_id,
-      o.name         as org_name,
-      p.id           as plant_code,
-      p.plant_name   as plant_name,
-      sd.device_id,
-      d.device_name  as inverter_name,
-      sd.string_number,
-      sd.health_score
-    FROM string_daily sd
-    LEFT JOIN string_configs sc
-      ON sc.device_id = sd.device_id AND sc.string_number = sd.string_number
-    JOIN plants p ON p.id = sd.plant_id
-    JOIN devices d ON d.id = sd.device_id
-    LEFT JOIN plant_assignments pa ON pa.plant_id = p.id
-    LEFT JOIN organizations o ON o.id = pa.organization_id
-    ${where}
-    ORDER BY sd.device_id, sd.string_number, o.name, p.plant_name, d.device_name
+    SELECT * FROM (
+      SELECT DISTINCT ON (sd.device_id, sd.string_number)
+        o.id           as org_id,
+        o.name         as org_name,
+        p.id           as plant_code,
+        p.plant_name   as plant_name,
+        sd.device_id,
+        d.device_name  as inverter_name,
+        sd.string_number,
+        sd.health_score
+      FROM string_daily sd
+      LEFT JOIN string_configs sc
+        ON sc.device_id = sd.device_id AND sc.string_number = sd.string_number
+      JOIN plants p ON p.id = sd.plant_id
+      JOIN devices d ON d.id = sd.device_id
+      LEFT JOIN plant_assignments pa ON pa.plant_id = p.id
+      LEFT JOIN organizations o ON o.id = pa.organization_id
+      ${where}
+      ORDER BY sd.device_id, sd.string_number, o.name, p.plant_name, d.device_name
+    ) AS deduped
+    ORDER BY deduped.health_score ASC NULLS LAST, deduped.plant_name, deduped.inverter_name, deduped.string_number
     LIMIT ${FLEET_PAGE_SIZE}
     OFFSET ${offset}
   `
@@ -695,6 +732,7 @@ export async function loadFleetRows(params: LoadFleetRowsParams = {}): Promise<F
       LEFT JOIN string_configs sc
         ON sc.device_id = sd.device_id AND sc.string_number = sd.string_number
       JOIN plants p ON p.id = sd.plant_id
+      JOIN devices d ON d.id = sd.device_id
       LEFT JOIN plant_assignments pa ON pa.plant_id = p.id
       ${where}
     ) AS distinct_rows
@@ -740,6 +778,7 @@ export async function loadFleetRows(params: LoadFleetRowsParams = {}): Promise<F
 interface FleetConnectivityRow {
   device_id: string
   plant_code: string
+  plant_name: string | null
   inverter_name: string | null
   provider: string
   vendor_last_data_at: Date | null
@@ -761,6 +800,7 @@ export async function loadFleetConnectivity(orgId?: string): Promise<FleetConnec
     SELECT DISTINCT
       d.id              AS device_id,
       d.plant_id        AS plant_code,
+      p.plant_name      AS plant_name,
       d.device_name     AS inverter_name,
       d.provider        AS provider,
       d.vendor_last_data_at,
@@ -795,6 +835,7 @@ export async function loadFleetConnectivity(orgId?: string): Promise<FleetConnec
     return {
       deviceId: r.device_id,
       plantCode: r.plant_code,
+      plantName: r.plant_name ?? r.plant_code,
       inverterName: r.inverter_name ?? r.device_id,
       provider: r.provider,
       status: conn.status,
@@ -803,6 +844,139 @@ export async function loadFleetConnectivity(orgId?: string): Promise<FleetConnec
   })
 
   return { counts, devices }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// NOC v3 facet helpers + KPI / Needs-Attention rollups
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/** Device ids having ≥1 string in the selected health buckets (under org + q).
+ *  Used to recompute the CONNECTIVITY donut under the health facet. */
+export async function loadDeviceIdsForBuckets(params: {
+  orgId?: string
+  buckets: DonutBucket[]
+  q?: string
+}): Promise<string[]> {
+  if (params.buckets.length === 0) return []
+  const yesterday = getPktYesterdayDate()
+  const wheres: Prisma.Sql[] = [
+    Prisma.sql`sd.date = ${yesterday}`,
+    Prisma.sql`COALESCE(sc.is_used, true) = true`,
+    Prisma.sql`COALESCE(sc.exclude_from_peer_comparison, false) = false`,
+    ...fleetFacetWheres({ orgId: params.orgId, buckets: params.buckets, q: params.q }),
+  ]
+  const rows = await prisma.$queryRaw<Array<{ device_id: string }>>`
+    SELECT DISTINCT sd.device_id
+    FROM string_daily sd
+    LEFT JOIN string_configs sc
+      ON sc.device_id = sd.device_id AND sc.string_number = sd.string_number
+    JOIN plants p ON p.id = sd.plant_id
+    JOIN devices d ON d.id = sd.device_id
+    LEFT JOIN plant_assignments pa ON pa.plant_id = sd.plant_id
+    WHERE ${Prisma.join(wheres, ' AND ')}
+  `
+  return rows.map((r) => r.device_id)
+}
+
+export interface CritPerPlant {
+  plantCode: string
+  plantName: string
+  crit: number
+}
+
+/** Critical-string count per plant (org-scoped, unfaceted — feeds KPIs + Needs-Attention). */
+export async function loadCritStringsPerPlant(orgId?: string): Promise<CritPerPlant[]> {
+  const yesterday = getPktYesterdayDate()
+  const orgFilter = orgId ?? null
+  const rows = await prisma.$queryRaw<Array<{ plant_code: string; plant_name: string; crit: bigint }>>`
+    SELECT p.id AS plant_code, p.plant_name, COUNT(DISTINCT (sd.device_id, sd.string_number))::bigint AS crit
+    FROM string_daily sd
+    LEFT JOIN string_configs sc
+      ON sc.device_id = sd.device_id AND sc.string_number = sd.string_number
+    JOIN plants p ON p.id = sd.plant_id
+    LEFT JOIN plant_assignments pa ON pa.plant_id = sd.plant_id
+    WHERE sd.date = ${yesterday}
+      AND COALESCE(sc.is_used, true) = true
+      AND COALESCE(sc.exclude_from_peer_comparison, false) = false
+      AND sd.health_score IS NOT NULL AND sd.health_score < ${HEALTH_WARNING}
+      AND (${orgFilter}::text IS NULL OR pa.organization_id = ${orgFilter}::text)
+    GROUP BY p.id, p.plant_name
+  `
+  return rows.map((r) => ({ plantCode: r.plant_code, plantName: r.plant_name, crit: bigintToNumber(r.crit) }))
+}
+
+export interface FleetKpis {
+  offlineInverters: number
+  frozenInverters: number
+  criticalStrings: number
+  plantsWithIssues: number
+  livePct: number | null // null when no reporting (non-idle) devices
+}
+
+export interface AttentionPlant {
+  plantCode: string
+  plantName: string
+  critStrings: number
+  frozen: number
+  offline: number
+  /** Oldest effectiveFreshAt among this plant's frozen/offline devices (ISO) — "down since". */
+  worstSince: string | null
+  score: number
+}
+
+/** Pure: assemble the KPI strip from the (org-scoped, unfaceted) connectivity
+ *  rollup + critical-strings-per-plant. KPIs deliberately ignore donut facets —
+ *  they describe the fleet state, and each acts as a one-click quick filter. */
+export function buildFleetKpis(connectivity: FleetConnectivity, critPerPlant: CritPerPlant[]): FleetKpis {
+  const { live, frozen, offline } = connectivity.counts
+  const reporting = live + frozen + offline
+  const plantsWithConnIssues = new Set(
+    connectivity.devices.filter((d) => d.status === 'frozen' || d.status === 'offline').map((d) => d.plantCode),
+  )
+  const plantsWithCrit = new Set(critPerPlant.filter((p) => p.crit > 0).map((p) => p.plantCode))
+  const plantsWithIssues = new Set([...plantsWithConnIssues, ...plantsWithCrit]).size
+  return {
+    offlineInverters: offline,
+    frozenInverters: frozen,
+    criticalStrings: critPerPlant.reduce((a, p) => a + p.crit, 0),
+    plantsWithIssues,
+    livePct: reporting > 0 ? Math.round((live / reporting) * 1000) / 10 : null,
+  }
+}
+
+/** Pure: rank plants needing attention. score = crit×1 + frozen×2 + offline×3
+ *  (offline is the most actionable signal: nothing is being received at all). */
+export function buildAttention(
+  connectivity: FleetConnectivity,
+  critPerPlant: CritPerPlant[],
+  limit = 8,
+): AttentionPlant[] {
+  const byPlant = new Map<string, AttentionPlant>()
+  const ensure = (plantCode: string, plantName: string): AttentionPlant => {
+    let p = byPlant.get(plantCode)
+    if (!p) {
+      p = { plantCode, plantName, critStrings: 0, frozen: 0, offline: 0, worstSince: null, score: 0 }
+      byPlant.set(plantCode, p)
+    }
+    return p
+  }
+  for (const c of critPerPlant) {
+    if (c.crit > 0) ensure(c.plantCode, c.plantName).critStrings = c.crit
+  }
+  for (const d of connectivity.devices) {
+    if (d.status !== 'frozen' && d.status !== 'offline') continue
+    const p = ensure(d.plantCode, d.plantName)
+    if (d.status === 'frozen') p.frozen += 1
+    else p.offline += 1
+    if (d.effectiveFreshAt && (p.worstSince === null || d.effectiveFreshAt < p.worstSince)) {
+      p.worstSince = d.effectiveFreshAt
+    }
+  }
+  const ranked = [...byPlant.values()]
+    .map((p) => ({ ...p, score: p.critStrings + p.frozen * 2 + p.offline * 3 }))
+    .filter((p) => p.score > 0)
+    .sort((a, b) => b.score - a.score || (a.worstSince ?? 'z').localeCompare(b.worstSince ?? 'z'))
+  return ranked.slice(0, limit)
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

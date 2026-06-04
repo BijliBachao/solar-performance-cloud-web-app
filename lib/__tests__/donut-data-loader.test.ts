@@ -424,3 +424,58 @@ describe('loadOrgList', () => {
     expect(result[1].stringCount).toBe(50)
   })
 })
+
+// ─── NOC v3 pure assemblers ──────────────────────────────────────────
+// Dynamic import (matches this file's pattern): the prisma vi.mock factory
+// must initialize before the loader module is evaluated.
+
+const connFixture = {
+  counts: { live: 2, frozen: 1, offline: 1, idle: 1 },
+  devices: [
+    { deviceId: 'a', plantCode: 'P1', plantName: 'Alpha', inverterName: 'I1', provider: 'csi', status: 'frozen' as const, effectiveFreshAt: '2026-06-01T10:00:00.000Z' },
+    { deviceId: 'b', plantCode: 'P1', plantName: 'Alpha', inverterName: 'I2', provider: 'csi', status: 'live' as const, effectiveFreshAt: '2026-06-04T10:00:00.000Z' },
+    { deviceId: 'c', plantCode: 'P2', plantName: 'Beta', inverterName: 'I3', provider: 'solis', status: 'offline' as const, effectiveFreshAt: '2026-05-25T14:17:00.000Z' },
+    { deviceId: 'd', plantCode: 'P3', plantName: 'Gamma', inverterName: 'I4', provider: 'huawei', status: 'live' as const, effectiveFreshAt: '2026-06-04T10:00:00.000Z' },
+    { deviceId: 'e', plantCode: 'P4', plantName: 'Delta', inverterName: 'I5', provider: 'huawei', status: 'idle' as const, effectiveFreshAt: null },
+  ],
+}
+const critFixture = [
+  { plantCode: 'P1', plantName: 'Alpha', crit: 3 },
+  { plantCode: 'P5', plantName: 'Epsilon', crit: 1 },
+]
+
+describe('buildFleetKpis (pure)', () => {
+  it('tallies offline/frozen/critical and unions plants-with-issues', async () => {
+    const { buildFleetKpis } = await import('../donut-data-loader')
+    const k = buildFleetKpis(connFixture, critFixture)
+    expect(k.offlineInverters).toBe(1)
+    expect(k.frozenInverters).toBe(1)
+    expect(k.criticalStrings).toBe(4)
+    // P1 (frozen+crit), P2 (offline), P5 (crit) — union = 3
+    expect(k.plantsWithIssues).toBe(3)
+    // live 2 of reporting 4 (idle excluded) = 50%
+    expect(k.livePct).toBe(50)
+  })
+  it('livePct is null when nothing is reporting', async () => {
+    const { buildFleetKpis } = await import('../donut-data-loader')
+    const k = buildFleetKpis({ counts: { live: 0, frozen: 0, offline: 0, idle: 5 }, devices: [] }, [])
+    expect(k.livePct).toBeNull()
+    expect(k.plantsWithIssues).toBe(0)
+  })
+})
+
+describe('buildAttention (pure)', () => {
+  it('ranks by crit + frozen*2 + offline*3 and carries worstSince', async () => {
+    const { buildAttention } = await import('../donut-data-loader')
+    const a = buildAttention(connFixture, critFixture)
+    // P1: crit 3 + frozen 2 = 5; P2: offline 3; P5: crit 1
+    expect(a.map((p) => p.plantCode)).toEqual(['P1', 'P2', 'P5'])
+    expect(a[0]).toMatchObject({ plantName: 'Alpha', critStrings: 3, frozen: 1, offline: 0, score: 5 })
+    expect(a[0].worstSince).toBe('2026-06-01T10:00:00.000Z')
+    expect(a[1].worstSince).toBe('2026-05-25T14:17:00.000Z')
+  })
+  it('returns empty when the fleet is clean', async () => {
+    const { buildAttention } = await import('../donut-data-loader')
+    expect(buildAttention({ counts: { live: 1, frozen: 0, offline: 0, idle: 0 }, devices: [] }, [])).toEqual([])
+  })
+})
