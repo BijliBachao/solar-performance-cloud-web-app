@@ -172,20 +172,20 @@ export async function GET(request: NextRequest) {
     })
     const providers = allForCounts.map(g => ({ provider: g.provider, count: g._count }))
 
-    // Stats from current filtered dataset. Status counts come from the
-    // UNIFIED op_status — the header and the table rows below it now agree
-    // by construction (they read the same field).
-    const countOp = (s: PlantOpStatus) => formatted.filter(p => p.op_status === s).length
+    // Stats counted from the SAME set the table renders (`filtered`, incl.
+    // the ASSIGNED/UNASSIGNED filter) and from the UNIFIED op_status field —
+    // the header and the rows below it agree by construction.
+    const countOp = (s: PlantOpStatus) => filtered.filter(p => p.op_status === s).length
     const stats = {
-      total: formatted.length,
-      assigned: formatted.filter(p => p.assigned_org !== null).length,
-      unassigned: formatted.filter(p => p.assigned_org === null).length,
+      total: filtered.length,
+      assigned: filtered.filter(p => p.assigned_org !== null).length,
+      unassigned: filtered.filter(p => p.assigned_org === null).length,
       live: countOp('live'),
       idle: countOp('idle'),
       frozen: countOp('frozen'),
       offline: countOp('offline'),
       faulty: countOp('faulty'),
-      plants_with_alerts: formatted.filter(p => p.alerts_unresolved.total > 0).length,
+      plants_with_alerts: filtered.filter(p => p.alerts_unresolved.total > 0).length,
     }
 
     return NextResponse.json({ plants: filtered, stats, providers })

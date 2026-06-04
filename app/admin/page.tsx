@@ -20,7 +20,7 @@ interface DashboardData {
     plants: { total: number; assigned: number; unassigned: number }
     activeAlerts: { CRITICAL: number; WARNING: number; INFO: number }
   }
-  plantHealth: { healthy: number; faulty: number; disconnected: number }
+  plantHealth: { live: number; idle: number; frozen: number; offline: number; faulty: number }
   plantsByOrganization: Array<{ organization: string; plantCount: number }>
   recentActivity: Array<{ type: string; message: string; timestamp: string; status: string }>
   recentAlerts: Array<{
@@ -242,19 +242,22 @@ export default function AdminDashboardPage() {
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">Plant Health</h3>
                 <Activity className="w-3.5 h-3.5 text-slate-400" strokeWidth={2} />
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className={`text-center p-3 rounded-sm ${STATUS_STYLES.healthy.bg}`}>
-                  <div className={`text-2xl font-mono font-bold ${STATUS_STYLES.healthy.fg}`}>{data.plantHealth.healthy}</div>
-                  <div className={`text-[11px] font-bold mt-1 uppercase tracking-wider ${STATUS_STYLES.healthy.fg}`}>Healthy</div>
-                </div>
-                <div className={`text-center p-3 rounded-sm ${STATUS_STYLES.critical.bg}`}>
-                  <div className={`text-2xl font-mono font-bold ${STATUS_STYLES.critical.fg}`}>{data.plantHealth.faulty}</div>
-                  <div className={`text-[11px] font-bold mt-1 uppercase tracking-wider ${STATUS_STYLES.critical.fg}`}>Faulty</div>
-                </div>
-                <div className={`text-center p-3 rounded-sm ${STATUS_STYLES.offline.bg}`}>
-                  <div className={`text-2xl font-mono font-bold ${STATUS_STYLES.offline.fg}`}>{data.plantHealth.disconnected}</div>
-                  <div className={`text-[11px] font-bold mt-1 uppercase tracking-wider ${STATUS_STYLES.offline.fg}`}>Offline</div>
-                </div>
+              {/* Status Unification: same op_status engine + vocabulary as
+                  /admin/plants and the NOC — these three screens agree by
+                  construction. Zero-count tiles are hidden to keep focus. */}
+              <div className="flex flex-wrap gap-3">
+                {([
+                  { n: data.plantHealth.live,    label: 'Live',        style: STATUS_STYLES.healthy },
+                  { n: data.plantHealth.idle,    label: 'Idle · night', style: STATUS_STYLES.idle },
+                  { n: data.plantHealth.frozen,  label: 'Frozen feed', style: STATUS_STYLES.frozen },
+                  { n: data.plantHealth.offline, label: 'Offline',     style: STATUS_STYLES.offline },
+                  { n: data.plantHealth.faulty,  label: 'Faulty',      style: STATUS_STYLES.critical },
+                ] as const).filter((t) => t.n > 0).map((t) => (
+                  <div key={t.label} className={`flex-1 min-w-[90px] text-center p-3 rounded-sm ${t.style.bg}`}>
+                    <div className={`text-2xl font-mono font-bold ${t.style.fg}`}>{t.n}</div>
+                    <div className={`text-[11px] font-bold mt-1 uppercase tracking-wider ${t.style.fg}`}>{t.label}</div>
+                  </div>
+                ))}
               </div>
               {data.stats.totalDevices > 0 && (
                 <div className="mt-3 text-[11px] font-semibold text-slate-400 text-center">

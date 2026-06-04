@@ -433,7 +433,7 @@ export function InverterDetailSection({
                 ) : liveStatus === 'IDLE' ? (
                   <span className="flex items-center gap-1 text-[10px] font-bold text-slate-500 shrink-0">
                     <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                    STANDBY
+                    IDLE
                   </span>
                 ) : (
                   <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 shrink-0">

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getUserFromRequest, requireRole, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
-import { PLANT_HEALTH_HEALTHY, PLANT_HEALTH_FAULTY } from '@/lib/string-health'
+import { loadPlantOpStatuses } from '@/lib/donut-data-loader'
 
 export async function GET() {
   try {
@@ -35,7 +35,9 @@ export async function GET() {
       prisma.alerts.count({ where: { severity: 'CRITICAL', resolved_at: null } }),
       prisma.alerts.count({ where: { severity: 'WARNING', resolved_at: null } }),
       prisma.alerts.count({ where: { severity: 'INFO', resolved_at: null } }),
-      prisma.plants.groupBy({ by: ['health_state'], _count: { id: true } }),
+      // Status Unification: plant status from the connectivity engine (same
+      // op_status as /admin/plants + the NOC) — NOT vendor health_state.
+      loadPlantOpStatuses(),
       prisma.alerts.findMany({
         where: { resolved_at: null },
         orderBy: { created_at: 'desc' },
@@ -72,12 +74,10 @@ export async function GET() {
       plantCount: p._count.id,
     }))
 
-    const healthMap = { healthy: 0, faulty: 0, disconnected: 0 }
-    for (const h of plantHealth) {
-      if (h.health_state === PLANT_HEALTH_HEALTHY) healthMap.healthy = h._count.id
-      else if (h.health_state === PLANT_HEALTH_FAULTY) healthMap.faulty = h._count.id
-      else healthMap.disconnected += h._count.id
-    }
+    // Unified op_status counts — /admin home, /admin/plants header, and the
+    // NOC now agree by construction (one engine, one taxonomy).
+    const healthMap = { live: 0, idle: 0, frozen: 0, offline: 0, faulty: 0 }
+    for (const s of plantHealth.values()) healthMap[s] += 1
 
     const recentActivity = recentUsers.map(u => ({
       type: u.status === 'PENDING_ASSIGNMENT' ? 'user_pending' : 'user_active',
