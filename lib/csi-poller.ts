@@ -2,9 +2,8 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { CsiClient, CsiDevice, CsiDeviceData, parseRealData } from '@/lib/csi-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate } from '@/lib/poller-utils'
-import { classifyDeviceWrite, FLEET_DEFAULT_LAT, FLEET_DEFAULT_LNG } from '@/lib/string-health'
-import { isDaylight } from '@/lib/solar-geometry'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, resolveAlertsForUntrustedFeed } from '@/lib/poller-utils'
+import { classifyDeviceWrite } from '@/lib/string-health'
 import {
   PLANT_HEALTH_HEALTHY,
   PLANT_HEALTH_FAULTY,
@@ -344,6 +343,7 @@ async function processCsiDevice(
     // not recordDeviceFreshness — no fresh strings; an empty-signature would
     // wrongly reset reading_changed_at.
     await recordDeviceSeen(device.id, vendorTs)
+    await resolveAlertsForUntrustedFeed(device.id)
     return
   }
   if (staleFeedLogged.delete(device.id)) {
@@ -391,15 +391,15 @@ async function processCsiDevice(
   // The lastReportTime gate above catches an honest stuck clock; this one
   // catches a lying one — lastReportTime advancing while every value stays
   // frozen (replay), or night snapshots claiming production.
-  const sunUp = isDaylight(
-    device.plants?.latitude != null ? Number(device.plants.latitude) : FLEET_DEFAULT_LAT,
-    device.plants?.longitude != null ? Number(device.plants.longitude) : FLEET_DEFAULT_LNG,
-    new Date(),
-  )
+  const sunUp = sunUpForWriteGate(device.plants)
   const gate = classifyDeviceWrite(strings, device.last_reading_sig, sunUp)
   logWriteGate('CSI', device.id, gate)
   if (gate !== 'write') {
-    await recordDeviceSeen(device.id, vendorTs)
+    // last_seen_at ONLY — advancing a lying vendor ts here would classify
+    // the device "live" and hide the freeze. Untrusted data → open alerts
+    // resolved (re-open on recovery).
+    await recordDeviceSeen(device.id, null)
+    await resolveAlertsForUntrustedFeed(device.id)
     return
   }
 

@@ -2,9 +2,8 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { SolisClient } from '@/lib/solis-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate } from '@/lib/poller-utils'
-import { classifyDeviceWrite, FLEET_DEFAULT_LAT, FLEET_DEFAULT_LNG } from '@/lib/string-health'
-import { isDaylight } from '@/lib/solar-geometry'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, resolveAlertsForUntrustedFeed } from '@/lib/poller-utils'
+import { classifyDeviceWrite } from '@/lib/string-health'
 import { classifyVendorFeed } from '@/lib/string-health'
 
 let lastPlantSync = 0
@@ -252,8 +251,10 @@ async function processSolisDevice(
     }
     // Record the (stuck) vendor time + last_seen_at so the connectivity UI
     // shows "frozen since HH:MM" (frozen ≠ offline) — restart-safe. No fresh
-    // strings here, so the reading signature is deliberately untouched.
+    // strings here, so the reading signature is deliberately untouched. The
+    // stuck ts is safe to store: it doesn't advance, so it can't fake "live".
     await recordDeviceSeen(device.id, vendorTs)
+    await resolveAlertsForUntrustedFeed(device.id)
     return
   }
   if (staleFeedLogged.delete(device.id)) {
@@ -317,15 +318,15 @@ async function processSolisDevice(
     // catches a LYING clock — dataTimestamp advancing while every value stays
     // frozen (replay), or night snapshots claiming production. 40k phantom
     // night rows in the week before this gate.
-    const sunUp = isDaylight(
-      device.plants?.latitude != null ? Number(device.plants.latitude) : FLEET_DEFAULT_LAT,
-      device.plants?.longitude != null ? Number(device.plants.longitude) : FLEET_DEFAULT_LNG,
-      new Date(),
-    )
+    const sunUp = sunUpForWriteGate(device.plants)
     const gate = classifyDeviceWrite(gateStrings, device.last_reading_sig, sunUp)
     logWriteGate('Solis', device.id, gate)
     if (gate !== 'write') {
-      await recordDeviceSeen(device.id, vendorTs)
+      // last_seen_at ONLY — advancing a lying vendor ts here would classify
+      // the device "live" and hide the freeze. Untrusted data → open alerts
+      // resolved (re-open on recovery).
+      await recordDeviceSeen(device.id, null)
+      await resolveAlertsForUntrustedFeed(device.id)
       return
     }
 

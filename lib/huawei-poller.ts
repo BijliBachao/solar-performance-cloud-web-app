@@ -2,9 +2,8 @@ import { prisma } from '@/lib/prisma'
 import { huaweiClient } from '@/lib/huawei-client'
 import { Decimal } from '@prisma/client/runtime/library'
 import { PROVIDERS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches, safeArray, safeObject, safeFloat, recordDeviceFreshness, recordDeviceSeen, logWriteGate } from '@/lib/poller-utils'
-import { classifyDeviceWrite, FLEET_DEFAULT_LAT, FLEET_DEFAULT_LNG } from '@/lib/string-health'
-import { isDaylight } from '@/lib/solar-geometry'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches, safeArray, safeObject, safeFloat, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, resolveAlertsForUntrustedFeed } from '@/lib/poller-utils'
+import { classifyDeviceWrite } from '@/lib/string-health'
 import { ACTIVE_CURRENT_THRESHOLD } from '@/lib/string-health'
 import { getHuaweiMaxStrings } from '@/lib/huawei-model-strings'
 
@@ -346,15 +345,12 @@ async function processHuaweiDeviceData(
     // Huawei's realtime endpoint has no data-timestamp and replays cached
     // snapshots when a logger goes quiet (74k phantom night rows in the week
     // before this gate). Signature dedup + night gate keep them out.
-    const sunUp = isDaylight(
-      device.plants?.latitude != null ? Number(device.plants.latitude) : FLEET_DEFAULT_LAT,
-      device.plants?.longitude != null ? Number(device.plants.longitude) : FLEET_DEFAULT_LNG,
-      new Date(),
-    )
+    const sunUp = sunUpForWriteGate(device.plants)
     const gate = classifyDeviceWrite(gateStrings, device.last_reading_sig, sunUp)
     logWriteGate('Huawei', device.id, gate)
     if (gate !== 'write') {
       await recordDeviceSeen(device.id, null)
+      await resolveAlertsForUntrustedFeed(device.id)
       return
     }
 

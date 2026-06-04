@@ -6,8 +6,10 @@ import {
   MIN_PEERS_FOR_COMPARISON, MIN_AVG_FOR_COMPARISON,
   MAX_STRING_CURRENT_A, MAX_STRING_POWER_W, MS_PER_HOUR,
   MIN_PRODUCTIVE_HOURS_FOR_DAILY_SCORE, MIN_PRODUCTIVE_POWER_W,
+  FLEET_DEFAULT_LAT, FLEET_DEFAULT_LNG,
   type DeviceWriteAction,
 } from '@/lib/string-health'
+import { isDaylight } from '@/lib/solar-geometry'
 import { scoreDailyP2P, type DailyStringInput } from '@/lib/string-health-daily'
 
 /**
@@ -61,6 +63,51 @@ export async function recordDeviceSeen(
     data.vendor_last_data_at = vendorLastDataAt
   }
   await prisma.devices.update({ where: { id: deviceId }, data })
+}
+
+// Pakistan bounding box (generous). The ENTIRE fleet is Pakistani; coordinates
+// outside this box are vendor-default garbage (e.g., Beijing 39.9/116.4, seen
+// live — see memory project_bad_plant_coords). Beijing's sun sets ~3h before
+// Pakistan's, so trusting such coords in the night write-gate would discard
+// 2-3h of REAL evening production every day. Out-of-box → fleet centroid.
+const PK_LAT_MIN = 23, PK_LAT_MAX = 37.5
+const PK_LNG_MIN = 60, PK_LNG_MAX = 78
+
+/**
+ * Sun position for the WRITE GATE: plant coords are used only when they are
+ * plausibly Pakistani; null or out-of-country coords fall back to the fleet
+ * centroid. The threshold assumes the coords are the plant's PHYSICAL
+ * location — never pass vendor defaults through unclamped.
+ */
+export function sunUpForWriteGate(
+  plants: { latitude: unknown; longitude: unknown } | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  let lat = plants?.latitude != null ? Number(plants.latitude) : NaN
+  let lng = plants?.longitude != null ? Number(plants.longitude) : NaN
+  const plausible =
+    lat >= PK_LAT_MIN && lat <= PK_LAT_MAX && lng >= PK_LNG_MIN && lng <= PK_LNG_MAX
+  if (!plausible) {
+    lat = FLEET_DEFAULT_LAT
+    lng = FLEET_DEFAULT_LNG
+  }
+  return isDaylight(lat, lng, now)
+}
+
+/**
+ * When the write gate (or a vendor-ts stale gate) rejects a device's feed, the
+ * data behind its open string-health alerts is no longer trusted — resolve
+ * them so operators don't stare at phantom CRITICALs for the duration of a
+ * freeze. Alerts re-open naturally from fresh data once the feed recovers
+ * (generateAlerts runs again on the first trusted snapshot). Also acts as the
+ * deploy-time cleanup: devices already frozen resolve their phantom alerts on
+ * their first gated cycle.
+ */
+export async function resolveAlertsForUntrustedFeed(deviceId: string): Promise<void> {
+  await prisma.alerts.updateMany({
+    where: { device_id: deviceId, resolved_at: null },
+    data: { resolved_at: new Date() },
+  })
 }
 
 // One log line per device per stall (and one on recovery) — same pattern as the

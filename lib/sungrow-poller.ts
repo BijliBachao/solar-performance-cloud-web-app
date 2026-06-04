@@ -2,9 +2,8 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { SungrowClient } from '@/lib/sungrow-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, safeObject, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate } from '@/lib/poller-utils'
-import { classifyDeviceWrite, FLEET_DEFAULT_LAT, FLEET_DEFAULT_LNG } from '@/lib/string-health'
-import { isDaylight } from '@/lib/solar-geometry'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, safeObject, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, resolveAlertsForUntrustedFeed } from '@/lib/poller-utils'
+import { classifyDeviceWrite } from '@/lib/string-health'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
@@ -324,18 +323,16 @@ async function processSungrowDevice(
     // datalogger goes quiet (confirmed live: identical-to-0.01W values every
     // 5 min for days). No vendor data-timestamp exists to gate on, so the gate
     // runs on the reading signature + the sun position at the plant.
-    const sunUp = isDaylight(
-      device.plants?.latitude != null ? Number(device.plants.latitude) : FLEET_DEFAULT_LAT,
-      device.plants?.longitude != null ? Number(device.plants.longitude) : FLEET_DEFAULT_LNG,
-      new Date(),
-    )
+    const sunUp = sunUpForWriteGate(device.plants)
     const gate = classifyDeviceWrite(gateStrings, device.last_reading_sig, sunUp)
     logWriteGate('Sungrow', device.id, gate)
     if (gate !== 'write') {
       // Still "saw" the device this cycle (frozen ≠ offline) — but the
       // untrusted snapshot must not advance the reading signature, create
-      // alerts, feed aggregates, or refresh the native daily counter.
+      // alerts, feed aggregates, or refresh the native daily counter. Open
+      // alerts rest on data we no longer trust → resolve (re-open on recovery).
       await recordDeviceSeen(device.id, null)
+      await resolveAlertsForUntrustedFeed(device.id)
       return
     }
 

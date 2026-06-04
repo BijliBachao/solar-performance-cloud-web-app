@@ -2,9 +2,8 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { GrowattClient } from '@/lib/growatt-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate } from '@/lib/poller-utils'
-import { classifyDeviceWrite, FLEET_DEFAULT_LAT, FLEET_DEFAULT_LNG } from '@/lib/string-health'
-import { isDaylight } from '@/lib/solar-geometry'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, resolveAlertsForUntrustedFeed } from '@/lib/poller-utils'
+import { classifyDeviceWrite } from '@/lib/string-health'
 import {
   PLANT_HEALTH_HEALTHY,
   PLANT_HEALTH_FAULTY,
@@ -408,18 +407,18 @@ async function processDeviceData(
     // Growatt replays cached snapshots when a logger goes quiet (29k phantom
     // night rows in the week before this gate; one logger clock also runs ~2h
     // fast). Signature dedup + night gate keep replays out of the data.
-    const sunUp = isDaylight(
-      device.plants?.latitude != null ? Number(device.plants.latitude) : FLEET_DEFAULT_LAT,
-      device.plants?.longitude != null ? Number(device.plants.longitude) : FLEET_DEFAULT_LNG,
-      new Date(),
-    )
+    const sunUp = sunUpForWriteGate(device.plants)
     const gate = classifyDeviceWrite(gateStrings, device.last_reading_sig, sunUp)
     logWriteGate('Growatt', device.id, gate)
     if (gate !== 'write') {
-      // Seen, not trusted: stamp last_seen_at (+ stuck vendor ts for the
-      // "frozen since" display); skip measurements/alerts/aggregates/fault
-      // codes/native counter — all would be echoes of the replayed snapshot.
-      await recordDeviceSeen(device.id, vendorTs)
+      // Seen, not trusted: stamp last_seen_at ONLY. Deliberately NOT the
+      // vendor ts — a lying clock (ts advancing while values replay) would
+      // otherwise classify the device "live" and hide the freeze. Skip
+      // measurements/alerts/aggregates/fault codes/native counter — all
+      // would be echoes of the replayed snapshot. Open alerts rest on data
+      // we no longer trust → resolve (re-open on recovery).
+      await recordDeviceSeen(device.id, null)
+      await resolveAlertsForUntrustedFeed(device.id)
       return
     }
 

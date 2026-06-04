@@ -53,9 +53,52 @@ const mockPrisma = {
   string_measurements: { findMany: vi.fn() },
   string_daily: { upsert: vi.fn((args: any) => args) },
   devices: { update: vi.fn(), findUnique: vi.fn() },
+  alerts: { updateMany: vi.fn() },
   $transaction: vi.fn(async (x: any) => x),
 }
 vi.mock('@/lib/prisma', () => ({ prisma: mockPrisma }))
+
+// ─── sunUpForWriteGate — Pakistan bounding-box clamp ─────────────────
+// Review finding (Critical): plants carrying vendor-default Beijing coords
+// (39.9/116.4) hit "Beijing sunset" ~3h before Pakistan's — trusting those
+// coords would discard 2-3h of REAL evening production every day.
+
+const PKT_DUSK = new Date('2026-06-05T12:30:00Z')      // 17:30 PKT — Pak sun well up, Beijing sun down
+const PKT_MIDNIGHT = new Date('2026-06-05T19:05:00Z')  // 00:05 PKT (Jun 6)
+const PKT_NOON = new Date('2026-06-05T07:00:00Z')      // 12:00 PKT
+
+describe('sunUpForWriteGate', () => {
+  it('Beijing vendor-default coords are clamped to fleet centroid → still daytime at PKT dusk', async () => {
+    const { sunUpForWriteGate } = await import('../poller-utils')
+    expect(sunUpForWriteGate({ latitude: 39.9, longitude: 116.4 }, PKT_DUSK)).toBe(true)
+  })
+  it('null coords → fleet centroid (day at noon, night at midnight)', async () => {
+    const { sunUpForWriteGate } = await import('../poller-utils')
+    expect(sunUpForWriteGate(null, PKT_NOON)).toBe(true)
+    expect(sunUpForWriteGate({ latitude: null, longitude: null }, PKT_MIDNIGHT)).toBe(false)
+  })
+  it('plausible Pakistani coords are used as-is', async () => {
+    const { sunUpForWriteGate } = await import('../poller-utils')
+    expect(sunUpForWriteGate({ latitude: 24.86, longitude: 67.0 }, PKT_NOON)).toBe(true)   // Karachi noon
+    expect(sunUpForWriteGate({ latitude: 24.86, longitude: 67.0 }, PKT_MIDNIGHT)).toBe(false)
+  })
+})
+
+// ─── resolveAlertsForUntrustedFeed ───────────────────────────────────
+// Review finding (Important): alerts opened from phantom data would otherwise
+// stay open for the whole freeze (generateAlerts never runs on gated cycles).
+
+describe('resolveAlertsForUntrustedFeed', () => {
+  it('resolves all open alerts for the device', async () => {
+    mockPrisma.alerts.updateMany.mockClear()
+    const { resolveAlertsForUntrustedFeed } = await import('../poller-utils')
+    await resolveAlertsForUntrustedFeed('dev-frozen')
+    expect(mockPrisma.alerts.updateMany).toHaveBeenCalledTimes(1)
+    const arg = mockPrisma.alerts.updateMany.mock.calls[0][0]
+    expect(arg.where).toEqual({ device_id: 'dev-frozen', resolved_at: null })
+    expect(arg.data.resolved_at).toBeInstanceOf(Date)
+  })
+})
 
 const NOON_PKT_UTC = new Date('2026-06-05T07:00:00Z') // 12:00 PKT
 
