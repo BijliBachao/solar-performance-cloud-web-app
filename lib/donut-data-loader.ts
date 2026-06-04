@@ -120,6 +120,21 @@ export function getPktYesterdayDate(now: Date = new Date()): Date {
 }
 
 /**
+ * Returns UTC midnight of the CURRENT PKT date. NOC "Today · live" mode reads
+ * string_daily at this date — the poller recomputes today's rows every cycle
+ * (~5 min), so these scores update intraday and settle by end of day.
+ */
+export function getPktTodayDate(now: Date = new Date()): Date {
+  const nowPKT = new Date(now.getTime() + PKT_OFFSET_MS)
+  return new Date(Date.UTC(
+    nowPKT.getUTCFullYear(),
+    nowPKT.getUTCMonth(),
+    nowPKT.getUTCDate(),
+    0, 0, 0, 0,
+  ))
+}
+
+/**
  * Returns the UTC timestamp for "start of N PKT hours ago, aligned to PKT
  * hour boundary". Used for string_hourly window queries.
  */
@@ -459,10 +474,14 @@ export interface FleetCountsFacets {
   /** Restrict to these devices (the connectivity facet's matching devices).
    *  Pass an EMPTY array to match nothing; undefined = no device filter. */
   deviceIds?: string[]
+  /** PKT date (UTC midnight) of the string_daily rows to read. Defaults to
+   *  yesterday (settled). Pass getPktTodayDate() for the live intraday view. */
+  date?: Date
 }
 
 export async function loadFleetCounts(orgId?: string, facets: FleetCountsFacets = {}): Promise<FleetCountsResult> {
-  const yesterday = getPktYesterdayDate()
+  const date = facets.date ?? getPktYesterdayDate()
+  const isToday = date.getTime() === getPktTodayDate().getTime()
 
   // Plants↔orgs is a many-to-many via plant_assignments (no organization_id on
   // plants directly). DISTINCT on (device_id, string_number) so a plant
@@ -494,7 +513,7 @@ export async function loadFleetCounts(orgId?: string, facets: FleetCountsFacets 
       -- having assigned the plant to an org. The rows query (loadFleetRows)
       -- uses the same LEFT JOIN so counts and rows stay reconciled.
       LEFT JOIN plant_assignments pa ON pa.plant_id = sd.plant_id
-      WHERE sd.date = ${yesterday}
+      WHERE sd.date = ${date}
         AND (${orgFilter}::text IS NULL OR pa.organization_id = ${orgFilter}::text)
         AND (${useDeviceFilter}::bool = false OR sd.device_id = ANY(${deviceIdsArr}))
         AND (${qLike}::text IS NULL OR p.plant_name ILIKE ${qLike} OR p.id ILIKE ${qLike} OR d.device_name ILIKE ${qLike})
@@ -565,16 +584,22 @@ export async function loadFleetCounts(orgId?: string, facets: FleetCountsFacets 
 
   const warnings: Warning[] = []
   if (totalStrings === 0) {
-    warnings.push({
-      code: 'NO_DATA_YESTERDAY',
-      message: orgId
-        ? 'No string data for this organization on the previous day.'
-        : 'No string data across the fleet on the previous day.',
-    })
+    warnings.push(isToday
+      ? {
+          code: 'NO_DATA_TODAY',
+          message: 'No string scores yet for today (PKT). Scores appear once plants start producing after sunrise.',
+        }
+      : {
+          code: 'NO_DATA_YESTERDAY',
+          message: orgId
+            ? 'No string data for this organization on the previous day.'
+            : 'No string data across the fleet on the previous day.',
+        })
   }
 
-  const startsAt = yesterday
-  const endsAt = new Date(yesterday.getTime() + 24 * 60 * 60 * 1000)
+  const startsAt = date
+  // Today's window is still open — it ends "now", not at PKT midnight.
+  const endsAt = isToday ? new Date() : new Date(date.getTime() + 24 * 60 * 60 * 1000)
 
   return {
     totalStrings,
@@ -591,7 +616,9 @@ export async function loadFleetCounts(orgId?: string, facets: FleetCountsFacets 
     },
     excluded: { unused: excludedUnused, nonStandard: excludedNonStandard },
     timeBasis: {
-      label: `Yesterday · ${formatPktDateLabel(yesterday)}`,
+      label: isToday
+        ? `Today · ${formatPktDateLabel(date)} · live`
+        : `Yesterday · ${formatPktDateLabel(date)}`,
       startsAt,
       endsAt,
     },
@@ -633,6 +660,9 @@ export interface LoadFleetRowsParams {
   /** Case-insensitive match on plant name / plant code / inverter name. */
   q?: string
   page?: number
+  /** PKT date (UTC midnight) of the string_daily rows to read. Defaults to
+   *  yesterday (settled). Pass getPktTodayDate() for the live intraday view. */
+  date?: Date
 }
 
 /** One health bucket → its score predicate (shared by rows + facet helpers). */
@@ -679,7 +709,7 @@ function fleetFacetWheres(params: {
 }
 
 export async function loadFleetRows(params: LoadFleetRowsParams = {}): Promise<FleetRowsPage> {
-  const yesterday = getPktYesterdayDate()
+  const date = params.date ?? getPktYesterdayDate()
   const page = Math.max(1, params.page ?? 1)
   const offset = (page - 1) * FLEET_PAGE_SIZE
 
@@ -689,7 +719,7 @@ export async function loadFleetRows(params: LoadFleetRowsParams = {}): Promise<F
   // Build the WHERE clause via Prisma.sql composition for safe parameterization.
   // Note: org filtering goes through plant_assignments (M2M); see schema.prisma.
   const wheres: Prisma.Sql[] = [
-    Prisma.sql`sd.date = ${yesterday}`,
+    Prisma.sql`sd.date = ${date}`,
     Prisma.sql`COALESCE(sc.is_used, true) = true`,
     Prisma.sql`COALESCE(sc.exclude_from_peer_comparison, false) = false`,
     ...fleetFacetWheres({ orgId: params.orgId, buckets, deviceIds: params.deviceIds, q: params.q }),
@@ -867,11 +897,13 @@ export async function loadDeviceIdsForBuckets(params: {
   orgId?: string
   buckets: DonutBucket[]
   q?: string
+  /** PKT date (UTC midnight) of string_daily to read; defaults to yesterday. */
+  date?: Date
 }): Promise<string[]> {
   if (params.buckets.length === 0) return []
-  const yesterday = getPktYesterdayDate()
+  const date = params.date ?? getPktYesterdayDate()
   const wheres: Prisma.Sql[] = [
-    Prisma.sql`sd.date = ${yesterday}`,
+    Prisma.sql`sd.date = ${date}`,
     Prisma.sql`COALESCE(sc.is_used, true) = true`,
     Prisma.sql`COALESCE(sc.exclude_from_peer_comparison, false) = false`,
     ...fleetFacetWheres({ orgId: params.orgId, buckets: params.buckets, q: params.q }),
@@ -896,8 +928,8 @@ export interface CritPerPlant {
 }
 
 /** Critical-string count per plant (org-scoped, unfaceted — feeds KPIs + Needs-Attention). */
-export async function loadCritStringsPerPlant(orgId?: string): Promise<CritPerPlant[]> {
-  const yesterday = getPktYesterdayDate()
+export async function loadCritStringsPerPlant(orgId?: string, date?: Date): Promise<CritPerPlant[]> {
+  const scoreDate = date ?? getPktYesterdayDate()
   const orgFilter = orgId ?? null
   const rows = await prisma.$queryRaw<Array<{ plant_code: string; plant_name: string; crit: bigint }>>`
     SELECT p.id AS plant_code, p.plant_name, COUNT(DISTINCT (sd.device_id, sd.string_number))::bigint AS crit
@@ -906,7 +938,7 @@ export async function loadCritStringsPerPlant(orgId?: string): Promise<CritPerPl
       ON sc.device_id = sd.device_id AND sc.string_number = sd.string_number
     JOIN plants p ON p.id = sd.plant_id
     LEFT JOIN plant_assignments pa ON pa.plant_id = sd.plant_id
-    WHERE sd.date = ${yesterday}
+    WHERE sd.date = ${scoreDate}
       AND COALESCE(sc.is_used, true) = true
       AND COALESCE(sc.exclude_from_peer_comparison, false) = false
       AND sd.health_score IS NOT NULL AND sd.health_score < ${HEALTH_WARNING}
@@ -917,11 +949,14 @@ export async function loadCritStringsPerPlant(orgId?: string): Promise<CritPerPl
 }
 
 export interface FleetKpis {
-  offlineInverters: number
-  frozenInverters: number
+  /** null in Yesterday·settled mode — connectivity is a live-only signal and
+   *  has no historical snapshot; mixing it under a "Yesterday" header would
+   *  put two time bases on one screen. */
+  offlineInverters: number | null
+  frozenInverters: number | null
   criticalStrings: number
   plantsWithIssues: number
-  livePct: number | null // null when no reporting (non-idle) devices
+  livePct: number | null // null when no reporting (non-idle) devices or Yesterday mode
 }
 
 export interface AttentionPlant {
@@ -937,28 +972,44 @@ export interface AttentionPlant {
 
 /** Pure: assemble the KPI strip from the (org-scoped, unfaceted) connectivity
  *  rollup + critical-strings-per-plant. KPIs deliberately ignore donut facets —
- *  they describe the fleet state, and each acts as a one-click quick filter. */
-export function buildFleetKpis(connectivity: FleetConnectivity, critPerPlant: CritPerPlant[]): FleetKpis {
+ *  they describe the fleet state, and each acts as a one-click quick filter.
+ *
+ *  connectivity = null → Yesterday·settled mode: the strip is health-only
+ *  (plantsWithIssues = plants with critical strings, no conn union) so the
+ *  whole page stays on ONE time basis. */
+export function buildFleetKpis(connectivity: FleetConnectivity | null, critPerPlant: CritPerPlant[]): FleetKpis {
+  const criticalStrings = critPerPlant.reduce((a, p) => a + p.crit, 0)
+  const plantsWithCrit = new Set(critPerPlant.filter((p) => p.crit > 0).map((p) => p.plantCode))
+  if (connectivity === null) {
+    return {
+      offlineInverters: null,
+      frozenInverters: null,
+      criticalStrings,
+      plantsWithIssues: plantsWithCrit.size,
+      livePct: null,
+    }
+  }
   const { live, frozen, offline } = connectivity.counts
   const reporting = live + frozen + offline
   const plantsWithConnIssues = new Set(
     connectivity.devices.filter((d) => d.status === 'frozen' || d.status === 'offline').map((d) => d.plantCode),
   )
-  const plantsWithCrit = new Set(critPerPlant.filter((p) => p.crit > 0).map((p) => p.plantCode))
   const plantsWithIssues = new Set([...plantsWithConnIssues, ...plantsWithCrit]).size
   return {
     offlineInverters: offline,
     frozenInverters: frozen,
-    criticalStrings: critPerPlant.reduce((a, p) => a + p.crit, 0),
+    criticalStrings,
     plantsWithIssues,
     livePct: reporting > 0 ? Math.round((live / reporting) * 1000) / 10 : null,
   }
 }
 
 /** Pure: rank plants needing attention. score = crit×1 + frozen×2 + offline×3
- *  (offline is the most actionable signal: nothing is being received at all). */
+ *  (offline is the most actionable signal: nothing is being received at all).
+ *  connectivity = null → Yesterday·settled mode: ranks by critical strings
+ *  only (no live signals on a settled view). */
 export function buildAttention(
-  connectivity: FleetConnectivity,
+  connectivity: FleetConnectivity | null,
   critPerPlant: CritPerPlant[],
   limit = 8,
 ): AttentionPlant[] {
@@ -974,7 +1025,7 @@ export function buildAttention(
   for (const c of critPerPlant) {
     if (c.crit > 0) ensure(c.plantCode, c.plantName).critStrings = c.crit
   }
-  for (const d of connectivity.devices) {
+  for (const d of connectivity?.devices ?? []) {
     if (d.status !== 'frozen' && d.status !== 'offline') continue
     const p = ensure(d.plantCode, d.plantName)
     if (d.status === 'frozen') p.frozen += 1
@@ -1000,8 +1051,8 @@ interface OrgListRow {
   string_count: bigint
 }
 
-export async function loadOrgList(): Promise<Array<{ id: string; name: string; stringCount: number }>> {
-  const yesterday = getPktYesterdayDate()
+export async function loadOrgList(date?: Date): Promise<Array<{ id: string; name: string; stringCount: number }>> {
+  const scoreDate = date ?? getPktYesterdayDate()
 
   // Walk organizations → plant_assignments → string_daily. M2M join means a
   // plant assigned to two orgs contributes to both orgs' counts (correct: each
@@ -1014,7 +1065,7 @@ export async function loadOrgList(): Promise<Array<{ id: string; name: string; s
     FROM organizations o
     LEFT JOIN plant_assignments pa ON pa.organization_id = o.id
     LEFT JOIN string_daily sd
-      ON sd.plant_id = pa.plant_id AND sd.date = ${yesterday}
+      ON sd.plant_id = pa.plant_id AND sd.date = ${scoreDate}
     GROUP BY o.id, o.name
     ORDER BY o.name
   `

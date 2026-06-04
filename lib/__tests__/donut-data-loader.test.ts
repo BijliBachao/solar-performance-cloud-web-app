@@ -53,6 +53,24 @@ describe('getPktYesterdayDate', () => {
   })
 })
 
+describe('getPktTodayDate', () => {
+  it('returns 2026-05-24 00:00:00 UTC when now is 2026-05-24 10:00 PKT', async () => {
+    const { getPktTodayDate } = await import('@/lib/donut-data-loader')
+    expect(getPktTodayDate().toISOString()).toBe('2026-05-24T00:00:00.000Z')
+  })
+
+  it('rolls to the next PKT date across the midnight boundary', async () => {
+    vi.setSystemTime(new Date('2026-05-24T19:30:00Z')) // 00:30 PKT on May 25
+    const { getPktTodayDate } = await import('@/lib/donut-data-loader')
+    expect(getPktTodayDate().toISOString()).toBe('2026-05-25T00:00:00.000Z')
+  })
+
+  it('is exactly one day after getPktYesterdayDate at any instant', async () => {
+    const { getPktTodayDate, getPktYesterdayDate } = await import('@/lib/donut-data-loader')
+    expect(getPktTodayDate().getTime() - getPktYesterdayDate().getTime()).toBe(24 * 60 * 60 * 1000)
+  })
+})
+
 // Helper: mock the two-query sequence for the per-plant prev-day path
 //   1st call: string_daily JOIN string_configs rows
 //   2nd call: SELECT COUNT(*) AS unused from string_configs (excluded.unused)
@@ -331,6 +349,49 @@ describe('loadFleetCounts', () => {
     expect(result.totalStrings).toBe(0)
     expect(result.warnings.some(w => w.code === 'NO_DATA_YESTERDAY')).toBe(true)
   })
+
+  it('defaults to yesterday with the settled label', async () => {
+    mockPrisma.$queryRaw.mockResolvedValue([{
+      healthy: 1n, abnormal_by_score: 0n, critical_by_score: 0n, no_data: 0n,
+      excluded_unused: 0n, excluded_nonstandard: 0n,
+    }])
+    const { loadFleetCounts } = await import('@/lib/donut-data-loader')
+
+    const result = await loadFleetCounts()
+
+    expect(result.timeBasis.label).toBe('Yesterday · 2026-05-23')
+    const interpolated = mockPrisma.$queryRaw.mock.calls[0].slice(1)
+    expect(interpolated.some((v: any) => v instanceof Date && v.toISOString() === '2026-05-23T00:00:00.000Z')).toBe(true)
+  })
+
+  it("date=today → queries today's rows, labels 'Today · … · live', endsAt = now", async () => {
+    mockPrisma.$queryRaw.mockResolvedValue([{
+      healthy: 1n, abnormal_by_score: 0n, critical_by_score: 0n, no_data: 0n,
+      excluded_unused: 0n, excluded_nonstandard: 0n,
+    }])
+    const { loadFleetCounts, getPktTodayDate } = await import('@/lib/donut-data-loader')
+
+    const result = await loadFleetCounts(undefined, { date: getPktTodayDate() })
+
+    expect(result.timeBasis.label).toBe('Today · 2026-05-24 · live')
+    // window is still open — ends "now", not at PKT midnight
+    expect(result.timeBasis.endsAt.toISOString()).toBe(PKT_NOW_UTC.toISOString())
+    const interpolated = mockPrisma.$queryRaw.mock.calls[0].slice(1)
+    expect(interpolated.some((v: any) => v instanceof Date && v.toISOString() === '2026-05-24T00:00:00.000Z')).toBe(true)
+  })
+
+  it('date=today + zero rows → NO_DATA_TODAY warning (not NO_DATA_YESTERDAY)', async () => {
+    mockPrisma.$queryRaw.mockResolvedValue([{
+      healthy: 0n, abnormal_by_score: 0n, critical_by_score: 0n, no_data: 0n,
+      excluded_unused: 0n, excluded_nonstandard: 0n,
+    }])
+    const { loadFleetCounts, getPktTodayDate } = await import('@/lib/donut-data-loader')
+
+    const result = await loadFleetCounts(undefined, { date: getPktTodayDate() })
+
+    expect(result.warnings.some(w => w.code === 'NO_DATA_TODAY')).toBe(true)
+    expect(result.warnings.some(w => w.code === 'NO_DATA_YESTERDAY')).toBe(false)
+  })
 })
 
 describe('loadFleetRows', () => {
@@ -462,6 +523,16 @@ describe('buildFleetKpis (pure)', () => {
     expect(k.livePct).toBeNull()
     expect(k.plantsWithIssues).toBe(0)
   })
+  it('null connectivity (Yesterday·settled) → health-only strip, conn KPIs null', async () => {
+    const { buildFleetKpis } = await import('../donut-data-loader')
+    const k = buildFleetKpis(null, critFixture)
+    expect(k.offlineInverters).toBeNull()
+    expect(k.frozenInverters).toBeNull()
+    expect(k.livePct).toBeNull()
+    expect(k.criticalStrings).toBe(4)
+    // P1 + P5 have crit strings — no conn union on a settled view
+    expect(k.plantsWithIssues).toBe(2)
+  })
 })
 
 describe('buildAttention (pure)', () => {
@@ -477,5 +548,11 @@ describe('buildAttention (pure)', () => {
   it('returns empty when the fleet is clean', async () => {
     const { buildAttention } = await import('../donut-data-loader')
     expect(buildAttention({ counts: { live: 1, frozen: 0, offline: 0, idle: 0 }, devices: [] }, [])).toEqual([])
+  })
+  it('null connectivity (Yesterday·settled) → ranks by critical strings only', async () => {
+    const { buildAttention } = await import('../donut-data-loader')
+    const a = buildAttention(null, critFixture)
+    expect(a.map((p) => p.plantCode)).toEqual(['P1', 'P5'])
+    expect(a[0]).toMatchObject({ critStrings: 3, frozen: 0, offline: 0, score: 3, worstSince: null })
   })
 })

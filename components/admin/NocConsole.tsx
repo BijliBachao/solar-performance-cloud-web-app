@@ -59,8 +59,9 @@ interface FleetConnectivity {
 }
 
 interface FleetKpis {
-  offlineInverters: number
-  frozenInverters: number
+  // null in Yesterday·settled mode — connectivity is live-only (no snapshot).
+  offlineInverters: number | null
+  frozenInverters: number | null
   criticalStrings: number
   plantsWithIssues: number
   livePct: number | null
@@ -76,8 +77,10 @@ interface AttentionPlant {
   score: number
 }
 
+type NocMode = 'today' | 'prev-day'
+
 interface NocApiResponse extends DonutAggregate {
-  mode: 'prev-day'
+  mode: NocMode
   timeBasis: { label: string; startsAt: string; endsAt: string }
   freshness: { lastDataAt: string | null; coveragePct: number }
   orgs: Array<{ id: string; name: string; stringCount: number }>
@@ -87,7 +90,9 @@ interface NocApiResponse extends DonutAggregate {
     total: number
     items: PerStringRow[]
   }
-  connectivity: FleetConnectivity
+  /** null in Yesterday·settled mode — the API does not load live connectivity
+   *  under a settled header (one screen = one time basis). */
+  connectivity: FleetConnectivity | null
   kpis: FleetKpis
   attention: AttentionPlant[]
   warnings: Array<{ code: string; message: string }>
@@ -128,6 +133,9 @@ const CONN_TO_SLOT: Record<'live' | 'frozen' | 'offline', DonutBucket> = {
 }
 
 interface Filters {
+  /** Time basis for the WHOLE page — today (live, default) or prev-day
+   *  (settled). Never mixed: prev-day clears + disallows the conn facet. */
+  mode: NocMode
   org: string | undefined
   buckets: DonutBucket[]
   conn: ConnectivityStatus[]
@@ -148,6 +156,7 @@ function parsePage(v: string | null): number {
 
 function filtersToQuery(f: Filters): string {
   const qs = new URLSearchParams()
+  if (f.mode === 'prev-day') qs.set('view', 'yesterday')
   if (f.org) qs.set('org', f.org)
   if (f.buckets.length > 0) qs.set('buckets', f.buckets.join(','))
   if (f.conn.length > 0) qs.set('conn', f.conn.join(','))
@@ -167,13 +176,18 @@ export function NocConsole() {
 
   // Filters are CLIENT state (instant, no navigation), initialized once from
   // the URL so deep links work. The URL is kept in sync shallowly below.
-  const [filters, setFilters] = useState<Filters>(() => ({
-    org: searchParams.get('org') ?? undefined,
-    buckets: parseCsv(searchParams.get('buckets') ?? searchParams.get('bucket'), VALID_BUCKETS),
-    conn: parseCsv(searchParams.get('conn'), VALID_CONN),
-    q: searchParams.get('q') ?? '',
-    page: parsePage(searchParams.get('page')),
-  }))
+  const [filters, setFilters] = useState<Filters>(() => {
+    const mode: NocMode = searchParams.get('view') === 'yesterday' ? 'prev-day' : 'today'
+    return {
+      mode,
+      org: searchParams.get('org') ?? undefined,
+      buckets: parseCsv(searchParams.get('buckets') ?? searchParams.get('bucket'), VALID_BUCKETS),
+      // Connectivity is live-only — a yesterday deep link can't carry it.
+      conn: mode === 'today' ? parseCsv(searchParams.get('conn'), VALID_CONN) : [],
+      q: searchParams.get('q') ?? '',
+      page: parsePage(searchParams.get('page')),
+    }
+  })
   // Debounced search input (interactive filtering without a fetch per keystroke).
   const [qInput, setQInput] = useState(filters.q)
 
@@ -195,7 +209,7 @@ export function NocConsole() {
   }, [qInput])
 
   const apiUrl = useMemo(() => {
-    const qs = new URLSearchParams({ mode: 'prev-day' })
+    const qs = new URLSearchParams({ mode: filters.mode })
     if (filters.org) qs.set('org', filters.org)
     if (filters.buckets.length > 0) qs.set('buckets', filters.buckets.join(','))
     if (filters.conn.length > 0) qs.set('conn', filters.conn.join(','))
@@ -250,6 +264,15 @@ export function NocConsole() {
     setFilters((f) => ({ ...f, org: id === '__all__' ? undefined : id, page: 1 }))
   }, [])
 
+  // Mode switch — the time-basis toggle. Switching to Yesterday clears the
+  // connectivity facet (live-only signal; the settled view never carries it).
+  const setMode = useCallback((m: NocMode) => {
+    setFilters((f) => {
+      if (f.mode === m) return f
+      return { ...f, mode: m, page: 1, conn: m === 'prev-day' ? [] : f.conn }
+    })
+  }, [])
+
   const setPage = useCallback((p: number) => {
     setFilters((f) => ({ ...f, page: p }))
   }, [])
@@ -302,6 +325,8 @@ export function NocConsole() {
     <div className="space-y-4">
       {/* Header bar */}
       <NocHeader
+        mode={filters.mode}
+        onModeChange={setMode}
         org={filters.org}
         orgs={orgsForFilter}
         onOrgChange={setOrg}
@@ -313,9 +338,12 @@ export function NocConsole() {
         timeBasisLabel={data?.timeBasis.label}
       />
 
-      {/* KPI strip — fleet state, each card a one-click quick filter */}
+      {/* KPI strip — fleet state, each card a one-click quick filter.
+          Layout keys off data.mode (NOT filters.mode): while a mode switch is
+          in flight (keepPreviousData) the old numbers keep their OWN labels —
+          data and labels swap atomically, never mislabeled. */}
       {firstLoad ? <SkeletonKpis /> : data ? (
-        <KpiStrip kpis={data.kpis} filters={filters} setFilters={setFilters} />
+        <KpiStrip mode={data.mode} kpis={data.kpis} filters={filters} setFilters={setFilters} />
       ) : null}
 
       {/* Body: split pane */}
@@ -326,19 +354,21 @@ export function NocConsole() {
             {firstLoad ? (
               <SkeletonDonut />
             ) : data ? (
-              <FleetDonut data={data} selectedBuckets={filters.buckets} onBucketClick={toggleBucket} />
+              <FleetDonut data={data} mode={data.mode} selectedBuckets={filters.buckets} onBucketClick={toggleBucket} />
             ) : null}
           </div>
           <div className="bg-white border border-slate-200 rounded-sm p-5 shadow-card">
-            {firstLoad ? (
+            {firstLoad || !data ? (
               <SkeletonDonut />
-            ) : data ? (
+            ) : data.mode === 'prev-day' || !data.connectivity ? (
+              <ConnectivityLiveOnlyNote onSwitchToToday={() => setMode('today')} />
+            ) : (
               <ConnectivityDonut
                 connectivity={data.connectivity}
                 selectedConn={filters.conn}
                 onSlotClick={toggleConn}
               />
-            ) : null}
+            )}
           </div>
         </div>
 
@@ -366,7 +396,9 @@ export function NocConsole() {
       </div>
 
       {/* Needs attention — worst offenders, fleet-state (unfaceted) */}
-      {data && data.attention.length > 0 && <AttentionPanel attention={data.attention} />}
+      {data && data.attention.length > 0 && (
+        <AttentionPanel attention={data.attention} mode={data.mode} />
+      )}
 
       {/* Warnings (if any) */}
       {data && data.warnings.length > 0 && (
@@ -386,6 +418,8 @@ export function NocConsole() {
 // ─── Header ─────────────────────────────────────────────────────────
 
 function NocHeader({
+  mode,
+  onModeChange,
   org,
   orgs,
   onOrgChange,
@@ -396,6 +430,8 @@ function NocHeader({
   dataAt,
   timeBasisLabel,
 }: {
+  mode: NocMode
+  onModeChange: (m: NocMode) => void
   org: string | undefined
   orgs: Array<{ id: string; name: string; stringCount: number }>
   onOrgChange: (id: string) => void
@@ -416,6 +452,7 @@ function NocHeader({
             {timeBasisLabel ?? 'Loading…'}
           </p>
         </div>
+        <ModeToggle mode={mode} onChange={onModeChange} />
       </div>
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative">
@@ -441,6 +478,37 @@ function NocHeader({
           Refresh
         </button>
       </div>
+    </div>
+  )
+}
+
+/** Time-basis toggle — ONE basis for the whole page, never mixed.
+ *  Today = intraday scores (update ~5 min) + live connectivity.
+ *  Yesterday = settled scores only; connectivity (live-only) is hidden. */
+function ModeToggle({ mode, onChange }: { mode: NocMode; onChange: (m: NocMode) => void }) {
+  const opts: Array<{ value: NocMode; label: string; title: string }> = [
+    { value: 'today', label: 'Today · live', title: 'Today’s scores — update every ~5 min, settle through the day. Connectivity shown live.' },
+    { value: 'prev-day', label: 'Yesterday · settled', title: 'Final scores for the full previous day (PKT). Settled report — connectivity hidden (live-only signal).' },
+  ]
+  return (
+    <div role="group" aria-label="Time basis" className="inline-flex border border-slate-300 rounded-sm overflow-hidden">
+      {opts.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          title={o.title}
+          aria-pressed={mode === o.value}
+          onClick={() => onChange(o.value)}
+          className={cn(
+            'px-2.5 py-1.5 text-[11px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/40',
+            mode === o.value
+              ? 'bg-slate-900 text-white'
+              : 'bg-white text-slate-600 hover:bg-slate-50',
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
     </div>
   )
 }
@@ -495,10 +563,12 @@ function OrgFilter({
 // ─── KPI strip ──────────────────────────────────────────────────────
 
 function KpiStrip({
+  mode,
   kpis,
   filters,
   setFilters,
 }: {
+  mode: NocMode
   kpis: FleetKpis
   filters: Filters
   setFilters: React.Dispatch<React.SetStateAction<Filters>>
@@ -518,16 +588,24 @@ function KpiStrip({
   const frozenActive = filters.conn.length === 1 && filters.conn[0] === 'frozen'
   const critActive = filters.buckets.length === 1 && filters.buckets[0] === 'critical'
 
-  const cards: Array<{
+  type KpiCard = {
     key: string; value: string; label: string; tone: 'red' | 'orange' | 'slate' | 'emerald'
     onClick?: () => void; active?: boolean
-  }> = [
-    { key: 'offline', value: String(kpis.offlineInverters), label: 'inverters offline', tone: kpis.offlineInverters > 0 ? 'red' : 'slate', onClick: () => applyConn('offline'), active: offlineActive },
-    { key: 'frozen', value: String(kpis.frozenInverters), label: 'feeds frozen', tone: kpis.frozenInverters > 0 ? 'orange' : 'slate', onClick: () => applyConn('frozen'), active: frozenActive },
-    { key: 'critical', value: String(kpis.criticalStrings), label: 'critical strings', tone: kpis.criticalStrings > 0 ? 'red' : 'slate', onClick: applyCritical, active: critActive },
-    { key: 'plants', value: String(kpis.plantsWithIssues), label: 'plants w/ issues', tone: kpis.plantsWithIssues > 0 ? 'orange' : 'slate' },
-    { key: 'live', value: kpis.livePct === null ? '—' : `${kpis.livePct}%`, label: 'fleet live', tone: 'emerald' },
-  ]
+  }
+  // Yesterday·settled = health-only strip: live signals (offline/frozen/live%)
+  // have no yesterday snapshot, so they are absent — not zero, ABSENT.
+  const cards: KpiCard[] = mode === 'prev-day'
+    ? [
+        { key: 'critical', value: String(kpis.criticalStrings), label: 'critical strings', tone: kpis.criticalStrings > 0 ? 'red' : 'slate', onClick: applyCritical, active: critActive },
+        { key: 'plants', value: String(kpis.plantsWithIssues), label: 'plants w/ critical strings', tone: kpis.plantsWithIssues > 0 ? 'orange' : 'slate' },
+      ]
+    : [
+        { key: 'offline', value: String(kpis.offlineInverters ?? 0), label: 'inverters offline', tone: (kpis.offlineInverters ?? 0) > 0 ? 'red' : 'slate', onClick: () => applyConn('offline'), active: offlineActive },
+        { key: 'frozen', value: String(kpis.frozenInverters ?? 0), label: 'feeds frozen', tone: (kpis.frozenInverters ?? 0) > 0 ? 'orange' : 'slate', onClick: () => applyConn('frozen'), active: frozenActive },
+        { key: 'critical', value: String(kpis.criticalStrings), label: 'critical strings', tone: kpis.criticalStrings > 0 ? 'red' : 'slate', onClick: applyCritical, active: critActive },
+        { key: 'plants', value: String(kpis.plantsWithIssues), label: 'plants w/ issues', tone: kpis.plantsWithIssues > 0 ? 'orange' : 'slate' },
+        { key: 'live', value: kpis.livePct === null ? '—' : `${kpis.livePct}%`, label: 'fleet live', tone: 'emerald' },
+      ]
 
   const toneCls: Record<string, string> = {
     red: 'text-red-700',
@@ -537,7 +615,7 @@ function KpiStrip({
   }
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+    <div className={cn('grid gap-2', mode === 'prev-day' ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5')}>
       {cards.map((c) => {
         const Tag = c.onClick ? 'button' : 'div'
         return (
@@ -659,10 +737,12 @@ function FilterChips({
 
 function FleetDonut({
   data,
+  mode,
   selectedBuckets,
   onBucketClick,
 }: {
   data: NocApiResponse
+  mode: NocMode
   selectedBuckets: DonutBucket[]
   onBucketClick: (b: DonutBucket) => void
 }) {
@@ -670,11 +750,21 @@ function FleetDonut({
   const healthyPct = total > 0 ? (data.counts.healthy / total) * 100 : 0
   return (
     <div className="flex flex-col items-center gap-4">
-      <div className="self-start flex items-center gap-2 mb-1">
-        <Activity className="w-4 h-4 text-slate-400" strokeWidth={2} />
-        <h2 className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
-          String Health
-        </h2>
+      <div className="self-start flex items-center justify-between gap-2 mb-1 w-full">
+        <div className="flex items-center gap-2">
+          <Activity className="w-4 h-4 text-slate-400" strokeWidth={2} />
+          <h2 className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
+            String Health
+          </h2>
+        </div>
+        <span
+          className="text-[10px] font-semibold text-slate-400"
+          title={mode === 'today'
+            ? 'Today’s scores recompute every ~5 minutes and settle as the day’s production accumulates.'
+            : 'Final scores for the full previous day (PKT) — these do not change.'}
+        >
+          {mode === 'today' ? 'updates ~5 min · settles by day end' : 'settled · full day'}
+        </span>
       </div>
       <DonutCore
         counts={{
@@ -714,6 +804,34 @@ const DOT_CLASS_HEX: Record<string, string> = {
 function connectivityHex(status: ConnectivityStatus): string {
   const dot = STATUS_STYLES[statusKeyFromConnectivity(status)].dot
   return DOT_CLASS_HEX[dot] ?? '#94a3b8'
+}
+
+/** Shown in place of the connectivity donut in Yesterday·settled mode.
+ *  Connectivity is a live-only signal (no historical snapshot) — rendering
+ *  "now" connectivity under a "Yesterday" header would mix time bases. */
+function ConnectivityLiveOnlyNote({ onSwitchToToday }: { onSwitchToToday: () => void }) {
+  return (
+    <div className="flex flex-col items-center gap-3 py-6 text-center">
+      <div className="self-start flex items-center gap-2 mb-1">
+        <Wifi className="w-4 h-4 text-slate-300" strokeWidth={2} />
+        <h2 className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+          Inverter Connectivity
+        </h2>
+      </div>
+      <Wifi className="w-8 h-8 text-slate-300" strokeWidth={1.5} />
+      <p className="text-xs text-slate-500 max-w-[260px]">
+        Connectivity is a <span className="font-semibold">live</span> signal — there is no
+        “yesterday” snapshot, so it is not shown on the settled view.
+      </p>
+      <button
+        type="button"
+        onClick={onSwitchToToday}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded-sm text-xs font-semibold text-slate-700 hover:bg-slate-50"
+      >
+        Switch to Today · live
+      </button>
+    </div>
+  )
 }
 
 /** Connectivity donut — interactive (NOC v3): slices cross-filter the table to
@@ -909,7 +1027,7 @@ function sinceLabel(iso: string | null): string {
   return `${Math.floor(h / 24)}d`
 }
 
-function AttentionPanel({ attention }: { attention: AttentionPlant[] }) {
+function AttentionPanel({ attention, mode }: { attention: AttentionPlant[]; mode: NocMode }) {
   return (
     <div className="bg-white border border-slate-200 rounded-sm shadow-card overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-2">
@@ -917,7 +1035,11 @@ function AttentionPanel({ attention }: { attention: AttentionPlant[] }) {
         <h2 className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
           Needs attention
         </h2>
-        <span className="text-[11px] text-slate-400">— fleet-wide, unaffected by filters</span>
+        <span className="text-[11px] text-slate-400">
+          {mode === 'today'
+            ? '— fleet-wide, unaffected by filters'
+            : '— yesterday’s settled scores · critical strings only'}
+        </span>
       </div>
       <ul className="divide-y divide-slate-100">
         {attention.map((p, i) => {
