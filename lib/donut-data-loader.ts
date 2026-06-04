@@ -854,10 +854,14 @@ export async function loadFleetConnectivity(orgId?: string): Promise<FleetConnec
       d.vendor_last_data_at,
       d.reading_changed_at,
       d.last_seen_at,
-      (
-        SELECT MAX(sm.timestamp)
-        FROM string_measurements sm
-        WHERE sm.device_id = d.id
+      -- last_seen_at is stamped every poll cycle (even on gated skips), so
+      -- the expensive correlated MAX() probe against the 4M-row measurements
+      -- table only runs for devices never seen since the column shipped —
+      -- a set that empties after one daylight cycle. COALESCE evaluates its
+      -- arguments lazily. (CQ audit 2026-06-05 finding #2.)
+      COALESCE(
+        d.last_seen_at,
+        (SELECT MAX(sm.timestamp) FROM string_measurements sm WHERE sm.device_id = d.id)
       )                 AS last_write_at,
       p.latitude        AS latitude,
       p.longitude       AS longitude

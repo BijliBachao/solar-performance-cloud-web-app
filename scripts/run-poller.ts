@@ -12,6 +12,7 @@ async function pollAll() {
   const { pollSungrow } = await import('../lib/sungrow-poller')
   const { pollCsi } = await import('../lib/csi-poller')
 
+  const cycleStart = Date.now()
   const results = await Promise.allSettled([
     pollHuawei(),
     pollSolis(),
@@ -25,6 +26,13 @@ async function pollAll() {
     if (r.status === 'rejected') console.error(`[${name}] Poll failed:`, r.reason)
     else console.log(`[${name}] Poll complete`)
   })
+
+  // Cycle-duration visibility: when this approaches the 5-min cron interval,
+  // the isPolling guard starts SILENTLY skipping cycles (dropping data
+  // resolution) — make that observable before it happens. (CQ audit #5.)
+  const cycleSec = Math.round((Date.now() - cycleStart) / 1000)
+  const level = cycleSec > 240 ? 'warn' : 'log'
+  console[level](`[Poller] Cycle completed in ${cycleSec}s${cycleSec > 240 ? ' — approaching the 5-min interval; next cycle may be skipped' : ''}`)
 }
 
 async function main() {

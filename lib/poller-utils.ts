@@ -369,21 +369,27 @@ export async function generateAlerts(
     where: { device_id: deviceId, resolved_at: null },
   })
 
-  const resolvedSet = new Set<string>()
-
-  // Resolve recovered or changed-severity alerts
-  for (const alert of openAlerts) {
+  // Resolve recovered or changed-severity alerts — ONE updateMany, not one
+  // round-trip per alert. A fault-heavy morning at fleet scale used to fire
+  // dozens of serialized single-row writes per device against the shared RDS
+  // (CQ audit 2026-06-05 finding #1: the N+1 write storm).
+  const toResolve = openAlerts.filter((alert) => {
     const currentState = currentSeverities.get(alert.string_number)
-    if (!currentState || currentState.severity !== alert.severity) {
-      await prisma.alerts.update({
-        where: { id: alert.id },
-        data: { resolved_at: new Date() },
-      })
-      resolvedSet.add(`${alert.string_number}:${alert.severity}`)
-    }
+    return !currentState || currentState.severity !== alert.severity
+  })
+  if (toResolve.length > 0) {
+    await prisma.alerts.updateMany({
+      where: { id: { in: toResolve.map((a) => a.id) } },
+      data: { resolved_at: new Date() },
+    })
   }
+  const resolvedSet = new Set(toResolve.map((a) => `${a.string_number}:${a.severity}`))
 
-  // Create new alerts
+  // Create new alerts — collect rows, then ONE createMany.
+  const creates: Array<{
+    device_id: string; plant_id: string; string_number: number; severity: string
+    message: string; expected_value: Decimal | null; actual_value: Decimal; gap_percent: Decimal | null
+  }> = []
   for (const [stringNumber, state] of currentSeverities) {
     const alreadyOpen = openAlerts.some(
       (a) =>
@@ -404,18 +410,19 @@ export async function generateAlerts(
     // gap_percent NULL on the alert row also serves as the discriminator for
     // peer-comparison vs dead-string alerts — used by the admin auto-resolve
     // logic to scope which alerts get cleared on flag toggles.
-    await prisma.alerts.create({
-      data: {
-        device_id: deviceId,
-        plant_id: plantId,
-        string_number: stringNumber,
-        severity: state.severity,
-        message,
-        expected_value: state.gapPercent !== null ? new Decimal(peerAvgCurrent.toFixed(3)) : null,
-        actual_value: measurement.current,
-        gap_percent: state.gapPercent !== null ? new Decimal(state.gapPercent.toFixed(1)) : null,
-      },
+    creates.push({
+      device_id: deviceId,
+      plant_id: plantId,
+      string_number: stringNumber,
+      severity: state.severity,
+      message,
+      expected_value: state.gapPercent !== null ? new Decimal(peerAvgCurrent.toFixed(3)) : null,
+      actual_value: measurement.current,
+      gap_percent: state.gapPercent !== null ? new Decimal(state.gapPercent.toFixed(1)) : null,
     })
+  }
+  if (creates.length > 0) {
+    await prisma.alerts.createMany({ data: creates })
   }
 }
 

@@ -9,7 +9,12 @@ import { prisma } from '@/lib/prisma'
  *
  * Checks:
  *   - DB reachable (cheap SELECT 1)
- *   - Poller freshness (age of latest measurement)
+ *   - Poller liveness (age of the newest devices.last_seen_at — stamped every
+ *     cycle for every device the vendor APIs return, EVEN when the DQ write
+ *     gate rejects the snapshot). Measurement age is informational only: the
+ *     gates correctly write NOTHING at night, so "latest measurement" would
+ *     cry degraded every night while the poller is perfectly healthy
+ *     (CQ audit 2026-06-05, found by the post-deploy WARN).
  *
  * Response: 200 OK on green, 503 on degraded/down. Body always JSON.
  */
@@ -21,27 +26,34 @@ export async function GET() {
   const startedAt = Date.now()
   let dbOk = false
   let dbLatencyMs: number | null = null
+  let latestContactAgeSec: number | null = null
   let latestMeasurementAgeSec: number | null = null
 
   try {
     const t0 = Date.now()
-    const rows = await prisma.$queryRaw<Array<{ latest: Date | null }>>`
-      SELECT MAX(timestamp) as latest FROM string_measurements
+    const rows = await prisma.$queryRaw<Array<{ latest_seen: Date | null; latest_write: Date | null }>>`
+      SELECT
+        (SELECT MAX(last_seen_at) FROM devices)            AS latest_seen,
+        (SELECT MAX(timestamp) FROM string_measurements)   AS latest_write
     `
     dbLatencyMs = Date.now() - t0
     dbOk = true
-    const latest = rows?.[0]?.latest
-    if (latest) {
-      latestMeasurementAgeSec = Math.floor((Date.now() - new Date(latest).getTime()) / 1000)
-    }
+    const seen = rows?.[0]?.latest_seen
+    const write = rows?.[0]?.latest_write
+    if (seen) latestContactAgeSec = Math.floor((Date.now() - new Date(seen).getTime()) / 1000)
+    if (write) latestMeasurementAgeSec = Math.floor((Date.now() - new Date(write).getTime()) / 1000)
   } catch {
     dbOk = false
   }
 
-  // Poller is considered lagging if no measurement in 15 minutes
-  // (matches STALE_MS from lib/string-health.ts).
-  const pollerStale =
-    latestMeasurementAgeSec === null || latestMeasurementAgeSec > 15 * 60
+  // Poller is lagging if it hasn't CONTACTED the vendors in 15 minutes
+  // (3 missed cycles). Fall back to measurement age only while last_seen_at
+  // is still unpopulated (fresh deploy) — newest of the two signals wins.
+  const freshestSec =
+    latestContactAgeSec !== null && latestMeasurementAgeSec !== null
+      ? Math.min(latestContactAgeSec, latestMeasurementAgeSec)
+      : latestContactAgeSec ?? latestMeasurementAgeSec
+  const pollerStale = freshestSec === null || freshestSec > 15 * 60
 
   const status: 'ok' | 'degraded' | 'down' = !dbOk
     ? 'down'
@@ -58,6 +70,7 @@ export async function GET() {
       latency_ms: dbLatencyMs,
     },
     poller: {
+      latest_contact_age_sec: latestContactAgeSec,
       latest_measurement_age_sec: latestMeasurementAgeSec,
       stale: pollerStale,
     },

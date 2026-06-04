@@ -42,8 +42,13 @@ export async function POST(req: Request) {
   try {
     switch (eventType) {
       case 'user.created': {
-        const { id, email_addresses, first_name, last_name } = evt.data
-        const primaryEmail = email_addresses?.[0]?.email_address
+        const { id, email_addresses, first_name, last_name, primary_email_address_id } = evt.data
+        // Resolve the PRIMARY email (same rule as getUserFromRequest) —
+        // index 0 is NOT guaranteed to be the primary; using it can create a
+        // wrong/duplicate identity match. (CQ audit 2026-06-05 finding #8.)
+        const primaryEmail =
+          email_addresses?.find((e) => e.id === primary_email_address_id)?.email_address ??
+          email_addresses?.[0]?.email_address
         if (!primaryEmail) break
 
         await prisma.users.create({
@@ -62,8 +67,10 @@ export async function POST(req: Request) {
       }
 
       case 'user.updated': {
-        const { id, email_addresses, first_name, last_name } = evt.data
-        const primaryEmail = email_addresses?.[0]?.email_address
+        const { id, email_addresses, first_name, last_name, primary_email_address_id } = evt.data
+        const primaryEmail =
+          email_addresses?.find((e) => e.id === primary_email_address_id)?.email_address ??
+          email_addresses?.[0]?.email_address
 
         const existingUser = await prisma.users.findUnique({
           where: { clerk_user_id: id },

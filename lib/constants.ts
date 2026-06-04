@@ -21,5 +21,8 @@ export const INVERTER_DEVICE_TYPE_IDS = [1, 38, 100, 200, 201, 300, 400]
 // peak is ~15 of the connection_limit=20 pool — leaves ~5-slot headroom
 // for ad-hoc queries (sync-plants, fetchAlarms, vendor_alarms upserts).
 // Was 4 when only 4 providers existed; dropped to 3 ahead of CSI onboard.
-// Shared RDS bijli-bachao-db has max_connections=181 (co-tenanted with Wattey).
+// Shared RDS bijli-bachao-db: t4g.small since 2026-04-30 -> max_connections=145
+// (co-tenanted with Wattey; smartswitch arriving as 3rd tenant). NOTE: the
+// real scaling lever is round-trips per device (batched generateAlerts,
+// future writeDeviceSnapshot pipeline), NOT raising this concurrency.
 export const POLLER_DEVICE_CONCURRENCY = 3
