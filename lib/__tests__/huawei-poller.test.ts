@@ -51,9 +51,15 @@ vi.mock('@/lib/huawei-client', () => ({
 describe('pollHuawei — degraded-path resilience', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Pin the clock to PKT noon: the DQ v2 write gate night-checks snapshots
+    // claiming production, and these fixtures have no plant coords (fleet
+    // default). Without this, the suite fails when run at night (it did).
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-06-05T07:00:00Z')) // 12:00 PKT
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
   })
 

@@ -2,7 +2,9 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { CsiClient, CsiDevice, CsiDeviceData, parseRealData } from '@/lib/csi-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate } from '@/lib/poller-utils'
+import { classifyDeviceWrite, FLEET_DEFAULT_LAT, FLEET_DEFAULT_LNG } from '@/lib/string-health'
+import { isDaylight } from '@/lib/solar-geometry'
 import {
   PLANT_HEALTH_HEALTHY,
   PLANT_HEALTH_FAULTY,
@@ -259,7 +261,11 @@ async function fetchCsiStringData(client: CsiClient): Promise<void> {
       provider: PROVIDERS.CSI,
       device_type_id: DEVICE_TYPE_IDS.CSI_INVERTER,
     },
-    select: { id: true, plant_id: true, max_strings: true, model: true, last_reading_sig: true },
+    select: {
+      id: true, plant_id: true, max_strings: true, model: true, last_reading_sig: true,
+      // Plant coords for the night write-gate (fleet-default fallback at the gate).
+      plants: { select: { latitude: true, longitude: true } },
+    },
   })
 
   if (devices.length === 0) {
@@ -303,7 +309,11 @@ async function fetchCsiStringData(client: CsiClient): Promise<void> {
 }
 
 async function processCsiDevice(
-  device: { id: string; plant_id: string; max_strings: number | null; model: string | null; last_reading_sig: string | null },
+  device: {
+    id: string; plant_id: string; max_strings: number | null; model: string | null
+    last_reading_sig: string | null
+    plants: { latitude: unknown; longitude: unknown } | null
+  },
   data: CsiDeviceData,
 ): Promise<void> {
   // Vendor data-time: CSI returns "YYYY-MM-DD HH:MM:SS" (no TZ) — treat as UTC
@@ -329,12 +339,11 @@ async function processCsiDevice(
       where: { id: device.plant_id },
       data: { health_state: PLANT_HEALTH_DISCONNECTED, last_synced: new Date() },
     })
-    // Record the (stuck) vendor time so the UI shows "frozen since HH:MM".
-    // Direct update — do NOT call recordDeviceFreshness here (we have no fresh
-    // strings; an empty-signature would wrongly reset reading_changed_at).
-    if (vendorTs) {
-      await prisma.devices.update({ where: { id: device.id }, data: { vendor_last_data_at: vendorTs } })
-    }
+    // Record the (stuck) vendor time + last_seen_at so the UI shows "frozen
+    // since HH:MM" and frozen stays distinguishable from offline. Deliberately
+    // not recordDeviceFreshness — no fresh strings; an empty-signature would
+    // wrongly reset reading_changed_at.
+    await recordDeviceSeen(device.id, vendorTs)
     return
   }
   if (staleFeedLogged.delete(device.id)) {
@@ -376,6 +385,22 @@ async function processCsiDevice(
       where: { id: device.id },
       data: deviceUpdate,
     })
+  }
+
+  // ── Write gate (DQ v2), second layer behind isVendorFeedStale ──────
+  // The lastReportTime gate above catches an honest stuck clock; this one
+  // catches a lying one — lastReportTime advancing while every value stays
+  // frozen (replay), or night snapshots claiming production.
+  const sunUp = isDaylight(
+    device.plants?.latitude != null ? Number(device.plants.latitude) : FLEET_DEFAULT_LAT,
+    device.plants?.longitude != null ? Number(device.plants.longitude) : FLEET_DEFAULT_LNG,
+    new Date(),
+  )
+  const gate = classifyDeviceWrite(strings, device.last_reading_sig, sunUp)
+  logWriteGate('CSI', device.id, gate)
+  if (gate !== 'write') {
+    await recordDeviceSeen(device.id, vendorTs)
+    return
   }
 
   const measurements = strings.map((s) => ({

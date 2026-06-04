@@ -363,6 +363,36 @@ export function PlantDetailView({
         </div>
       </div>
 
+      {/* Frozen-feed banner — the vendor cloud is repeating old data for one
+          or more inverters here. Values below are the LAST REAL readings; the
+          DQ write gate holds the replayed copies out of scores and energy. */}
+      {(() => {
+        const frozenDevices = plant.devices.filter((d) => d.connectivity === 'frozen')
+        if (frozenDevices.length === 0) return null
+        const oldest = frozenDevices.reduce<string | null>(
+          (acc, d) => (d.effective_fresh_at && (acc === null || d.effective_fresh_at < acc) ? d.effective_fresh_at : acc),
+          null,
+        )
+        const names = frozenDevices.map((d) => d.device_name || d.id)
+        const shown = names.slice(0, 3).join(', ') + (names.length > 3 ? ` +${names.length - 3} more` : '')
+        return (
+          <div className="px-4 sm:px-6 max-w-[1440px] mx-auto mt-3">
+            <div className="bg-amber-50 border border-amber-300 rounded-sm px-4 py-2.5 flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" strokeWidth={2} />
+              <p className="text-xs text-amber-900">
+                <span className="font-bold">
+                  Data feed frozen for {frozenDevices.length} inverter{frozenDevices.length === 1 ? '' : 's'}
+                </span>
+                {' '}({shown}) — the inverter&apos;s datalogger has stopped sending new data
+                {oldest ? <> since <span className="font-semibold">{relativeTime(oldest)}</span></> : null}.
+                Values shown are the last real readings. Check the datalogger&apos;s power and
+                internet connection on site.
+              </p>
+            </div>
+          </div>
+        )
+      })()}
+
       <div className="px-4 sm:px-6 py-5 max-w-[1440px] mx-auto">
         <Tabs defaultValue="overview" className="w-full">
           <TabsList className="mb-5">

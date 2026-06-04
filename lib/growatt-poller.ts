@@ -2,7 +2,9 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { GrowattClient } from '@/lib/growatt-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate } from '@/lib/poller-utils'
+import { classifyDeviceWrite, FLEET_DEFAULT_LAT, FLEET_DEFAULT_LNG } from '@/lib/string-health'
+import { isDaylight } from '@/lib/solar-geometry'
 import {
   PLANT_HEALTH_HEALTHY,
   PLANT_HEALTH_FAULTY,
@@ -268,6 +270,8 @@ async function fetchStringData(client: GrowattClient): Promise<void> {
       device_type_id: true,
       max_strings: true,
       last_reading_sig: true,
+      // Plant coords for the night write-gate (fleet-default fallback at the gate).
+      plants: { select: { latitude: true, longitude: true } },
     },
   })
 
@@ -344,7 +348,11 @@ async function fetchStringData(client: GrowattClient): Promise<void> {
 }
 
 async function processDeviceData(
-  device: { id: string; plant_id: string; device_type_id: number; max_strings: number | null; last_reading_sig: string | null },
+  device: {
+    id: string; plant_id: string; device_type_id: number; max_strings: number | null
+    last_reading_sig: string | null
+    plants: { latitude: unknown; longitude: unknown } | null
+  },
   deviceData: any,
   deviceType: string
 ): Promise<void> {
@@ -381,7 +389,40 @@ async function processDeviceData(
     }
   }
 
+  // Vendor data-time: deviceData.time is "YYYY-MM-DD HH:MM:SS" in PKT
+  // (account-local). NOT deviceData.calendar — that field is timezone-shifted
+  // ~3h and wrong (verified).
+  const gt = (deviceData as any)?.time
+  const _g = typeof gt === 'string' ? new Date(gt.replace(' ', 'T') + '+05:00') : null
+  const vendorTs = _g && !isNaN(_g.getTime()) ? _g : null
+
   if (measurements.length > 0) {
+    const gateStrings = strings.map((s) => ({
+      string_number: Number(s.string_number),
+      voltage: Number(s.voltage),
+      current: Number(s.current),
+      power: Number(s.power),
+    }))
+
+    // ── Write gate (DQ v2) ─────────────────────────────────────────
+    // Growatt replays cached snapshots when a logger goes quiet (29k phantom
+    // night rows in the week before this gate; one logger clock also runs ~2h
+    // fast). Signature dedup + night gate keep replays out of the data.
+    const sunUp = isDaylight(
+      device.plants?.latitude != null ? Number(device.plants.latitude) : FLEET_DEFAULT_LAT,
+      device.plants?.longitude != null ? Number(device.plants.longitude) : FLEET_DEFAULT_LNG,
+      new Date(),
+    )
+    const gate = classifyDeviceWrite(gateStrings, device.last_reading_sig, sunUp)
+    logWriteGate('Growatt', device.id, gate)
+    if (gate !== 'write') {
+      // Seen, not trusted: stamp last_seen_at (+ stuck vendor ts for the
+      // "frozen since" display); skip measurements/alerts/aggregates/fault
+      // codes/native counter — all would be echoes of the replayed snapshot.
+      await recordDeviceSeen(device.id, vendorTs)
+      return
+    }
+
     await prisma.string_measurements.createMany({
       data: measurements.map((m) => ({
         ...m,
@@ -389,26 +430,9 @@ async function processDeviceData(
       })),
     })
 
-    // Vendor data-time: deviceData.time is "YYYY-MM-DD HH:MM:SS" in PKT
-    // (account-local). NOT deviceData.calendar — that field is timezone-shifted
-    // ~3h and wrong (verified).
-    const gt = (deviceData as any)?.time
-    const _g = typeof gt === 'string' ? new Date(gt.replace(' ', 'T') + '+05:00') : null
-    const vendorTs = _g && !isNaN(_g.getTime()) ? _g : null
-
     // Connectivity freshness: vendor time + value-change signature, from the
     // strings we just wrote. Only on the path where strings were written.
-    await recordDeviceFreshness(
-      device.id,
-      strings.map((s) => ({
-        string_number: Number(s.string_number),
-        voltage: Number(s.voltage),
-        current: Number(s.current),
-        power: Number(s.power),
-      })),
-      vendorTs,
-      device.last_reading_sig,
-    )
+    await recordDeviceFreshness(device.id, gateStrings, vendorTs, device.last_reading_sig)
   }
 
   if (measurements.length > 0) {

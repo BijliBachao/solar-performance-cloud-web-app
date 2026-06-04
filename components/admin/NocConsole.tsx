@@ -21,7 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 import {
-  AlertTriangle, RefreshCw, Info, ExternalLink, Activity, Wifi, Search, X, Flame,
+  AlertTriangle, RefreshCw, Info, ExternalLink, Activity, Wifi, Search, X, Flame, Snowflake,
 } from 'lucide-react'
 import { DonutCore } from '@/components/shared/DonutCore'
 import { cn } from '@/lib/utils'
@@ -321,6 +321,17 @@ export function NocConsole() {
   }
 
   const orgsForFilter = data?.orgs ?? []
+  // Devices whose vendor feed is frozen (today mode only — connectivity is
+  // live-only). Their table rows get a "frozen feed" badge: the scores shown
+  // were computed before the feed stalled.
+  const frozenDeviceIds = useMemo(
+    () => new Set(
+      (data?.connectivity?.devices ?? [])
+        .filter((d) => d.status === 'frozen')
+        .map((d) => d.deviceId),
+    ),
+    [data],
+  )
 
   return (
     <div className="space-y-4">
@@ -346,6 +357,15 @@ export function NocConsole() {
       {firstLoad ? <SkeletonKpis /> : data ? (
         <KpiStrip mode={data.mode} kpis={data.kpis} filters={filters} setFilters={setFilters} />
       ) : null}
+
+      {/* Frozen-feed warning — vendor is replaying stale data for these
+          inverters; the write gate is holding their data out of scores/energy. */}
+      {data && data.mode === 'today' && data.connectivity && (
+        <FrozenFeedBanner
+          connectivity={data.connectivity}
+          onInspect={() => setFilters((f) => ({ ...f, page: 1, conn: ['frozen'] }))}
+        />
+      )}
 
       {/* Body: split pane */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,420px)_1fr] gap-4">
@@ -382,7 +402,7 @@ export function NocConsole() {
             ) : data && data.rows.items.length === 0 ? (
               <EmptyTable hasFacets={hasActiveFacets(filters)} onClearAll={clearFacets} />
             ) : data ? (
-              <StringsTable rows={data.rows.items} />
+              <StringsTable rows={data.rows.items} frozenDeviceIds={frozenDeviceIds} />
             ) : null}
           </div>
           {data && data.rows.total > data.rows.pageSize && (
@@ -810,6 +830,45 @@ function connectivityHex(status: ConnectivityStatus): string {
   return DOT_CLASS_HEX[dot] ?? '#94a3b8'
 }
 
+/** Amber banner when ≥1 inverter feed is frozen (vendor replaying stale data).
+ *  The DQ write gate holds replayed snapshots out of scores/energy; this makes
+ *  the situation — and the affected plants — visible at a glance. */
+function FrozenFeedBanner({
+  connectivity,
+  onInspect,
+}: {
+  connectivity: FleetConnectivity
+  onInspect: () => void
+}) {
+  const frozen = connectivity.devices.filter((d) => d.status === 'frozen')
+  if (frozen.length === 0) return null
+  // Oldest real data among the frozen feeds — "stuck since".
+  const oldest = frozen.reduce<string | null>(
+    (acc, d) => (d.effectiveFreshAt && (acc === null || d.effectiveFreshAt < acc) ? d.effectiveFreshAt : acc),
+    null,
+  )
+  const plants = [...new Set(frozen.map((d) => d.plantName))]
+  const shown = plants.slice(0, 3).join(', ') + (plants.length > 3 ? ` +${plants.length - 3} more` : '')
+  return (
+    <div className="bg-amber-50 border border-amber-300 rounded-sm px-4 py-2.5 flex items-center gap-3 flex-wrap">
+      <Snowflake className="w-4 h-4 text-amber-600 flex-shrink-0" strokeWidth={2} />
+      <p className="text-xs text-amber-900 flex-1 min-w-[240px]">
+        <span className="font-bold">{frozen.length} inverter feed{frozen.length === 1 ? '' : 's'} frozen</span>
+        {' — '}the vendor is repeating old data ({shown}
+        {oldest ? `; last real data ${sinceLabel(oldest)} ago` : ''}).
+        Replayed readings are excluded from scores and energy until fresh data arrives.
+      </p>
+      <button
+        type="button"
+        onClick={onInspect}
+        className="text-xs font-semibold text-amber-900 border border-amber-400 rounded-sm px-2.5 py-1 hover:bg-amber-100"
+      >
+        Inspect frozen feeds
+      </button>
+    </div>
+  )
+}
+
 /** Shown in place of the connectivity donut in Yesterday·settled mode.
  *  Connectivity is a live-only signal (no historical snapshot) — rendering
  *  "now" connectivity under a "Yesterday" header would mix time bases. */
@@ -898,7 +957,7 @@ function ConnectivityDonut({
 
 // ─── Strings table ──────────────────────────────────────────────────
 
-function StringsTable({ rows }: { rows: PerStringRow[] }) {
+function StringsTable({ rows, frozenDeviceIds }: { rows: PerStringRow[]; frozenDeviceIds: ReadonlySet<string> }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs">
@@ -915,7 +974,7 @@ function StringsTable({ rows }: { rows: PerStringRow[] }) {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <TableRow key={`${r.deviceId}:${r.stringNumber}`} row={r} />
+            <TableRow key={`${r.deviceId}:${r.stringNumber}`} row={r} frozenFeed={frozenDeviceIds.has(r.deviceId)} />
           ))}
         </tbody>
       </table>
@@ -929,7 +988,7 @@ const BUCKET_DOT_CLASS: Record<DonutBucket, string> = {
   critical: 'bg-red-500',
 }
 
-function TableRow({ row }: { row: PerStringRow }) {
+function TableRow({ row, frozenFeed }: { row: PerStringRow; frozenFeed: boolean }) {
   const linkRef = useRef<HTMLAnchorElement>(null)
   const href = `/admin/plants/${encodeURIComponent(row.plantCode)}`
   const onKeyDown = (e: React.KeyboardEvent<HTMLTableRowElement>) => {
@@ -947,7 +1006,19 @@ function TableRow({ row }: { row: PerStringRow }) {
     >
       <td className="px-3 py-2 text-slate-700 truncate max-w-[140px]">{row.orgName}</td>
       <td className="px-3 py-2 text-slate-900 font-medium truncate max-w-[180px]">{row.plantName}</td>
-      <td className="px-3 py-2 text-slate-700 truncate max-w-[140px]">{row.inverterName}</td>
+      <td className="px-3 py-2 text-slate-700 max-w-[200px]">
+        <span className="inline-flex items-center gap-1.5 max-w-full">
+          <span className="truncate">{row.inverterName}</span>
+          {frozenFeed && (
+            <span
+              className="inline-flex items-center gap-0.5 flex-shrink-0 bg-amber-100 border border-amber-300 text-amber-800 rounded-sm px-1 py-px text-[9px] font-bold uppercase tracking-wide"
+              title="This inverter's vendor feed is frozen (replaying old data). The score shown was computed before the feed stalled."
+            >
+              <Snowflake className="w-2.5 h-2.5" /> frozen feed
+            </span>
+          )}
+        </span>
+      </td>
       <td className="px-3 py-2 text-right font-mono tabular-nums text-slate-900">{row.stringNumber}</td>
       <td className="px-3 py-2 text-right font-mono tabular-nums text-slate-900">
         {row.healthScore === null ? '—' : row.healthScore.toFixed(1)}

@@ -89,6 +89,10 @@ model devices {
   vendor_last_data_at DateTime?
   reading_changed_at  DateTime?
   last_reading_sig    String?               @db.VarChar(64)
+  /// Last time a poll cycle SAW this device in the vendor API (independent of
+  /// whether the snapshot was written — the write gate skips duplicates).
+  /// Drives frozen-vs-offline: "still hearing about it" vs "gone".
+  last_seen_at        DateTime?
   created_at          DateTime              @default(now())
   plants              plants                @relation(fields: [plant_id], references: [id])
   string_measurements string_measurements[]

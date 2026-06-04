@@ -825,6 +825,7 @@ interface FleetConnectivityRow {
   provider: string
   vendor_last_data_at: Date | null
   reading_changed_at: Date | null
+  last_seen_at: Date | null
   last_write_at: Date | null
   latitude: Prisma.Decimal | number | null
   longitude: Prisma.Decimal | number | null
@@ -847,6 +848,7 @@ export async function loadFleetConnectivity(orgId?: string): Promise<FleetConnec
       d.provider        AS provider,
       d.vendor_last_data_at,
       d.reading_changed_at,
+      d.last_seen_at,
       (
         SELECT MAX(sm.timestamp)
         FROM string_measurements sm
@@ -870,9 +872,17 @@ export async function loadFleetConnectivity(orgId?: string): Promise<FleetConnec
       r.longitude != null ? Number(r.longitude) : FLEET_DEFAULT_LNG,
       new Date(now),
     )
+    // "Last contact" = newest of last_seen_at (poll cycle saw the device, even
+    // when the write gate skipped a duplicate replay) and MAX(measurement ts)
+    // (pre-gate fallback until last_seen_at populates). Keeps frozen (still
+    // seen, values stuck) distinguishable from offline (gone) now that frozen
+    // feeds no longer produce measurement rows.
+    const seenMs = r.last_seen_at?.getTime() ?? null
+    const writeMs = r.last_write_at?.getTime() ?? null
+    const lastContactMs = seenMs == null && writeMs == null ? null : Math.max(seenMs ?? 0, writeMs ?? 0)
     const conn = deviceConnectivity(
       { vendor_last_data_at: r.vendor_last_data_at, reading_changed_at: r.reading_changed_at },
-      r.last_write_at?.getTime() ?? null,
+      lastContactMs,
       sunUp,
       now,
     )

@@ -28,6 +28,7 @@ export async function GET(
             last_synced: true,
             vendor_last_data_at: true,
             reading_changed_at: true,
+            last_seen_at: true,
           },
         },
       },
@@ -65,9 +66,15 @@ export async function GET(
       new Date(now),
     )
     const devicesWithConnectivity = plant.devices.map((d) => {
+      // "Last contact" = newest of last_seen_at (poll saw the device even when
+      // the DQ write gate skipped a duplicate replay) and MAX(measurement ts).
+      // Keeps frozen (seen, values stuck) distinguishable from offline (gone).
+      const seenMs = d.last_seen_at?.getTime() ?? null
+      const writeMs = lastWriteByDevice.get(d.id) ?? null
+      const lastContactMs = seenMs == null && writeMs == null ? null : Math.max(seenMs ?? 0, writeMs ?? 0)
       const conn = deviceConnectivity(
         { vendor_last_data_at: d.vendor_last_data_at, reading_changed_at: d.reading_changed_at },
-        lastWriteByDevice.get(d.id) ?? null,
+        lastContactMs,
         sunUp,
         now,
       )

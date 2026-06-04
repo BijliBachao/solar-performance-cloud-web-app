@@ -2,7 +2,9 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { SolisClient } from '@/lib/solis-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate } from '@/lib/poller-utils'
+import { classifyDeviceWrite, FLEET_DEFAULT_LAT, FLEET_DEFAULT_LNG } from '@/lib/string-health'
+import { isDaylight } from '@/lib/solar-geometry'
 import { classifyVendorFeed } from '@/lib/string-health'
 
 let lastPlantSync = 0
@@ -195,6 +197,8 @@ async function fetchSolisStringData(client: SolisClient): Promise<void> {
       plant_id: true,
       max_strings: true,
       last_reading_sig: true,
+      // Plant coords for the night write-gate (fleet-default fallback at the gate).
+      plants: { select: { latitude: true, longitude: true } },
     },
   })
 
@@ -215,7 +219,10 @@ async function fetchSolisStringData(client: SolisClient): Promise<void> {
 
 async function processSolisDevice(
   client: SolisClient,
-  device: { id: string; plant_id: string; max_strings: number | null; last_reading_sig: string | null },
+  device: {
+    id: string; plant_id: string; max_strings: number | null; last_reading_sig: string | null
+    plants: { latitude: unknown; longitude: unknown } | null
+  },
 ): Promise<void> {
   const detail = await client.getInverterDetail(device.id)
   // Vendor data-time (ms epoch) for the connectivity "vendor last data" display.
@@ -243,9 +250,10 @@ async function processSolisDevice(
       const ts = detail.dataTimestamp ? new Date(detail.dataTimestamp).toISOString() : 'null'
       console.warn(`[Solis] ${device.id} vendor feed stale (dataTimestamp=${ts}) — pausing writes until it advances`)
     }
-    // Record the (stuck) vendor time so the connectivity UI shows "frozen since
-    // HH:MM" — restart-safe. No fresh strings here, so don't touch the signature.
-    if (vendorTs) await prisma.devices.update({ where: { id: device.id }, data: { vendor_last_data_at: vendorTs } })
+    // Record the (stuck) vendor time + last_seen_at so the connectivity UI
+    // shows "frozen since HH:MM" (frozen ≠ offline) — restart-safe. No fresh
+    // strings here, so the reading signature is deliberately untouched.
+    await recordDeviceSeen(device.id, vendorTs)
     return
   }
   if (staleFeedLogged.delete(device.id)) {
@@ -255,6 +263,7 @@ async function processSolisDevice(
     // Vendor hasn't published a new sample since our last write — nothing new
     // to record. Aggregates are recomputed from stored rows on the next fresh
     // sample, so skipping is safe (and keeps string_measurements honest).
+    await recordDeviceSeen(device.id, vendorTs)
     return
   }
   if (detail.dataTimestamp != null) lastSeenDataTs.set(device.id, detail.dataTimestamp)
@@ -299,6 +308,27 @@ async function processSolisDevice(
   }
 
   if (measurements.length > 0) {
+    const gateStrings = measurements.map((m) => ({
+      string_number: m.string_number, voltage: Number(m.voltage), current: Number(m.current), power: Number(m.power),
+    }))
+
+    // ── Write gate (DQ v2), second layer behind classifyVendorFeed ───
+    // The dataTimestamp gate above catches an HONEST stuck clock; this one
+    // catches a LYING clock — dataTimestamp advancing while every value stays
+    // frozen (replay), or night snapshots claiming production. 40k phantom
+    // night rows in the week before this gate.
+    const sunUp = isDaylight(
+      device.plants?.latitude != null ? Number(device.plants.latitude) : FLEET_DEFAULT_LAT,
+      device.plants?.longitude != null ? Number(device.plants.longitude) : FLEET_DEFAULT_LNG,
+      new Date(),
+    )
+    const gate = classifyDeviceWrite(gateStrings, device.last_reading_sig, sunUp)
+    logWriteGate('Solis', device.id, gate)
+    if (gate !== 'write') {
+      await recordDeviceSeen(device.id, vendorTs)
+      return
+    }
+
     await prisma.string_measurements.createMany({
       data: measurements.map((m) => ({
         ...m,
@@ -310,9 +340,7 @@ async function processSolisDevice(
     await updateHourlyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
     await updateDailyAggregates(device.id, device.plant_id, maxStrings, stringConfigs, { model: null, max_strings: device.max_strings })
     // Connectivity freshness: vendor time + value-change signature.
-    await recordDeviceFreshness(device.id, measurements.map((m) => ({
-      string_number: m.string_number, voltage: Number(m.voltage), current: Number(m.current), power: Number(m.power),
-    })), vendorTs, device.last_reading_sig)
+    await recordDeviceFreshness(device.id, gateStrings, vendorTs, device.last_reading_sig)
   }
 
   // Save hardware daily counter — source of truth for "today's energy" display

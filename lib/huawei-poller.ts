@@ -2,7 +2,9 @@ import { prisma } from '@/lib/prisma'
 import { huaweiClient } from '@/lib/huawei-client'
 import { Decimal } from '@prisma/client/runtime/library'
 import { PROVIDERS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches, safeArray, safeObject, safeFloat, recordDeviceFreshness } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches, safeArray, safeObject, safeFloat, recordDeviceFreshness, recordDeviceSeen, logWriteGate } from '@/lib/poller-utils'
+import { classifyDeviceWrite, FLEET_DEFAULT_LAT, FLEET_DEFAULT_LNG } from '@/lib/string-health'
+import { isDaylight } from '@/lib/solar-geometry'
 import { ACTIVE_CURRENT_THRESHOLD } from '@/lib/string-health'
 import { getHuaweiMaxStrings } from '@/lib/huawei-model-strings'
 
@@ -209,6 +211,8 @@ async function fetchStringData(): Promise<void> {
       // Prior reading signature — recordDeviceFreshness only bumps
       // reading_changed_at when the new signature differs from this.
       last_reading_sig: true,
+      // Plant coords for the night write-gate (fleet-default fallback at the gate).
+      plants: { select: { latitude: true, longitude: true } },
     },
   })
 
@@ -258,7 +262,11 @@ async function fetchStringData(): Promise<void> {
 }
 
 async function processHuaweiDeviceData(
-  device: { id: string; plant_id: string; device_type_id: number; max_strings: number | null; model: string | null; last_reading_sig: string | null },
+  device: {
+    id: string; plant_id: string; device_type_id: number; max_strings: number | null
+    model: string | null; last_reading_sig: string | null
+    plants: { latitude: unknown; longitude: unknown } | null
+  },
   data: any,
 ): Promise<void> {
   // Guard against Huawei returning a device with no dataItemMap at all
@@ -327,6 +335,29 @@ async function processHuaweiDeviceData(
   }
 
   if (measurements.length > 0) {
+    const gateStrings = measurements.map((m) => ({
+      string_number: m.string_number,
+      voltage: Number(m.voltage),
+      current: Number(m.current),
+      power: Number(m.power),
+    }))
+
+    // ── Write gate (DQ v2) ─────────────────────────────────────────
+    // Huawei's realtime endpoint has no data-timestamp and replays cached
+    // snapshots when a logger goes quiet (74k phantom night rows in the week
+    // before this gate). Signature dedup + night gate keep them out.
+    const sunUp = isDaylight(
+      device.plants?.latitude != null ? Number(device.plants.latitude) : FLEET_DEFAULT_LAT,
+      device.plants?.longitude != null ? Number(device.plants.longitude) : FLEET_DEFAULT_LNG,
+      new Date(),
+    )
+    const gate = classifyDeviceWrite(gateStrings, device.last_reading_sig, sunUp)
+    logWriteGate('Huawei', device.id, gate)
+    if (gate !== 'write') {
+      await recordDeviceSeen(device.id, null)
+      return
+    }
+
     await prisma.string_measurements.createMany({
       data: measurements.map((m) => ({
         ...m,
@@ -336,17 +367,7 @@ async function processHuaweiDeviceData(
     // Connectivity freshness: value-change signature from the strings we just
     // wrote. Huawei stores V/I/P as Decimal, so map to plain numbers. Huawei's
     // getDeviceRealtimeData returns no usable data-timestamp, so vendor time is null.
-    await recordDeviceFreshness(
-      device.id,
-      measurements.map((m) => ({
-        string_number: m.string_number,
-        voltage: Number(m.voltage),
-        current: Number(m.current),
-        power: Number(m.power),
-      })),
-      null,
-      device.last_reading_sig,
-    )
+    await recordDeviceFreshness(device.id, gateStrings, null, device.last_reading_sig)
     const stringConfigs = await loadStringConfigs(device.id)
     await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
     await updateHourlyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)

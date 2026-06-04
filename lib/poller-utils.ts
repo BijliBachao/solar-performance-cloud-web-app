@@ -5,6 +5,8 @@ import {
   canCompare, computeAvailability, p2pToHealthScore, readingSignature, VENDOR_TS_MAX_FUTURE_SKEW_MS,
   MIN_PEERS_FOR_COMPARISON, MIN_AVG_FOR_COMPARISON,
   MAX_STRING_CURRENT_A, MAX_STRING_POWER_W, MS_PER_HOUR,
+  MIN_PRODUCTIVE_HOURS_FOR_DAILY_SCORE, MIN_PRODUCTIVE_POWER_W,
+  type DeviceWriteAction,
 } from '@/lib/string-health'
 import { scoreDailyP2P, type DailyStringInput } from '@/lib/string-health-daily'
 
@@ -13,9 +15,10 @@ import { scoreDailyP2P, type DailyStringInput } from '@/lib/string-health-daily'
  * page + NOC). Computes the reading signature; if it changed vs prevSig, stamps
  * reading_changed_at=now + stores the new sig. Stores vendor_last_data_at when
  * provided AND not future-skewed beyond tolerance (fast logger clocks are
- * garbage — see VENDOR_TS_MAX_FUTURE_SKEW_MS). Issues AT MOST ONE
- * devices.update, and NONE when nothing changed (a frozen feed produces no
- * write churn after its first stall cycle).
+ * garbage — see VENDOR_TS_MAX_FUTURE_SKEW_MS). ALWAYS stamps last_seen_at —
+ * "the poll cycle saw this device in the vendor API" — which is what keeps
+ * frozen (still seen, values stuck) distinguishable from offline (gone) now
+ * that the write gate stops re-writing duplicate measurements.
  *
  * prevSig is passed in by the caller (pollers already select the device row) to
  * avoid an extra read. Restart-safe because the prior sig lives in the DB.
@@ -27,7 +30,9 @@ export async function recordDeviceFreshness(
   prevSig: string | null,
 ): Promise<void> {
   const sig = readingSignature(strings)
-  const data: { vendor_last_data_at?: Date; reading_changed_at?: Date; last_reading_sig?: string } = {}
+  const data: { vendor_last_data_at?: Date; reading_changed_at?: Date; last_reading_sig?: string; last_seen_at: Date } = {
+    last_seen_at: new Date(),
+  }
   // Reject vendor timestamps in the future beyond clock-skew tolerance — a
   // fast logger clock (seen live: Growatt ~2h ahead) would otherwise pin the
   // device "live" forever. reading_changed_at (our clock) stays the honest signal.
@@ -38,8 +43,46 @@ export async function recordDeviceFreshness(
     data.reading_changed_at = new Date()
     data.last_reading_sig = sig
   }
-  if (Object.keys(data).length === 0) return
   await prisma.devices.update({ where: { id: deviceId }, data })
+}
+
+/**
+ * Lighter sibling of recordDeviceFreshness for SKIPPED writes (duplicate
+ * replay / night phantom / stale vendor feed): stamps last_seen_at (+ the
+ * vendor ts when valid) but deliberately does NOT touch the reading signature
+ * or reading_changed_at — untrusted data must not look like fresh data.
+ */
+export async function recordDeviceSeen(
+  deviceId: string,
+  vendorLastDataAt: Date | null,
+): Promise<void> {
+  const data: { last_seen_at: Date; vendor_last_data_at?: Date } = { last_seen_at: new Date() }
+  if (vendorLastDataAt && vendorLastDataAt.getTime() <= Date.now() + VENDOR_TS_MAX_FUTURE_SKEW_MS) {
+    data.vendor_last_data_at = vendorLastDataAt
+  }
+  await prisma.devices.update({ where: { id: deviceId }, data })
+}
+
+// One log line per device per stall (and one on recovery) — same pattern as the
+// CSI/Solis stale-feed logging. Keyed by deviceId (globally unique across providers).
+const writeGateLogState = new Map<string, DeviceWriteAction>()
+
+/** Log write-gate transitions without per-cycle spam. Call with EVERY gate
+ *  verdict (including 'write', which logs recovery + clears state). */
+export function logWriteGate(provider: string, deviceId: string, action: DeviceWriteAction): void {
+  const prev = writeGateLogState.get(deviceId)
+  if (action === 'write') {
+    if (prev) console.log(`[${provider}] ${deviceId} write gate cleared (${prev}) — resuming writes`)
+    writeGateLogState.delete(deviceId)
+    return
+  }
+  if (prev !== action) {
+    writeGateLogState.set(deviceId, action)
+    const why = action === 'skip_duplicate'
+      ? 'duplicate snapshot (vendor replaying cached data) — skipping writes until values change'
+      : 'night phantom (sun down but vendor reports production) — skipping replayed daytime data'
+    console.warn(`[${provider}] ${deviceId} write gate: ${why}`)
+  }
 }
 
 /** Safe parseFloat that returns 0 instead of NaN */
@@ -559,12 +602,28 @@ export async function updateDailyAggregates(
       hourly: Array.from(hourBuckets.entries()).map(([hour, b]) => ({ hour, avg_power_W: b.sum / b.n })),
     }
   })
-  const p2pByString = new Map(
-    scoreDailyP2P(dailyInputs, {
-      deviceId,
-      inverterModel: dev?.model ?? null,
-      inverterMaxStrings: dev?.max_strings ?? null,
-    }).map((r) => [r.string_number, r]),
+  // ── Daily scoring gate (DQ v2) ────────────────────────────────────
+  // A day is only scoreable once it has real production breadth: at least
+  // MIN_PRODUCTIVE_HOURS distinct hours where some string averaged above the
+  // power floor. Below that (e.g., the first poll cycles after PKT midnight,
+  // or a day of pure night zeros) health_score stays NULL → the donut shows
+  // honest "no data" instead of criticals computed from scraps.
+  const productiveHours = new Set<number>()
+  for (const di of dailyInputs) {
+    for (const h of di.hourly) {
+      if (h.avg_power_W > MIN_PRODUCTIVE_POWER_W) productiveHours.add(h.hour)
+    }
+  }
+  const dayIsScoreable = productiveHours.size >= MIN_PRODUCTIVE_HOURS_FOR_DAILY_SCORE
+  type P2PResult = ReturnType<typeof scoreDailyP2P>[number]
+  const p2pByString = new Map<number, P2PResult>(
+    dayIsScoreable
+      ? scoreDailyP2P(dailyInputs, {
+          deviceId,
+          inverterModel: dev?.model ?? null,
+          inverterMaxStrings: dev?.max_strings ?? null,
+        }).map((r) => [r.string_number, r] as [number, P2PResult])
+      : [],
   )
 
   // Batch upserts

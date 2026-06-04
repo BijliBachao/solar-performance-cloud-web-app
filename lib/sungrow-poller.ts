@@ -2,7 +2,9 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { SungrowClient } from '@/lib/sungrow-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, safeObject, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, safeObject, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate } from '@/lib/poller-utils'
+import { classifyDeviceWrite, FLEET_DEFAULT_LAT, FLEET_DEFAULT_LNG } from '@/lib/string-health'
+import { isDaylight } from '@/lib/solar-geometry'
 
 let lastPlantSync = 0
 let lastDeviceSync = 0
@@ -211,6 +213,9 @@ async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
       plant_id: true,
       max_strings: true,
       last_reading_sig: true,
+      // Plant coords for the night write-gate (fleet-default fallback applied
+      // at the gate — never trust fail-open-day for write decisions).
+      plants: { select: { latitude: true, longitude: true } },
     },
   })
 
@@ -231,7 +236,10 @@ async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
 
 async function processSungrowDevice(
   client: SungrowClient,
-  device: { id: string; plant_id: string; max_strings: number | null; last_reading_sig: string | null },
+  device: {
+    id: string; plant_id: string; max_strings: number | null; last_reading_sig: string | null
+    plants: { latitude: unknown; longitude: unknown } | null
+  },
 ): Promise<void> {
   const results = await client.getDeviceRealTimeData(
     [device.id], // device_sn
@@ -304,6 +312,33 @@ async function processSungrowDevice(
   }
 
   if (measurements.length > 0) {
+    const gateStrings = measurements.map((m) => ({
+      string_number: m.string_number,
+      voltage: Number(m.voltage),
+      current: Number(m.current),
+      power: Number(m.power),
+    }))
+
+    // ── Write gate (DQ v2) ─────────────────────────────────────────
+    // Sungrow's realtime endpoint replays the last daytime snapshot when a
+    // datalogger goes quiet (confirmed live: identical-to-0.01W values every
+    // 5 min for days). No vendor data-timestamp exists to gate on, so the gate
+    // runs on the reading signature + the sun position at the plant.
+    const sunUp = isDaylight(
+      device.plants?.latitude != null ? Number(device.plants.latitude) : FLEET_DEFAULT_LAT,
+      device.plants?.longitude != null ? Number(device.plants.longitude) : FLEET_DEFAULT_LNG,
+      new Date(),
+    )
+    const gate = classifyDeviceWrite(gateStrings, device.last_reading_sig, sunUp)
+    logWriteGate('Sungrow', device.id, gate)
+    if (gate !== 'write') {
+      // Still "saw" the device this cycle (frozen ≠ offline) — but the
+      // untrusted snapshot must not advance the reading signature, create
+      // alerts, feed aggregates, or refresh the native daily counter.
+      await recordDeviceSeen(device.id, null)
+      return
+    }
+
     await prisma.string_measurements.createMany({
       data: measurements.map((m) => ({
         ...m,
@@ -313,17 +348,7 @@ async function processSungrowDevice(
 
     // Connectivity freshness: value-change signature from the strings we just
     // parsed. Sungrow's getDeviceRealTimeData has no data-timestamp, so pass null.
-    await recordDeviceFreshness(
-      device.id,
-      measurements.map((m) => ({
-        string_number: m.string_number,
-        voltage: Number(m.voltage),
-        current: Number(m.current),
-        power: Number(m.power),
-      })),
-      null,
-      device.last_reading_sig,
-    )
+    await recordDeviceFreshness(device.id, gateStrings, null, device.last_reading_sig)
 
     const stringConfigs = await loadStringConfigs(device.id)
     await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)

@@ -238,6 +238,59 @@ export function readingSignature(
   return fnv(body, 0x811c9dc5) + fnv(body, 0x9e3779b1)
 }
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Device write gate (DQ v2, 2026-06-05)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Root cause (live finding 2026-06-05 00:15 PKT): when a datalogger goes
+// quiet, several vendor clouds (Sungrow/Growatt/Huawei confirmed) keep
+// serving the LAST daytime snapshot from their realtime endpoints. Our
+// pollers ingested it every cycle → ~192k phantom night rows/week, phantom
+// kWh in daily aggregates, and brand-new-day P2P scores computed from
+// yesterday-afternoon variance ("7 critical strings" at midnight).
+
+/** A real string produces ~0 W at night (sensor noise < tens of watts).
+ *  Above this with the sun down, the snapshot is a replayed daytime reading. */
+export const NIGHT_MAX_PHANTOM_W = 50
+
+/** Daily P2P scores need at least this many distinct productive hours before
+ *  they mean anything — also prevents a brand-new PKT day from being scored
+ *  off its first scraps of (possibly garbage) data. */
+export const MIN_PRODUCTIVE_HOURS_FOR_DAILY_SCORE = 2
+/** An hour counts as "productive" when a string's hourly avg power exceeds this. */
+export const MIN_PRODUCTIVE_POWER_W = 10
+
+export type DeviceWriteAction = 'write' | 'skip_duplicate' | 'skip_night_phantom'
+
+/**
+ * Should this device's snapshot be written to string_measurements?
+ *
+ *   skip_duplicate     — signature identical to the previous poll. Real solar
+ *     NEVER repeats every string to 0.01 W twice in a row; identical = the
+ *     vendor replayed a cached snapshot (or republished an unchanged sample —
+ *     Solis slow-publisher). Nothing new to store. Safe for energy math: the
+ *     trapezoidal integral skips gaps > 1h, so a skipped frozen stretch adds
+ *     ZERO phantom kWh instead of hours of it.
+ *   skip_night_phantom — sun is down at the plant but the snapshot claims real
+ *     production (> NIGHT_MAX_PHANTOM_W on any string): a replayed daytime
+ *     reading that happens to differ from the previous one. PV panels do not
+ *     produce in the dark. (IEC 61724-1 §12 night gate, write-path wiring.)
+ *   write              — everything else, including honest night zeros.
+ *
+ * Order matters: duplicate first — it's the more specific diagnosis and needs
+ * no sun calculation. Callers must pass sunUp computed with the FLEET-DEFAULT
+ * coordinate fallback (not isDaylight's fail-open-day) so coordless plants are
+ * still night-gated.
+ */
+export function classifyDeviceWrite(
+  strings: { string_number: number; voltage: number; current: number; power: number }[],
+  prevSig: string | null,
+  sunUp: boolean,
+): DeviceWriteAction {
+  if (strings.length > 0 && readingSignature(strings) === prevSig) return 'skip_duplicate'
+  if (!sunUp && strings.some((s) => s.power > NIGHT_MAX_PHANTOM_W)) return 'skip_night_phantom'
+  return 'write'
+}
+
 /**
  * Inverter connectivity status.
  * @param effectiveFreshAtMs newest evidence of genuinely-new data
