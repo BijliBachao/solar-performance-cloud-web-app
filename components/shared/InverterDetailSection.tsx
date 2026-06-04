@@ -603,8 +603,9 @@ export function InverterDetailSection({
           )}
         </div>
 
-        {/* ZONE 3 — String health proportion bar + inline legend */}
-        {totalStrings > 0 && (
+        {/* ZONE 3 — String health proportion bar + inline legend.
+            Hidden at night — the proportions are verdicts on stale dusk data. */}
+        {totalStrings > 0 && connectivity !== 'idle' && (
           <div>
             <div className="flex items-center justify-between text-[10px] mb-1.5">
               <span className="font-bold uppercase tracking-widest text-slate-400">String Health</span>
@@ -758,7 +759,7 @@ export function InverterDetailSection({
             <div className="mb-3">
               <SectionLabel>String Health Map</SectionLabel>
             </div>
-            <StringHealthMatrix strings={strings} avgCurrent={avgCurrent} />
+            <StringHealthMatrix strings={strings} avgCurrent={avgCurrent} nightIdle={connectivity === 'idle'} />
           </div>
         )}
 
@@ -767,7 +768,7 @@ export function InverterDetailSection({
           <div className="py-4 border-t border-slate-200">
             <div className="flex items-center justify-between mb-3">
               <SectionLabel icon={Table2}>String Comparison</SectionLabel>
-              {avgCurrent > 0 && (
+              {avgCurrent > 0 && connectivity !== 'idle' && (
                 <span className="text-[10px] text-slate-400 font-mono">
                   Avg: {avgCurrent.toFixed(2)}A
                 </span>
@@ -820,7 +821,7 @@ export function InverterDetailSection({
               </div>
             </details>
             <div className="overflow-x-auto">
-              <StringComparisonTable strings={strings} />
+              <StringComparisonTable strings={strings} nightIdle={connectivity === 'idle'} />
             </div>
           </div>
         )}
@@ -878,7 +879,7 @@ export function InverterDetailSection({
         </div>
 
         {/* ── Collapsible: Fault Diagnosis ─────────────────────── */}
-        {strings.length > 0 && (summary.warning > 0 || summary.critical > 0 || summary.openCircuit > 0 || summary.disconnected > 0) && (
+        {strings.length > 0 && connectivity !== 'idle' && (summary.warning > 0 || summary.critical > 0 || summary.openCircuit > 0 || summary.disconnected > 0) && (
           <CollapsibleSection
             title="Fault Diagnosis"
             icon={Stethoscope}

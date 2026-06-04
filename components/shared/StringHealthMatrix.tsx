@@ -27,6 +27,8 @@ interface StringData {
 interface StringHealthMatrixProps {
   strings: StringData[]
   avgCurrent: number
+  /** Sun down (device idle) — render calm slate cells, suspend verdicts. */
+  nightIdle?: boolean
 }
 
 /**
@@ -39,12 +41,12 @@ interface StringHealthMatrixProps {
  * Cell tint + dot come from STATUS_STYLES so colors always match
  * the rest of the app.
  */
-export function StringHealthMatrix({ strings, avgCurrent }: StringHealthMatrixProps) {
+export function StringHealthMatrix({ strings, avgCurrent, nightIdle = false }: StringHealthMatrixProps) {
   return (
     <TooltipProvider delayDuration={200}>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-1.5">
         {strings.map((s) => {
-          const style = STATUS_STYLES[statusKeyFromStringStatus(s.status)]
+          const style = STATUS_STYLES[nightIdle ? 'idle' : statusKeyFromStringStatus(s.status)]
           const deviation = avgCurrent > 0
             ? ((s.current - avgCurrent) / avgCurrent) * 100
             : 0
@@ -62,8 +64,8 @@ export function StringHealthMatrix({ strings, avgCurrent }: StringHealthMatrixPr
                     // from healthy/warning/critical (status-based) cells. The
                     // string is producing energy, just not peer-comparable.
                     // Colors come from STATUS_STYLES['peer-excluded'] (single source).
-                    s.peer_excluded ? STATUS_STYLES['peer-excluded'].bg : style.bg,
-                    s.peer_excluded ? STATUS_STYLES['peer-excluded'].border : style.border,
+                    s.peer_excluded && !nightIdle ? STATUS_STYLES['peer-excluded'].bg : style.bg,
+                    s.peer_excluded && !nightIdle ? STATUS_STYLES['peer-excluded'].border : style.border,
                   )}
                 >
                   {/* Row 1 — String number + status dot.
@@ -77,7 +79,7 @@ export function StringHealthMatrix({ strings, avgCurrent }: StringHealthMatrixPr
                     <span
                       className={cn(
                         'w-1.5 h-1.5 rounded-full',
-                        s.peer_excluded && s.status === 'NORMAL'
+                        s.peer_excluded && s.status === 'NORMAL' && !nightIdle
                           ? STATUS_STYLES['peer-excluded'].dot
                           : style.dot,
                       )}
@@ -104,11 +106,13 @@ export function StringHealthMatrix({ strings, avgCurrent }: StringHealthMatrixPr
                           : 'text-slate-500',
                       )}
                     >
-                      {s.status === 'OPEN_CIRCUIT'
-                        ? '0 A'
-                        : s.status === 'OFFLINE'
-                          ? 'Offline'
-                          : deviationStr}
+                      {nightIdle
+                        ? 'night'
+                        : s.status === 'OPEN_CIRCUIT'
+                          ? '0 A'
+                          : s.status === 'OFFLINE'
+                            ? 'Offline'
+                            : deviationStr}
                     </span>
                   </div>
                 </div>
@@ -117,7 +121,11 @@ export function StringHealthMatrix({ strings, avgCurrent }: StringHealthMatrixPr
                 <div className="space-y-1 font-mono min-w-[160px]">
                   <p className="font-bold text-sm flex items-center justify-between border-b border-slate-100 pb-1 mb-1">
                     <span>PV{s.string_number}</span>
-                    {s.peer_excluded && s.status === 'NORMAL' ? (
+                    {nightIdle ? (
+                      <span className={cn('text-[10px] font-bold uppercase tracking-wider', STATUS_STYLES.idle.fg)}>
+                        Night
+                      </span>
+                    ) : s.peer_excluded && s.status === 'NORMAL' ? (
                       <span className={cn(
                         'text-[10px] font-bold uppercase tracking-wider',
                         STATUS_STYLES['peer-excluded'].fg,
@@ -151,9 +159,11 @@ export function StringHealthMatrix({ strings, avgCurrent }: StringHealthMatrixPr
                   <div className="flex justify-between">
                     <span className="text-slate-500">Gap</span>
                     <span>
-                      {s.peer_excluded || s.gap_percent == null
-                        ? '— (peer-excluded)'
-                        : `${s.gap_percent.toFixed(1)}%`}
+                      {nightIdle
+                        ? '— (night)'
+                        : s.peer_excluded || s.gap_percent == null
+                          ? '— (peer-excluded)'
+                          : `${s.gap_percent.toFixed(1)}%`}
                     </span>
                   </div>
                 </div>

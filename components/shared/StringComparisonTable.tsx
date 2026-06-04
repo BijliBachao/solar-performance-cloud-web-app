@@ -26,6 +26,11 @@ interface StringData {
 
 interface StringComparisonTableProps {
   strings: StringData[]
+  /** Sun is down at this plant (device connectivity = idle). Status verdicts
+   *  are suspended: 0 A at night is CORRECT, not a fault — labeling sleeping
+   *  strings "0 A Fault" was the same sun-blind disease as the old pills
+   *  (found live on NE=86133226, 18 false fault rows at 4 AM). */
+  nightIdle?: boolean
 }
 
 /**
@@ -59,7 +64,7 @@ function gapBarColor(gap: number): string {
   return 'bg-emerald-500'
 }
 
-export function StringComparisonTable({ strings }: StringComparisonTableProps) {
+export function StringComparisonTable({ strings, nightIdle = false }: StringComparisonTableProps) {
   return (
     <div className="border border-slate-200 rounded-md overflow-hidden">
       <table className="w-full text-[12px]">
@@ -102,7 +107,9 @@ export function StringComparisonTable({ strings }: StringComparisonTableProps) {
         {/* ── Rows ───────────────────────────────────────────────── */}
         <tbody className="divide-y divide-slate-100">
           {strings.map((s) => {
-            const key = statusKeyFromStringStatus(s.status)
+            // Night: every string renders the calm idle style — fault/peer
+            // verdicts only mean something while the sun is up.
+            const key = nightIdle ? 'idle' as const : statusKeyFromStringStatus(s.status)
             const style = STATUS_STYLES[key]
             // Peer-excluded strings are not gap-comparable — gap_percent is null
             // from the API. Treat as 0 for the bar (which we hide anyway) so the
@@ -117,7 +124,7 @@ export function StringComparisonTable({ strings }: StringComparisonTableProps) {
                   // Peer-excluded rows skip the red/amber tint — they're not
                   // peer-comparable, so a "below peers" tint would be misleading.
                   // Tint comes from STATUS_STYLES['peer-excluded'] (single source).
-                  s.peer_excluded ? STATUS_STYLES['peer-excluded'].bg : ROW_TINT[s.status],
+                  nightIdle ? '' : s.peer_excluded ? STATUS_STYLES['peer-excluded'].bg : ROW_TINT[s.status],
                 )}
               >
                 {/* String identifier */}
@@ -163,7 +170,7 @@ export function StringComparisonTable({ strings }: StringComparisonTableProps) {
                     Peer-excluded strings show "—" since they're not in the peer
                     pool (non-standard orientation/shaded — comparison is unfair). */}
                 <td className="px-3 py-2 text-right">
-                  {s.peer_excluded ? (
+                  {s.peer_excluded || nightIdle ? (
                     <span className="font-mono text-slate-300">—</span>
                   ) : (
                     <div className="flex items-center justify-end gap-2">
@@ -186,7 +193,15 @@ export function StringComparisonTable({ strings }: StringComparisonTableProps) {
                     status is still respected for DISCONNECTED/OPEN_CIRCUIT.
                     Pill colors come from STATUS_STYLES['peer-excluded']. */}
                 <td className="px-3 py-2">
-                  {s.peer_excluded && s.status === 'NORMAL' ? (
+                  {nightIdle ? (
+                    <span className={cn(
+                      'inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider',
+                      STATUS_STYLES.idle.fg,
+                    )}>
+                      <span className={cn('w-1.5 h-1.5 rounded-full', STATUS_STYLES.idle.dot)} />
+                      Night
+                    </span>
+                  ) : s.peer_excluded && s.status === 'NORMAL' ? (
                     <span className={cn(
                       'inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider',
                       STATUS_STYLES['peer-excluded'].fg,
