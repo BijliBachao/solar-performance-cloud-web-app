@@ -832,7 +832,7 @@ export function InverterDetailSection({
             <div className="flex items-center justify-between mb-2">
               <SectionLabel>String Current Comparison</SectionLabel>
             </div>
-            <CurrentDeviationChart strings={strings} avgCurrent={avgCurrent} />
+            <CurrentDeviationChart strings={strings} avgCurrent={avgCurrent} nightIdle={connectivity === 'idle'} />
           </div>
         )}
 

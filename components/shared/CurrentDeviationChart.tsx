@@ -28,6 +28,12 @@ interface StringData {
 interface CurrentDeviationChartProps {
   strings: StringData[]
   avgCurrent: number
+  /** Sun down (device idle): bars stay — they're real residual readings and
+   *  the night-transparency window (a real leak shows as a tall bar) — but
+   *  ALL verdict paint is suspended: status colors/labels/counts, the avg
+   *  line, the "healthy zone" band, and above/below-avg stats are meaningless
+   *  judgments of sleep (Status Unification, 2026-06-05). */
+  nightIdle?: boolean
 }
 
 // Bar colors mirror STATUS_STYLES.*.dot (solid-500 family) so the chart stays
@@ -55,7 +61,12 @@ const STATUS_LABELS: Record<StringStatus, string> = {
   OFFLINE: 'Offline',
 }
 
-export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationChartProps) {
+const BAR_COLOR_NIGHT = '#94A3B8' // slate-400 — calm, verdict-free
+
+export function CurrentDeviationChart({ strings, avgCurrent, nightIdle = false }: CurrentDeviationChartProps) {
+  // Night: the avg of residual readings is not a benchmark — suppress every
+  // comparison derived from it.
+  const showAvg = avgCurrent > 0 && !nightIdle
   const data = strings.map((s) => ({
     name: `PV${s.string_number}`,
     current: s.current,
@@ -76,22 +87,27 @@ export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationC
 
   // Summary footer stats
   const total = strings.length
-  const aboveAvg = avgCurrent > 0
+  const aboveAvg = showAvg
     ? strings.filter((s) => s.current >= avgCurrent).length
     : 0
   const belowAvg = total - aboveAvg
 
   // Healthy band (±GAP_INFO% around avg) — gives viewers a "normal zone"
   const gapFrac = GAP_INFO / 100
-  const bandLow = avgCurrent > 0 ? avgCurrent * (1 - gapFrac) : 0
-  const bandHigh = avgCurrent > 0 ? avgCurrent * (1 + gapFrac) : 0
+  const bandLow = showAvg ? avgCurrent * (1 - gapFrac) : 0
+  const bandHigh = showAvg ? avgCurrent * (1 + gapFrac) : 0
 
   return (
     <div className="w-full">
       {/* ── Top row — inline legend + Avg readout ───────────────── */}
       <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-600">
-          {(['NORMAL', 'WARNING', 'CRITICAL', 'OPEN_CIRCUIT', 'OFFLINE'] as StringStatus[]).map((k) => (
+          {nightIdle ? (
+            <span className="flex items-center gap-1.5 text-slate-500">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: BAR_COLOR_NIGHT }} />
+              Night — residual readings shown; verdicts resume at sunrise
+            </span>
+          ) : (['NORMAL', 'WARNING', 'CRITICAL', 'OPEN_CIRCUIT', 'OFFLINE'] as StringStatus[]).map((k) => (
             <span key={k} className="flex items-center gap-1">
               <span
                 className="w-1.5 h-1.5 rounded-full"
@@ -112,7 +128,7 @@ export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationC
             </span>
           )}
         </div>
-        {avgCurrent > 0 && (
+        {showAvg && (
           <div className="text-[10px] font-mono text-slate-500 shrink-0">
             <span className="font-bold uppercase tracking-widest text-slate-400">Avg</span>
             <span className="mx-1 text-slate-300">┆</span>
@@ -129,7 +145,7 @@ export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationC
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 6, right: 12, left: 0, bottom: 4 }}>
             {/* Healthy band — ±GAP_INFO% around avg */}
-            {avgCurrent > 0 && (
+            {showAvg && (
               <ReferenceArea
                 y1={bandLow}
                 y2={bandHigh}
@@ -168,9 +184,11 @@ export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationC
               labelStyle={{ color: '#0F172A', fontWeight: 700, fontSize: 11 }}
               formatter={(value: number, _name: string, props: any) => {
                 const entry = props.payload
-                const label = entry.peer_excluded
-                  ? 'Non-standard'
-                  : (STATUS_LABELS[entry.status as StringStatus] || entry.status)
+                const label = nightIdle
+                  ? 'Night'
+                  : entry.peer_excluded
+                    ? 'Non-standard'
+                    : (STATUS_LABELS[entry.status as StringStatus] || entry.status)
                 return [
                   <span key="val" style={{ color: '#0F172A', fontFamily: 'monospace' }}>
                     <strong>{value.toFixed(2)} A</strong>
@@ -184,7 +202,7 @@ export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationC
             />
 
             {/* Avg reference line — no inline label (avg shown in header) */}
-            {avgCurrent > 0 && (
+            {showAvg && (
               <ReferenceLine
                 y={avgCurrent}
                 stroke="#F59E0B"
@@ -198,9 +216,11 @@ export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationC
                 <Cell
                   key={`cell-${index}`}
                   fill={
-                    entry.peer_excluded
-                      ? BAR_COLOR_PEER_EXCLUDED
-                      : BAR_COLOR_BY_STATUS[entry.status] ?? '#94A3B8'
+                    nightIdle
+                      ? BAR_COLOR_NIGHT
+                      : entry.peer_excluded
+                        ? BAR_COLOR_PEER_EXCLUDED
+                        : BAR_COLOR_BY_STATUS[entry.status] ?? '#94A3B8'
                   }
                 />
               ))}
@@ -215,7 +235,7 @@ export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationC
           <span className="font-mono font-semibold text-slate-900">{total}</span>
           <span> string{total !== 1 ? 's' : ''} total</span>
         </span>
-        {avgCurrent > 0 && (
+        {showAvg && (
           <>
             <span className="text-slate-300">·</span>
             <span>
@@ -229,11 +249,15 @@ export function CurrentDeviationChart({ strings, avgCurrent }: CurrentDeviationC
             </span>
           </>
         )}
-        <span className="text-slate-300">·</span>
-        <span className={cn('flex items-center gap-1')}>
-          <span className="w-2 h-2 rounded-sm bg-solar-gold/10 border border-solar-gold/30" />
-          <span>Healthy zone (±{GAP_INFO}%)</span>
-        </span>
+        {!nightIdle && (
+          <>
+            <span className="text-slate-300">·</span>
+            <span className={cn('flex items-center gap-1')}>
+              <span className="w-2 h-2 rounded-sm bg-solar-gold/10 border border-solar-gold/30" />
+              <span>Healthy zone (±{GAP_INFO}%)</span>
+            </span>
+          </>
+        )}
       </div>
     </div>
   )
