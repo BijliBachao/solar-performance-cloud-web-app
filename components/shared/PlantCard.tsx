@@ -135,7 +135,8 @@ export function PlantCard({ plant, basePath = '/dashboard/plants' }: PlantCardPr
                   <span className="text-xs font-mono font-semibold text-slate-500 ml-1">kW</span>
                 </>
               ) : liveStatus === 'IDLE' ? (
-                <span className="text-sm font-semibold text-slate-400">Standby</span>
+                // Status Unification: one vocabulary — 'Idle', never 'Standby'.
+                <span className="text-sm font-semibold text-slate-400">Idle</span>
               ) : (
                 '—'
               )}

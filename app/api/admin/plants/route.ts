@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest, requireRole, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
-import { PLANT_HEALTH_HEALTHY, PLANT_HEALTH_FAULTY } from '@/lib/string-health'
+import { type PlantOpStatus } from '@/lib/string-health'
+import { loadPlantOpStatuses } from '@/lib/donut-data-loader'
 
 export async function GET(request: NextRequest) {
   try {
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
     // count of real, monitored strings per plant.
     const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
 
-    const [unresolvedByPlant, todayByPlant, lastReadingByDevice, activeStrings] = await Promise.all([
+    const [unresolvedByPlant, todayByPlant, lastReadingByDevice, activeStrings, opStatusByPlant] = await Promise.all([
       prisma.alerts.groupBy({
         by: ['plant_id', 'severity'],
         where: { plant_id: { in: plantIds }, resolved_at: null },
@@ -77,6 +78,10 @@ export async function GET(request: NextRequest) {
             by: ['plant_id', 'device_id', 'string_number'],
             where: { plant_id: { in: plantIds }, date: { gte: fourteenDaysAgo } },
           }),
+      // Status Unification: ONE plant status from the connectivity engine
+      // (sun-aware, gate-aware, coord-clamped) — replaces both the vendor
+      // health_state counts AND the page's old sun-blind reading-age recipe.
+      loadPlantOpStatuses(),
     ])
 
     // One groupBy row per distinct (plant, device, string) → tally per plant.
@@ -130,6 +135,8 @@ export async function GET(request: NextRequest) {
         alerts_today: todayMap.get(p.id) || emptyAlerts,
         alerts_unresolved: unresolvedMap.get(p.id) || emptyAlerts,
         last_reading_at: lastReadingByPlant.get(p.id)?.toISOString() ?? null,
+        // The unified status — the ONLY status word any screen should render.
+        op_status: (opStatusByPlant.get(p.id) ?? 'offline') as PlantOpStatus,
       }
     })
 
@@ -165,14 +172,19 @@ export async function GET(request: NextRequest) {
     })
     const providers = allForCounts.map(g => ({ provider: g.provider, count: g._count }))
 
-    // Stats from current filtered dataset
+    // Stats from current filtered dataset. Status counts come from the
+    // UNIFIED op_status — the header and the table rows below it now agree
+    // by construction (they read the same field).
+    const countOp = (s: PlantOpStatus) => formatted.filter(p => p.op_status === s).length
     const stats = {
       total: formatted.length,
       assigned: formatted.filter(p => p.assigned_org !== null).length,
       unassigned: formatted.filter(p => p.assigned_org === null).length,
-      healthy: formatted.filter(p => p.health_state === PLANT_HEALTH_HEALTHY).length,
-      faulty: formatted.filter(p => p.health_state === PLANT_HEALTH_FAULTY).length,
-      disconnected: formatted.filter(p => p.health_state !== PLANT_HEALTH_HEALTHY && p.health_state !== PLANT_HEALTH_FAULTY).length,
+      live: countOp('live'),
+      idle: countOp('idle'),
+      frozen: countOp('frozen'),
+      offline: countOp('offline'),
+      faulty: countOp('faulty'),
       plants_with_alerts: formatted.filter(p => p.alerts_unresolved.total > 0).length,
     }
 

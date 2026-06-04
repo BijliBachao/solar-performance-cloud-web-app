@@ -15,7 +15,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { Search, Loader2, ArrowLeft, ChevronDown, ChevronRight } from 'lucide-react'
-import { providerBadge, statusKeyFromPlantHealth } from '@/lib/design-tokens'
+import { providerBadge, statusKeyFromPlantOp, STATUS_STYLES } from '@/lib/design-tokens'
+import { PLANT_OP_LABEL, type PlantOpStatus } from '@/lib/string-health'
 
 interface AlertCounts { critical: number; warning: number; info: number; total: number }
 
@@ -32,6 +33,9 @@ interface Plant {
   string_count: number
   alerts_today: AlertCounts
   alerts_unresolved: AlertCounts
+  /** Unified operational status (Status Unification 2026-06-05) — the ONLY
+   *  status word this page renders. Same engine as the NOC. */
+  op_status: PlantOpStatus
 }
 
 interface Organization { id: string; name: string; status: string }
@@ -40,13 +44,14 @@ interface PlantStats {
   total: number
   assigned: number
   unassigned: number
-  healthy: number
+  live: number
+  idle: number
+  frozen: number
+  offline: number
   faulty: number
-  disconnected: number
   plants_with_alerts: number
 }
 
-type StatusKey = 'healthy' | 'idle' | 'stale' | 'offline' | 'faulty'
 type SortKey = 'name' | 'last_reading' | 'capacity' | 'assigned' | 'provider'
 type SortDir = 'asc' | 'desc'
 
@@ -59,7 +64,7 @@ export default function AdminPlantsPage() {
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [providerFilter, setProviderFilter] = useState('ALL')
   const [providers, setProviders] = useState<Array<{ provider: string; count: number }>>([])
-  const [stats, setStats] = useState<PlantStats>({ total: 0, assigned: 0, unassigned: 0, healthy: 0, faulty: 0, disconnected: 0, plants_with_alerts: 0 })
+  const [stats, setStats] = useState<PlantStats>({ total: 0, assigned: 0, unassigned: 0, live: 0, idle: 0, frozen: 0, offline: 0, faulty: 0, plants_with_alerts: 0 })
 
   const [assignPlant, setAssignPlant] = useState<Plant | null>(null)
   const [orgs, setOrgs] = useState<Organization[]>([])
@@ -186,41 +191,15 @@ export default function AdminPlantsPage() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   }
 
-  // Combined plant status: worst-of (health, reading freshness). A "healthy"
-  // plant whose last reading was 4 hours ago is operationally offline.
-  const plantStatus = (plant: Plant): { key: StatusKey; label: string; relative: string } => {
-    const relative = relativeTime(plant.last_reading_at)
-    const lastReading = plant.last_reading_at ? new Date(plant.last_reading_at) : null
-    const ageMin = lastReading ? Math.floor((Date.now() - lastReading.getTime()) / 60000) : Infinity
-
-    let readingKey: 'healthy' | 'idle' | 'stale' | 'offline' = 'healthy'
-    if (!lastReading) readingKey = 'offline'
-    else if (ageMin > 60) readingKey = 'offline'
-    else if (ageMin > 15) readingKey = 'stale'
-    else if (ageMin > 5) readingKey = 'idle'
-
-    // Only flag "Faulty" when the centralized health helper says so AND we
-    // have recent data — a stale plant is "Offline", not "Faulty", regardless
-    // of the cached health flag. PLANT_HEALTH_HEALTHY=3, FAULTY=2 (not 1) —
-    // never compare against magic numbers, always go through statusKeyFromPlantHealth.
-    const healthKey = statusKeyFromPlantHealth(plant.health_state)
-    if (healthKey === 'critical' && lastReading && ageMin <= 60) {
-      return { key: 'faulty', label: 'Faulty', relative }
-    }
-    if (readingKey === 'offline') return { key: 'offline', label: 'Offline', relative }
-    if (readingKey === 'stale')   return { key: 'stale',   label: 'Stale',   relative }
-    if (readingKey === 'idle')    return { key: 'idle',    label: 'Idle',    relative }
-    return { key: 'healthy', label: 'Healthy', relative }
-  }
-
-  // Status word colour. Time-ago always slate-400 mono.
-  const statusColor = (key: StatusKey): string => {
-    if (key === 'healthy') return 'text-emerald-600'
-    if (key === 'idle')    return 'text-slate-700'
-    if (key === 'stale')   return 'text-amber-600'
-    if (key === 'offline') return 'text-slate-400'
-    return 'text-rose-600'  // faulty
-  }
+  // Status Unification (2026-06-05): the old page-local recipe (reading age
+  // 5/15/60 min, sun-blind — it marked the whole sleeping fleet "Offline"
+  // every night) is GONE. The server computes op_status from the same
+  // connectivity engine the NOC uses; this page only renders it.
+  const plantStatus = (plant: Plant): { label: string; cls: string; relative: string } => ({
+    label: PLANT_OP_LABEL[plant.op_status],
+    cls: STATUS_STYLES[statusKeyFromPlantOp(plant.op_status)].fg,
+    relative: relativeTime(plant.last_reading_at),
+  })
 
   const issueColor = (counts: AlertCounts): string => {
     if (counts.critical > 0) return 'text-rose-600'
@@ -346,21 +325,31 @@ export default function AdminPlantsPage() {
             </Button>
           </div>
 
-          {/* Inline counters — Stripe/Linear style. Numbers carry semantic colour, labels are muted. */}
+          {/* Inline counters — Stripe/Linear style. Numbers carry semantic
+              colour, labels are muted. Status counts use the SAME unified
+              op_status as the table rows below — they agree by construction. */}
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 mb-4 text-sm">
-            <Counter n={stats.total}                label="total"      color="text-slate-900" />
-            <Counter n={stats.healthy}              label="healthy"    color="text-emerald-600" />
-            {stats.faulty > 0 && (
-              <Counter n={stats.faulty}             label="faulty"     color="text-rose-600" />
+            <Counter n={stats.total}                label="total"        color="text-slate-900" />
+            {stats.live > 0 && (
+              <Counter n={stats.live}               label="live"         color="text-emerald-600" />
             )}
-            {stats.disconnected > 0 && (
-              <Counter n={stats.disconnected}       label="offline"    color="text-slate-500" />
+            {stats.idle > 0 && (
+              <Counter n={stats.idle}               label="idle · night" color="text-slate-500" />
+            )}
+            {stats.frozen > 0 && (
+              <Counter n={stats.frozen}             label="frozen feed"  color="text-orange-600" />
+            )}
+            {stats.offline > 0 && (
+              <Counter n={stats.offline}            label="offline"      color="text-slate-400" />
+            )}
+            {stats.faulty > 0 && (
+              <Counter n={stats.faulty}             label="faulty"       color="text-rose-600" />
             )}
             {stats.unassigned > 0 && (
-              <Counter n={stats.unassigned}         label="unassigned" color="text-amber-600" />
+              <Counter n={stats.unassigned}         label="unassigned"   color="text-amber-600" />
             )}
             {stats.plants_with_alerts > 0 && (
-              <Counter n={stats.plants_with_alerts} label="with issues" color="text-rose-600" />
+              <Counter n={stats.plants_with_alerts} label="with issues"  color="text-rose-600" />
             )}
           </div>
 
@@ -492,7 +481,7 @@ export default function AdminPlantsPage() {
                       {/* Status — log-line: word in colour, time-ago in mono slate */}
                       <TableCell className="px-4 py-2.5">
                         <div className="flex items-baseline gap-2 text-sm">
-                          <span className={`font-medium ${statusColor(status.key)}`}>{status.label}</span>
+                          <span className={`font-medium ${status.cls}`}>{status.label}</span>
                           <span className="text-xs text-slate-400 font-mono tabular-nums">{status.relative}</span>
                         </div>
                       </TableCell>

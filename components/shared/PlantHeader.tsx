@@ -187,8 +187,9 @@ export function PlantHeader({
                     <span className="text-xl font-mono font-semibold text-slate-500">kW</span>
                   </>
                 ) : liveStatus === 'IDLE' ? (
+                  // Status Unification: one vocabulary — 'Idle', never 'Standby'.
                   <span className="text-3xl font-mono font-semibold text-slate-400 leading-none">
-                    Standby
+                    Idle
                   </span>
                 ) : (
                   <span className="text-3xl font-mono font-semibold text-slate-400 leading-none">

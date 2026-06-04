@@ -343,6 +343,55 @@ export function classifyConnectivity(
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Status Unification (2026-06-05) — ONE plant-status taxonomy, ONE engine
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Before this, four screens cooked four different statuses for the same
+// physical situation (a sleeping plant at 2 AM read: NOC "idle", /admin/plants
+// table "Offline" via a sun-blind >60-min recipe, its header "healthy" via
+// vendor health_state, plant card "Standby" via a power floor). One taxonomy
+// now serves every screen: Live · Idle (night) · Frozen feed · Offline ·
+// Faulty — derived from the per-device connectivity engine (classify-
+// Connectivity) + a vendor-fault overlay. Pages must NOT invent statuses.
+
+export type PlantOpStatus = 'live' | 'idle' | 'frozen' | 'offline' | 'faulty'
+
+/** The one user-facing vocabulary. Every screen renders these words. */
+export const PLANT_OP_LABEL: Record<PlantOpStatus, string> = {
+  live: 'Live',
+  idle: 'Idle · night',
+  frozen: 'Frozen feed',
+  offline: 'Offline',
+  faulty: 'Faulty',
+}
+
+/**
+ * Roll a plant's per-device connectivity statuses up to ONE plant status.
+ *
+ * Rules (worst-issue-first — a roll-up exists to surface problems):
+ *   faulty  — the vendor flags the plant faulty AND we have fresh contact
+ *             evidence (≥1 device live/frozen). A fault flag with no recent
+ *             data is unverifiable → fall through to connectivity (matches
+ *             the long-standing "stale plant is Offline, not Faulty" rule).
+ *   offline > frozen > live > idle — worst connectivity wins; a plant with
+ *             3 live + 1 offline inverter shows OFFLINE (operator must see
+ *             the problem; per-device detail lives on the plant page).
+ *   no devices → offline.
+ */
+export function rollupPlantStatus(
+  deviceStatuses: ConnectivityStatus[],
+  healthState: number | null | undefined,
+): PlantOpStatus {
+  if (deviceStatuses.length === 0) return 'offline'
+  const has = (s: ConnectivityStatus) => deviceStatuses.includes(s)
+  const freshContact = has('live') || has('frozen')
+  if (healthState === PLANT_HEALTH_FAULTY && freshContact) return 'faulty'
+  if (has('offline')) return 'offline'
+  if (has('frozen')) return 'frozen'
+  if (has('live')) return 'live'
+  return 'idle'
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Algorithm v2 — Self-Referencing Ratio (SR) / Performance-to-Peers (P2P)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Spec: Working/2_Sunday_24_May_2026/STRING-HEALTH-ALGORITHM-V2.md

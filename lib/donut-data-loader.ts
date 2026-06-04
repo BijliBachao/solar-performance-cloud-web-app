@@ -27,7 +27,12 @@ import {
 import { scoreLiveSr, type LiveStringInput } from '@/lib/string-health-live'
 import { deviceConnectivity } from '@/lib/connectivity'
 import { isDaylight } from '@/lib/solar-geometry'
-import { clampToFleetCoords, type ConnectivityStatus } from '@/lib/string-health'
+import {
+  clampToFleetCoords,
+  rollupPlantStatus,
+  type ConnectivityStatus,
+  type PlantOpStatus,
+} from '@/lib/string-health'
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Public types
@@ -897,6 +902,32 @@ export async function loadFleetConnectivity(orgId?: string): Promise<FleetConnec
   })
 
   return { counts, devices }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Status Unification: plant-level operational status (ONE engine, every screen)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/** Unified plant status for EVERY plant (device-less plants → 'offline').
+ *  Derived from the per-device connectivity engine + vendor-fault overlay via
+ *  rollupPlantStatus — the same truth the NOC shows, rolled up per plant.
+ *  Pages must consume this instead of inventing local status recipes. */
+export async function loadPlantOpStatuses(): Promise<Map<string, PlantOpStatus>> {
+  const [conn, healthRows] = await Promise.all([
+    loadFleetConnectivity(),
+    prisma.plants.findMany({ select: { id: true, health_state: true } }),
+  ])
+  const devicesByPlant = new Map<string, ConnectivityStatus[]>()
+  for (const d of conn.devices) {
+    const arr = devicesByPlant.get(d.plantCode) ?? []
+    arr.push(d.status)
+    devicesByPlant.set(d.plantCode, arr)
+  }
+  const out = new Map<string, PlantOpStatus>()
+  for (const p of healthRows) {
+    out.set(p.id, rollupPlantStatus(devicesByPlant.get(p.id) ?? [], p.health_state))
+  }
+  return out
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

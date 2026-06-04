@@ -23,6 +23,7 @@ import {
   type StringStatus,
   type AlertSeverity,
   type ConnectivityStatus,
+  type PlantOpStatus,
 } from '@/lib/string-health'
 
 // ━━━ STATUS STYLES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -171,6 +172,18 @@ export function statusKeyFromConnectivity(c: ConnectivityStatus): StatusKey {
     case 'frozen': return 'frozen'
     case 'offline': return 'offline'
     case 'idle': return 'idle'
+  }
+}
+
+/** Unified plant operational status → StatusKey (Status Unification 2026-06-05).
+ *  THE mapper for plant-level status chips on every screen. */
+export function statusKeyFromPlantOp(s: PlantOpStatus): StatusKey {
+  switch (s) {
+    case 'live': return 'healthy'
+    case 'idle': return 'idle'
+    case 'frozen': return 'frozen'
+    case 'offline': return 'offline'
+    case 'faulty': return 'critical'
   }
 }
 
