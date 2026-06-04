@@ -191,6 +191,18 @@ export function classifyVendorFeed(
 export type ConnectivityStatus = 'live' | 'frozen' | 'offline' | 'idle'
 
 /**
+ * Fleet-default coordinates (central Punjab, Pakistan) for CONNECTIVITY
+ * DISPLAY ONLY. The fleet is 100% Pakistani; when a plant has no coordinates,
+ * isDaylight()'s fail-open-to-daytime (correct for alarm gating — never
+ * suppress a real daytime fault) would make the plant's normal nightly
+ * silence read as offline/frozen all night on the NOC. Using the fleet
+ * centroid keeps night-time connectivity honest. Do NOT use these for alarm
+ * suppression or performance math.
+ */
+export const FLEET_DEFAULT_LAT = 31.5
+export const FLEET_DEFAULT_LNG = 74.3
+
+/**
  * Stable, order-independent signature of a device's strings. Identical readings
  * → identical signature; any V/I/P change → different signature. Pure JS hash
  * (no node:crypto) so this module stays safe to import from any bundle. Persist

@@ -3,6 +3,7 @@ import { getUserFromRequest, createErrorResponse, ApiAuthError } from '@/lib/api
 import { requirePlantAccess } from '@/lib/api-access'
 import { prisma } from '@/lib/prisma'
 import { deviceConnectivity } from '@/lib/connectivity'
+import { FLEET_DEFAULT_LAT, FLEET_DEFAULT_LNG } from '@/lib/string-health'
 import { isDaylight } from '@/lib/solar-geometry'
 
 export async function GET(
@@ -55,9 +56,12 @@ export async function GET(
       lastWriteRows.map((r) => [r.device_id, r._max.timestamp?.getTime() ?? null]),
     )
     const now = Date.now()
+    // Missing coords → fleet default (Pakistan centroid) for connectivity
+    // display, NOT isDaylight's fail-open-day (which would flag an
+    // un-geo-located plant offline/frozen all night). See FLEET_DEFAULT_LAT.
     const sunUp = isDaylight(
-      plant.latitude != null ? Number(plant.latitude) : NaN,
-      plant.longitude != null ? Number(plant.longitude) : NaN,
+      plant.latitude != null ? Number(plant.latitude) : FLEET_DEFAULT_LAT,
+      plant.longitude != null ? Number(plant.longitude) : FLEET_DEFAULT_LNG,
       new Date(now),
     )
     const devicesWithConnectivity = plant.devices.map((d) => {

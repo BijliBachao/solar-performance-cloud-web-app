@@ -27,7 +27,7 @@ import {
 import { scoreLiveSr, type LiveStringInput } from '@/lib/string-health-live'
 import { deviceConnectivity } from '@/lib/connectivity'
 import { isDaylight } from '@/lib/solar-geometry'
-import type { ConnectivityStatus } from '@/lib/string-health'
+import { FLEET_DEFAULT_LAT, FLEET_DEFAULT_LNG, type ConnectivityStatus } from '@/lib/string-health'
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Public types
@@ -828,9 +828,12 @@ export async function loadFleetConnectivity(orgId?: string): Promise<FleetConnec
 
   const counts = { live: 0, frozen: 0, offline: 0, idle: 0 }
   const devices: FleetConnectivityDevice[] = rows.map((r) => {
+    // Missing coords → fleet default (Pakistan centroid) for connectivity
+    // display, NOT isDaylight's fail-open-day (which would flag every
+    // un-geo-located plant offline/frozen all night). See FLEET_DEFAULT_LAT.
     const sunUp = isDaylight(
-      r.latitude != null ? Number(r.latitude) : NaN,
-      r.longitude != null ? Number(r.longitude) : NaN,
+      r.latitude != null ? Number(r.latitude) : FLEET_DEFAULT_LAT,
+      r.longitude != null ? Number(r.longitude) : FLEET_DEFAULT_LNG,
       new Date(now),
     )
     const conn = deviceConnectivity(
