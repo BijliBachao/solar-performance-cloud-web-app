@@ -3,7 +3,7 @@ import { getUserFromRequest, createErrorResponse, ApiAuthError } from '@/lib/api
 import { requirePlantAccess } from '@/lib/api-access'
 import { prisma } from '@/lib/prisma'
 import { deviceConnectivity } from '@/lib/connectivity'
-import { clampToFleetCoords } from '@/lib/string-health'
+import { clampToFleetCoords, rollupPlantStatus } from '@/lib/string-health'
 import { isDaylight } from '@/lib/solar-geometry'
 
 export async function GET(
@@ -78,10 +78,20 @@ export async function GET(
       return { ...d, connectivity: conn.status, effective_fresh_at: conn.effectiveFreshAt }
     })
 
+    // Status Unification: ONE plant-level status from the same engine as the
+    // NOC and /admin screens — the page renders this instead of juggling the
+    // power-floor pill + vendor health badge dualism.
+    const opStatus = rollupPlantStatus(
+      devicesWithConnectivity.map((d) => d.connectivity),
+      plant.health_state,
+    )
+
     return NextResponse.json({
       ...plant,
       devices: devicesWithConnectivity,
       last_data_at: latestMeasurement?.timestamp || null,
+      op_status: opStatus,
+      sun_up: sunUp,
     })
   } catch (error) {
     if (error instanceof ApiAuthError) return createErrorResponse(error)

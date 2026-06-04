@@ -8,10 +8,14 @@ import { cn } from '@/lib/utils'
 import {
   STATUS_STYLES,
   statusKeyFromPlantHealth,
+  statusKeyFromPlantOp,
   plantHealthLabel,
   providerBadge,
 } from '@/lib/design-tokens'
-import { HEALTH_HEALTHY, HEALTH_WARNING } from '@/lib/string-health'
+import {
+  HEALTH_HEALTHY, HEALTH_WARNING,
+  PLANT_OP_LABEL, type PlantOpStatus,
+} from '@/lib/string-health'
 import { Sparkline } from './Sparkline'
 
 type PlantLiveStatus = 'PRODUCING' | 'IDLE' | 'OFFLINE'
@@ -34,6 +38,9 @@ interface PlantHeaderProps {
   onRefresh: () => void
   // Plant-level live KPIs (optional — preview pages may omit)
   liveStatus?: PlantLiveStatus
+  /** Unified operational status (Status Unification). When provided, it is
+   *  THE one status chip — replacing the power-floor pill + vendor badge. */
+  opStatus?: PlantOpStatus
   currentPowerKw?: number
   todayEnergyKwh?: number
   utilizationPct?: number | null
@@ -82,6 +89,7 @@ export function PlantHeader({
   onToggleAutoRefresh,
   onRefresh,
   liveStatus = 'OFFLINE',
+  opStatus,
   currentPowerKw = 0,
   todayEnergyKwh = 0,
   utilizationPct = null,
@@ -156,7 +164,23 @@ export function PlantHeader({
                 <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
                   Plant Power
                 </span>
-                {liveStatus === 'PRODUCING' ? (
+                {/* THE status chip — Status Unification: one word from the
+                    same engine as the NOC. Falls back to the legacy
+                    power-floor pill only when opStatus isn't provided
+                    (preview pages). */}
+                {opStatus ? (
+                  <span className={cn('flex items-center gap-1 text-[10px] font-bold', STATUS_STYLES[statusKeyFromPlantOp(opStatus)].fg)}>
+                    {opStatus === 'live' ? (
+                      <span className="relative flex h-1.5 w-1.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                      </span>
+                    ) : (
+                      <span className={cn('w-1.5 h-1.5 rounded-full', STATUS_STYLES[statusKeyFromPlantOp(opStatus)].dot)} />
+                    )}
+                    {PLANT_OP_LABEL[opStatus].toUpperCase()}
+                  </span>
+                ) : liveStatus === 'PRODUCING' ? (
                   <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-700">
                     <span className="relative flex h-1.5 w-1.5">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
@@ -203,18 +227,23 @@ export function PlantHeader({
                 {plantName}
               </h1>
 
-              {/* Status & provider badges + inverter count */}
+              {/* Provider badge + inverter count. The vendor health badge is
+                  GONE when the unified opStatus chip is shown above — two
+                  status systems in one header was the consistency bug this
+                  page was famous for (Status Unification, 2026-06-05). */}
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span
-                  className={cn(
-                    'inline-flex items-center text-[9px] font-bold uppercase tracking-widest px-1.5 py-0 rounded-sm border',
-                    healthStyle.bg,
-                    healthStyle.fg,
-                    healthStyle.border,
-                  )}
-                >
-                  {plantHealthLabel(healthState).toUpperCase()}
-                </span>
+                {!opStatus && (
+                  <span
+                    className={cn(
+                      'inline-flex items-center text-[9px] font-bold uppercase tracking-widest px-1.5 py-0 rounded-sm border',
+                      healthStyle.bg,
+                      healthStyle.fg,
+                      healthStyle.border,
+                    )}
+                  >
+                    {plantHealthLabel(healthState).toUpperCase()}
+                  </span>
+                )}
                 {providerMeta && (
                   <span
                     className={cn(

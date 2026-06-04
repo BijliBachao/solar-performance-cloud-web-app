@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import {
   type StringStatus,
   type ConnectivityStatus,
+  type PlantOpStatus,
   STANDBY_POWER_FLOOR_KW,
   classifyPlantLive,
   HEALTH_HEALTHY,
@@ -60,6 +61,10 @@ interface PlantData {
   provider?: string
   last_synced: string | null
   last_data_at: string | null
+  /** Unified operational status (Status Unification) — THE status word. */
+  op_status?: PlantOpStatus
+  /** Sun above the daylight gate at the plant (coord-clamped, server-side). */
+  sun_up?: boolean
   devices: Array<{
     id: string
     device_name: string | null
@@ -280,11 +285,15 @@ export function PlantDetailView({
       ? Math.round((rawLivePowerKw / capacityKw) * 100)
       : null
 
-  // Healthy % across ALL strings reported (normal / total)
+  // Healthy % across ALL strings reported (normal / total). Night-aware: a
+  // sleeping plant has zero "NORMAL" live strings, so the live ratio would
+  // read a scary 0% every night — suppress it while the plant is idle (the
+  // settled donut below carries the real health picture).
+  const isNightIdle = plant?.op_status === 'idle'
   const healthPct =
-    allStrings.length > 0
-      ? Math.round((stringSummary.ok / allStrings.length) * 100)
-      : null
+    isNightIdle || allStrings.length === 0
+      ? null
+      : Math.round((stringSummary.ok / allStrings.length) * 100)
 
   const alertCount = alerts.length
 
@@ -343,6 +352,7 @@ export function PlantDetailView({
         onToggleAutoRefresh={() => setAutoRefresh(!autoRefresh)}
         onRefresh={handleRefresh}
         liveStatus={liveStatus}
+        opStatus={plant.op_status}
         currentPowerKw={displayPowerKw}
         todayEnergyKwh={todayEnergyKwh}
         utilizationPct={utilizationPct}
@@ -352,15 +362,27 @@ export function PlantDetailView({
         sparkline24h={plantPower24h}
       />
 
-      {/* Plant-level data freshness — colored by age of last_data_at
-          (normal <15m, amber 15m–2h, red >2h). */}
+      {/* Plant-level data freshness. NIGHT-AWARE (Status Unification): a
+          sleeping plant's data is HOURS old by design — alarm colors at
+          night trained operators to distrust this page. Idle → calm copy;
+          alarm colors only apply while the sun is up. */}
       <div className="px-4 sm:px-6 max-w-[1440px] mx-auto">
-        <div className="text-[11px] text-slate-500">
-          Data last received{' '}
-          <span className={cn('font-mono font-semibold', freshnessColor(plant.last_data_at))}>
-            {relativeTime(plant.last_data_at)}
-          </span>
-        </div>
+        {plant.op_status === 'idle' ? (
+          <div className="text-[11px] text-slate-500">
+            Idle · night — last data{' '}
+            <span className="font-mono font-semibold text-slate-600">
+              {relativeTime(plant.last_data_at)}
+            </span>{' '}
+            <span className="text-slate-400">(normal: production resumes after sunrise)</span>
+          </div>
+        ) : (
+          <div className="text-[11px] text-slate-500">
+            Data last received{' '}
+            <span className={cn('font-mono font-semibold', freshnessColor(plant.last_data_at))}>
+              {relativeTime(plant.last_data_at)}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Frozen-feed banner — the vendor cloud is repeating old data for one

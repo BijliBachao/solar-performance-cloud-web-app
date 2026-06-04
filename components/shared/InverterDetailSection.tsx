@@ -494,6 +494,17 @@ export function InverterDetailSection({
                         {relativeTime(device.effective_fresh_at)}
                       </span>
                     </span>
+                  ) : connectivity === 'idle' ? (
+                    // Night-aware (Status Unification): the readings table
+                    // below shows the LAST values before the inverter slept —
+                    // label them so zeros aren't read as a live fault.
+                    <>
+                      idle · night — readings below are from{' '}
+                      <span className="font-mono font-semibold text-slate-500">
+                        {relativeTime(device.effective_fresh_at)}
+                      </span>
+                      <span className="text-slate-300"> (normal overnight)</span>
+                    </>
                   ) : device.vendor_last_data_at != null ? (
                     <>
                       vendor last data{' '}
