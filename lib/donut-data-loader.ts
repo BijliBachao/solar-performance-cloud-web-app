@@ -505,11 +505,14 @@ export async function loadFleetCounts(orgId?: string, facets: FleetCountsFacets 
       -- strings never appear in the scoped CTE above. Peer-excluded strings
       -- DO get string_daily rows (only excluded from alerts), so the
       -- scoped CTE handles those.
+      -- LEFT JOIN + DISTINCT pair: orphan plants stay counted (matches the
+      -- scoped CTE's deliberate inclusion) and a plant assigned to multiple
+      -- orgs isn't double-counted in the all-orgs view.
       SELECT
-        COUNT(*) FILTER (WHERE NOT sc.is_used)::bigint AS excluded_unused
+        COUNT(DISTINCT (sc.device_id, sc.string_number)) FILTER (WHERE NOT sc.is_used)::bigint AS excluded_unused
       FROM string_configs sc
       JOIN devices d ON d.id = sc.device_id
-      JOIN plant_assignments pa ON pa.plant_id = d.plant_id
+      LEFT JOIN plant_assignments pa ON pa.plant_id = d.plant_id
       WHERE (${orgFilter}::text IS NULL OR pa.organization_id = ${orgFilter}::text)
     )
     SELECT
@@ -695,9 +698,12 @@ export async function loadFleetRows(params: LoadFleetRowsParams = {}): Promise<F
 
   // Inner DISTINCT ON dedupes rows when a plant belongs to multiple orgs (M2M
   // via plant_assignments) and orgFilter is not set; the outer SELECT re-sorts
-  // worst-first (lowest score first; no-data after scored criticals) — the
-  // triage default per the NOC v3 spec. DISTINCT ON requires its own ORDER BY
-  // to lead with the distinct keys, hence the two-layer query.
+  // worst-first — the triage default per the NOC v3 spec. NULL health_score
+  // (no-data) is bucketed ABNORMAL by scoreToBucket/the donut, so it must sort
+  // within the abnormal band (after scored abnormals, BEFORE healthy) — never
+  // below healthy. The CASE pins no-data at 89.99: criticals (<50) first,
+  // scored abnormals ascending, then no-data, then healthy (>=90). DISTINCT ON
+  // requires its own ORDER BY to lead with the distinct keys, hence two layers.
   const items = await prisma.$queryRaw<FleetRowSql[]>`
     SELECT * FROM (
       SELECT DISTINCT ON (sd.device_id, sd.string_number)
@@ -719,7 +725,9 @@ export async function loadFleetRows(params: LoadFleetRowsParams = {}): Promise<F
       ${where}
       ORDER BY sd.device_id, sd.string_number, o.name, p.plant_name, d.device_name
     ) AS deduped
-    ORDER BY deduped.health_score ASC NULLS LAST, deduped.plant_name, deduped.inverter_name, deduped.string_number
+    ORDER BY
+      CASE WHEN deduped.health_score IS NULL THEN 89.99 ELSE deduped.health_score END ASC,
+      deduped.plant_name, deduped.inverter_name, deduped.string_number
     LIMIT ${FLEET_PAGE_SIZE}
     OFFSET ${offset}
   `
