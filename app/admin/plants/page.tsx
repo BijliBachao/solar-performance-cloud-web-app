@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -80,25 +80,55 @@ export default function AdminPlantsPage() {
   const [successMsg, setSuccessMsg] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
 
+  // ── Search flicker fix (2026-06-05, NocConsole semantics) ──────────
+  // Three stacked defects caused a full-screen flicker on every keystroke/
+  // backspace: (1) no debounce — one API refetch per keystroke; (2) no race
+  // guard — an older (broader) response could arrive AFTER a newer one and
+  // overwrite it; (3) loading state blanked context. Now: the input is
+  // instant local state, debounced 300ms into `search`; in-flight requests
+  // are aborted when superseded; rows stay visible (dimmed) while filtering.
+  const [searchInput, setSearchInput] = useState('')
+  const [filtering, setFiltering] = useState(false)
+  const firstLoadDone = useRef(false)
+  const abortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch((prev) => (prev === searchInput ? prev : searchInput))
+    }, 300)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
   const fetchPlants = useCallback(async () => {
+    // Supersede any in-flight request — last query wins, no out-of-order
+    // responses (the backspace race).
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     try {
-      setLoading(true)
+      if (!firstLoadDone.current) setLoading(true)
+      else setFiltering(true)
       setError(null)
       const params = new URLSearchParams()
       if (search) params.set('search', search)
       if (statusFilter !== 'ALL') params.set('status', statusFilter)
       if (providerFilter !== 'ALL') params.set('provider', providerFilter)
 
-      const res = await fetch(`/api/admin/plants?${params}`, { credentials: 'include' })
+      const res = await fetch(`/api/admin/plants?${params}`, { credentials: 'include', signal: controller.signal })
       if (!res.ok) throw new Error('Failed to fetch plants')
       const data = await res.json()
       setPlants(data.plants)
       setStats(data.stats)
       if (data.providers) setProviders(data.providers)
+      firstLoadDone.current = true
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return // superseded — newer request owns the UI
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
-      setLoading(false)
+      if (abortRef.current === controller) {
+        setLoading(false)
+        setFiltering(false)
+      }
     }
   }, [search, statusFilter, providerFilter])
 
@@ -358,8 +388,8 @@ export default function AdminPlantsPage() {
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
               <Input
                 placeholder="Search plants..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="pl-8 h-8 text-sm"
               />
             </div>
@@ -406,9 +436,11 @@ export default function AdminPlantsPage() {
         </div>
       )}
 
-      {/* Table — dense rows, hover-revealed actions, no row tinting */}
+      {/* Table — dense rows, hover-revealed actions, no row tinting.
+          While a filter request is in flight the existing rows stay visible,
+          dimmed — never blanked, never flickered (NocConsole semantics). */}
       <div className="px-4 sm:px-6 py-4">
-        <div className="border border-slate-200 rounded-md overflow-hidden">
+        <div className={`border border-slate-200 rounded-md overflow-hidden transition-opacity duration-150 ${filtering ? 'opacity-60' : ''}`}>
           <Table>
             <TableHeader>
               <TableRow className="bg-slate-50 hover:bg-slate-50">
