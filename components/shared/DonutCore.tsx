@@ -40,6 +40,12 @@ export interface DonutCoreProps {
   onClickBucket?: (bucket: DonutBucket) => void
   /** Currently selected bucket (renders thicker outline) */
   selectedBucket?: DonutBucket | null
+  /**
+   * Multi-select (NOC v3): selected slices get the thick outline; when ANY
+   * selection is active, non-selected slices dim — the explicit active-state
+   * affordance for donut-as-filter. Takes precedence over `selectedBucket`.
+   */
+  selectedBuckets?: DonutBucket[] | null
   size?: 'sm' | 'md' | 'lg'
   showLegend?: boolean
   legendOrientation?: 'right' | 'bottom'
@@ -154,6 +160,7 @@ export function DonutCore({
   onHoverBucket,
   onClickBucket,
   selectedBucket = null,
+  selectedBuckets = null,
   size = 'md',
   showLegend = true,
   legendOrientation = 'right',
@@ -168,6 +175,13 @@ export function DonutCore({
     if (controlledHover === undefined) setUncontrolledHover(b)
     onHoverBucket?.(b)
   }
+
+  // Normalised selection: multi-select wins; single-select folds into a set.
+  const selectedSet = useMemo<Set<DonutBucket> | null>(() => {
+    if (selectedBuckets && selectedBuckets.length > 0) return new Set(selectedBuckets)
+    if (selectedBucket) return new Set([selectedBucket])
+    return null
+  }, [selectedBuckets, selectedBucket])
 
   const segments = useMemo(() => {
     // Descending order so the largest slice starts at 12 o'clock
@@ -198,7 +212,7 @@ export function DonutCore({
         legendOrientation === 'right' ? 'flex-row items-center gap-6' : 'flex-col items-center gap-4',
       )}>
         <EmptyRing size={dim.donut} centerMetric={centerMetric} centerSubline={centerSubline} />
-        {showLegend && <Legend segments={segments} total={0} hoverKey={null} setHover={() => {}} selectedBucket={null} onClickBucket={undefined} />}
+        {showLegend && <Legend segments={segments} total={0} hoverKey={null} setHover={() => {}} selectedSet={null} onClickBucket={undefined} />}
       </div>
     )
   }
@@ -235,22 +249,30 @@ export function DonutCore({
                 if (k && onClickBucket) onClickBucket(k)
               }}
             >
-              {chartData.map((s) => (
-                <Cell
-                  key={s.key}
-                  fill={s.color}
-                  opacity={hoverKey && hoverKey !== s.key ? 0.4 : 1}
-                  // SVG paths don't honor CSS `outline`. Use stroke for the
-                  // "selected bucket" cue so NocConsole users see which slice
-                  // they clicked on.
-                  stroke={selectedBucket === s.key ? '#0F172A' : '#FFFFFF'}
-                  strokeWidth={selectedBucket === s.key ? 3 : 1}
-                  style={{
-                    cursor: isInteractive && s.value > 0 ? 'pointer' : 'default',
-                    transition: 'opacity 150ms, stroke-width 150ms',
-                  }}
-                />
-              ))}
+              {chartData.map((s) => {
+                const isSelected = selectedSet?.has(s.key) ?? false
+                // Hover dim wins; otherwise an active selection dims the
+                // NON-selected slices (donut-as-filter active state).
+                const opacity = hoverKey
+                  ? (hoverKey !== s.key ? 0.4 : 1)
+                  : (selectedSet && !isSelected ? 0.35 : 1)
+                return (
+                  <Cell
+                    key={s.key}
+                    fill={s.color}
+                    opacity={opacity}
+                    // SVG paths don't honor CSS `outline`. Use stroke for the
+                    // "selected bucket" cue so NocConsole users see which slice
+                    // they clicked on.
+                    stroke={isSelected ? '#0F172A' : '#FFFFFF'}
+                    strokeWidth={isSelected ? 3 : 1}
+                    style={{
+                      cursor: isInteractive && s.value > 0 ? 'pointer' : 'default',
+                      transition: 'opacity 150ms, stroke-width 150ms',
+                    }}
+                  />
+                )
+              })}
             </Pie>
             <Tooltip
               content={<DonutTooltip />}
@@ -289,7 +311,7 @@ export function DonutCore({
           total={total}
           hoverKey={hoverKey}
           setHover={setHover}
-          selectedBucket={selectedBucket}
+          selectedSet={selectedSet}
           onClickBucket={onClickBucket}
         />
       )}
@@ -304,14 +326,14 @@ function Legend({
   total,
   hoverKey,
   setHover,
-  selectedBucket,
+  selectedSet,
   onClickBucket,
 }: {
   segments: Array<{ key: DonutBucket; value: number; label: string; color: string }>
   total: number
   hoverKey: DonutBucket | null
   setHover: (b: DonutBucket | null) => void
-  selectedBucket: DonutBucket | null
+  selectedSet: Set<DonutBucket> | null
   onClickBucket?: (b: DonutBucket) => void
 }) {
   return (
@@ -319,8 +341,8 @@ function Legend({
       {segments.map((s) => {
         const pct = total > 0 ? (s.value / total) * 100 : 0
         const isHovered = hoverKey === s.key
-        const isDimmed = hoverKey && hoverKey !== s.key
-        const isSelected = selectedBucket === s.key
+        const isDimmed = (hoverKey && hoverKey !== s.key) || (!hoverKey && selectedSet && !selectedSet.has(s.key))
+        const isSelected = selectedSet?.has(s.key) ?? false
         const interactive = Boolean(onClickBucket) && s.value > 0
         return (
           <li key={s.key}>
