@@ -202,6 +202,25 @@ export type ConnectivityStatus = 'live' | 'frozen' | 'offline' | 'idle'
 export const FLEET_DEFAULT_LAT = 31.5
 export const FLEET_DEFAULT_LNG = 74.3
 
+// Pakistan bounding box (generous). The ENTIRE fleet is Pakistani; coordinates
+// outside this box are vendor-default garbage (Beijing 39.9/116.4 confirmed
+// live on multiple plants). Garbage coords poison EVERY sun-gated decision:
+// Beijing's sun rises ~3h before Pakistan's (false "offline" from ~01:45 PKT)
+// and sets ~3h earlier (would discard real evening production in the write
+// gate). Clamp before ANY isDaylight() call — write gate AND display.
+const PK_LAT_MIN = 23, PK_LAT_MAX = 37.5
+const PK_LNG_MIN = 60, PK_LNG_MAX = 78
+
+/** Plant coords if plausibly Pakistani, else the fleet centroid. Accepts the
+ *  raw (possibly Decimal/string/null) DB values. */
+export function clampToFleetCoords(latRaw: unknown, lngRaw: unknown): { lat: number; lng: number } {
+  const lat = latRaw != null ? Number(latRaw) : NaN
+  const lng = lngRaw != null ? Number(lngRaw) : NaN
+  const plausible =
+    lat >= PK_LAT_MIN && lat <= PK_LAT_MAX && lng >= PK_LNG_MIN && lng <= PK_LNG_MAX
+  return plausible ? { lat, lng } : { lat: FLEET_DEFAULT_LAT, lng: FLEET_DEFAULT_LNG }
+}
+
 /**
  * Max tolerated FUTURE skew on a vendor data-timestamp. Found live 2026-06-04:
  * Growatt EEL9E41056's logger clock runs ~2h fast, making its vendor ts land in

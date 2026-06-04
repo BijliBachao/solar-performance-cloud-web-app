@@ -6,7 +6,7 @@ import {
   MIN_PEERS_FOR_COMPARISON, MIN_AVG_FOR_COMPARISON,
   MAX_STRING_CURRENT_A, MAX_STRING_POWER_W, MS_PER_HOUR,
   MIN_PRODUCTIVE_HOURS_FOR_DAILY_SCORE, MIN_PRODUCTIVE_POWER_W,
-  FLEET_DEFAULT_LAT, FLEET_DEFAULT_LNG,
+  clampToFleetCoords,
   type DeviceWriteAction,
 } from '@/lib/string-health'
 import { isDaylight } from '@/lib/solar-geometry'
@@ -65,32 +65,17 @@ export async function recordDeviceSeen(
   await prisma.devices.update({ where: { id: deviceId }, data })
 }
 
-// Pakistan bounding box (generous). The ENTIRE fleet is Pakistani; coordinates
-// outside this box are vendor-default garbage (e.g., Beijing 39.9/116.4, seen
-// live — see memory project_bad_plant_coords). Beijing's sun sets ~3h before
-// Pakistan's, so trusting such coords in the night write-gate would discard
-// 2-3h of REAL evening production every day. Out-of-box → fleet centroid.
-const PK_LAT_MIN = 23, PK_LAT_MAX = 37.5
-const PK_LNG_MIN = 60, PK_LNG_MAX = 78
-
 /**
  * Sun position for the WRITE GATE: plant coords are used only when they are
- * plausibly Pakistani; null or out-of-country coords fall back to the fleet
- * centroid. The threshold assumes the coords are the plant's PHYSICAL
- * location — never pass vendor defaults through unclamped.
+ * plausibly Pakistani (clampToFleetCoords); null or out-of-country coords fall
+ * back to the fleet centroid. The threshold assumes the coords are the plant's
+ * PHYSICAL location — never pass vendor defaults through unclamped.
  */
 export function sunUpForWriteGate(
   plants: { latitude: unknown; longitude: unknown } | null | undefined,
   now: Date = new Date(),
 ): boolean {
-  let lat = plants?.latitude != null ? Number(plants.latitude) : NaN
-  let lng = plants?.longitude != null ? Number(plants.longitude) : NaN
-  const plausible =
-    lat >= PK_LAT_MIN && lat <= PK_LAT_MAX && lng >= PK_LNG_MIN && lng <= PK_LNG_MAX
-  if (!plausible) {
-    lat = FLEET_DEFAULT_LAT
-    lng = FLEET_DEFAULT_LNG
-  }
+  const { lat, lng } = clampToFleetCoords(plants?.latitude, plants?.longitude)
   return isDaylight(lat, lng, now)
 }
 

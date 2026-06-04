@@ -3,7 +3,7 @@ import { getUserFromRequest, createErrorResponse, ApiAuthError } from '@/lib/api
 import { requirePlantAccess } from '@/lib/api-access'
 import { prisma } from '@/lib/prisma'
 import { deviceConnectivity } from '@/lib/connectivity'
-import { FLEET_DEFAULT_LAT, FLEET_DEFAULT_LNG } from '@/lib/string-health'
+import { clampToFleetCoords } from '@/lib/string-health'
 import { isDaylight } from '@/lib/solar-geometry'
 
 export async function GET(
@@ -57,14 +57,11 @@ export async function GET(
       lastWriteRows.map((r) => [r.device_id, r._max.timestamp?.getTime() ?? null]),
     )
     const now = Date.now()
-    // Missing coords → fleet default (Pakistan centroid) for connectivity
-    // display, NOT isDaylight's fail-open-day (which would flag an
-    // un-geo-located plant offline/frozen all night). See FLEET_DEFAULT_LAT.
-    const sunUp = isDaylight(
-      plant.latitude != null ? Number(plant.latitude) : FLEET_DEFAULT_LAT,
-      plant.longitude != null ? Number(plant.longitude) : FLEET_DEFAULT_LNG,
-      new Date(now),
-    )
+    // Coords clamped to the Pakistan bounding box (fleet default for missing
+    // OR garbage values like vendor-default Beijing) — garbage coords would
+    // mis-gate the sun calc and flag sleeping inverters offline at night.
+    const clamped = clampToFleetCoords(plant.latitude, plant.longitude)
+    const sunUp = isDaylight(clamped.lat, clamped.lng, new Date(now))
     const devicesWithConnectivity = plant.devices.map((d) => {
       // "Last contact" = newest of last_seen_at (poll saw the device even when
       // the DQ write gate skipped a duplicate replay) and MAX(measurement ts).

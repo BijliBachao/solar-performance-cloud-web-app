@@ -27,7 +27,7 @@ import {
 import { scoreLiveSr, type LiveStringInput } from '@/lib/string-health-live'
 import { deviceConnectivity } from '@/lib/connectivity'
 import { isDaylight } from '@/lib/solar-geometry'
-import { FLEET_DEFAULT_LAT, FLEET_DEFAULT_LNG, type ConnectivityStatus } from '@/lib/string-health'
+import { clampToFleetCoords, type ConnectivityStatus } from '@/lib/string-health'
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Public types
@@ -864,14 +864,12 @@ export async function loadFleetConnectivity(orgId?: string): Promise<FleetConnec
 
   const counts = { live: 0, frozen: 0, offline: 0, idle: 0 }
   const devices: FleetConnectivityDevice[] = rows.map((r) => {
-    // Missing coords → fleet default (Pakistan centroid) for connectivity
-    // display, NOT isDaylight's fail-open-day (which would flag every
-    // un-geo-located plant offline/frozen all night). See FLEET_DEFAULT_LAT.
-    const sunUp = isDaylight(
-      r.latitude != null ? Number(r.latitude) : FLEET_DEFAULT_LAT,
-      r.longitude != null ? Number(r.longitude) : FLEET_DEFAULT_LNG,
-      new Date(now),
-    )
+    // Coords clamped to the Pakistan bounding box (fleet default for missing
+    // OR garbage values). Vendor-default Beijing coords would otherwise hit
+    // "Beijing sunrise" at ~01:45 PKT and flag sleeping inverters OFFLINE for
+    // the rest of the night (seen live on Zahoor Diary Farm, 2026-06-05).
+    const { lat, lng } = clampToFleetCoords(r.latitude, r.longitude)
+    const sunUp = isDaylight(lat, lng, new Date(now))
     // "Last contact" = newest of last_seen_at (poll cycle saw the device, even
     // when the write gate skipped a duplicate replay) and MAX(measurement ts)
     // (pre-gate fallback until last_seen_at populates). Keeps frozen (still

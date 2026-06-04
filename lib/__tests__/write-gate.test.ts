@@ -2,8 +2,29 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   classifyDeviceWrite,
   readingSignature,
+  clampToFleetCoords,
   NIGHT_MAX_PHANTOM_W,
+  FLEET_DEFAULT_LAT,
+  FLEET_DEFAULT_LNG,
 } from '../string-health'
+
+// ─── clampToFleetCoords — shared by write gate AND connectivity display ──
+// Live finding 2026-06-05 02:20 PKT: Zahoor Diary Farm's Beijing-default
+// coords hit "Beijing sunrise" at ~01:45 PKT → 2 sleeping inverters read
+// OFFLINE on the NOC. Same clamp must guard every isDaylight() call site.
+describe('clampToFleetCoords', () => {
+  it('Beijing vendor defaults → fleet centroid', () => {
+    expect(clampToFleetCoords(39.906922, 116.397551)).toEqual({ lat: FLEET_DEFAULT_LAT, lng: FLEET_DEFAULT_LNG })
+  })
+  it('null/missing → fleet centroid', () => {
+    expect(clampToFleetCoords(null, null)).toEqual({ lat: FLEET_DEFAULT_LAT, lng: FLEET_DEFAULT_LNG })
+    expect(clampToFleetCoords(31.5, null)).toEqual({ lat: FLEET_DEFAULT_LAT, lng: FLEET_DEFAULT_LNG })
+  })
+  it('plausible Pakistani coords pass through (accepts Decimal-ish strings)', () => {
+    expect(clampToFleetCoords(24.86, 67.0)).toEqual({ lat: 24.86, lng: 67.0 })   // Karachi
+    expect(clampToFleetCoords('31.262719', '74.164873')).toEqual({ lat: 31.262719, lng: 74.164873 })
+  })
+})
 
 // ─── classifyDeviceWrite (DQ v2 device write gate) ───────────────────
 // Root cause: vendor clouds replay the last daytime snapshot when a logger

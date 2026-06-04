@@ -451,22 +451,41 @@ describe('loadFleetConnectivity', () => {
       { device_id: 'd-offline', plant_code: 'p2', inverter_name: 'INV-OFF', provider: 'sungrow',
         vendor_last_data_at: hAgo(6), reading_changed_at: null, last_write_at: hAgo(1),
         latitude: null, longitude: null },
-      // idle: sun down at this instant for lat 40 / lng -75 (≈ midnight local) → idle
-      { device_id: 'd-idle', plant_code: 'p3', inverter_name: 'INV-IDLE', provider: 'huawei',
+      // garbage coords (vendor-default Beijing) are CLAMPED to the fleet
+      // centroid → Pakistan daytime at this instant → stale device reads
+      // offline, not US/Beijing-night idle (Zahoor Diary Farm regression).
+      { device_id: 'd-badcoords', plant_code: 'p3', inverter_name: 'INV-BJ', provider: 'huawei',
         vendor_last_data_at: hAgo(8), reading_changed_at: null, last_write_at: hAgo(8),
-        latitude: new Decimal('40'), longitude: new Decimal('-75') },
+        latitude: new Decimal('39.906922'), longitude: new Decimal('116.397551') },
     ])
 
     const { loadFleetConnectivity } = await import('@/lib/donut-data-loader')
 
     const result = await loadFleetConnectivity()
 
-    expect(result.counts).toEqual({ live: 1, frozen: 1, offline: 1, idle: 1 })
+    expect(result.counts).toEqual({ live: 1, frozen: 1, offline: 2, idle: 0 })
     expect(result.devices).toHaveLength(4)
     const live = result.devices.find((d) => d.deviceId === 'd-live')
     expect(live?.status).toBe('live')
     expect(live?.inverterName).toBe('INV-LIVE')
     expect(live?.effectiveFreshAt).toBe(minAgo(5).toISOString())
+    expect(result.devices.find((d) => d.deviceId === 'd-badcoords')?.status).toBe('offline')
+  })
+
+  it('idle at PKT night for a sleeping device — even with garbage Beijing coords (clamp)', async () => {
+    // 2026-05-23T21:00:00Z = 02:00 PKT (night in Pakistan; Beijing sunrise
+    // hits ~01:45 PKT, which previously flipped these devices to OFFLINE).
+    vi.setSystemTime(new Date('2026-05-23T21:00:00Z'))
+    const now = Date.now()
+    const hAgo = (h: number) => new Date(now - h * 3600e3)
+    mockPrisma.$queryRaw.mockResolvedValue([
+      { device_id: 'd-sleep', plant_code: 'p1', inverter_name: 'INV-SLEEP', provider: 'huawei',
+        vendor_last_data_at: hAgo(8), reading_changed_at: null, last_write_at: hAgo(8),
+        latitude: new Decimal('39.906922'), longitude: new Decimal('116.397551') },
+    ])
+    const { loadFleetConnectivity } = await import('@/lib/donut-data-loader')
+    const result = await loadFleetConnectivity()
+    expect(result.counts).toEqual({ live: 0, frozen: 0, offline: 0, idle: 1 })
   })
 })
 
