@@ -52,8 +52,12 @@ interface PlantStats {
   plants_with_alerts: number
 }
 
-type SortKey = 'name' | 'last_reading' | 'capacity' | 'assigned' | 'provider'
-type SortDir = 'asc' | 'desc'
+// Production-grade sorting (spec confirmed 2026-06-05): every visible column
+// sortable; first click = the USEFUL direction per column type; tie-breaks
+// stable and never flipped; third click returns to the default worst-first
+// ladder. null sortKey = the ladder.
+type SortKey = 'name' | 'status' | 'issues' | 'capacity' | 'org' | 'provider'
+type SortDir = 'natural' | 'reversed'
 
 export default function AdminPlantsPage() {
   const router = useRouter()
@@ -74,8 +78,8 @@ export default function AdminPlantsPage() {
   const [unassignConfirm, setUnassignConfirm] = useState<Plant | null>(null)
   const [rowBusy, setRowBusy] = useState<string | null>(null)
 
-  const [sortKey, setSortKey] = useState<SortKey>('name')
-  const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [sortKey, setSortKey] = useState<SortKey | null>(null) // null = worst-first ladder
+  const [sortDir, setSortDir] = useState<SortDir>('natural')
 
   const [successMsg, setSuccessMsg] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
@@ -238,44 +242,92 @@ export default function AdminPlantsPage() {
     return 'text-slate-300'
   }
 
+  // 3-state cycle: 1st click = natural direction, 2nd = reversed,
+  // 3rd = back to the default worst-first ladder.
   const toggleSort = (key: SortKey) => {
-    if (key === sortKey) setSortDir(sortDir === 'asc' ? 'desc' : 'asc')
-    else { setSortKey(key); setSortDir('asc') }
+    if (sortKey !== key) { setSortKey(key); setSortDir('natural') }
+    else if (sortDir === 'natural') setSortDir('reversed')
+    else { setSortKey(null); setSortDir('natural') }
+  }
+
+  // ── Sort engine ─────────────────────────────────────────────────
+  // STATUS_RANK: the triage ladder — worst first. Same worst-first rule as
+  // the NOC table, the plant rollup, and the attention panel.
+  const STATUS_RANK: Record<PlantOpStatus, number> = { faulty: 0, offline: 1, frozen: 2, live: 3, idle: 4 }
+  // Critical-weighted issue score: 5 criticals outrank 8 infos.
+  const alertWeight = (p: Plant) =>
+    p.alerts_unresolved.critical * 100 + p.alerts_unresolved.warning * 10 + p.alerts_unresolved.info
+  const readingMs = (p: Plant) => (p.last_reading_at ? new Date(p.last_reading_at).getTime() : null)
+  const providerLabelOf = (p: Plant) => providerBadge(p.provider)?.label ?? p.provider ?? ''
+
+  // Default order (no column clicked): worst status → heaviest issues → name.
+  const defaultLadder = (a: Plant, b: Plant) => {
+    const r = STATUS_RANK[a.op_status] - STATUS_RANK[b.op_status]
+    if (r) return r
+    const w = alertWeight(b) - alertWeight(a)
+    if (w) return w
+    return a.plant_name.localeCompare(b.plant_name)
+  }
+
+  // Each column declares its comparator in its NATURAL first-click direction.
+  // The engine applies direction to the PRIMARY key only; the name tie-break
+  // is stable and never flips (Rule 3 — groups stay readable when reversed).
+  const SORT_CONFIG: Record<SortKey, { cmp: (a: Plant, b: Plant) => number; naturalAria: 'ascending' | 'descending' }> = {
+    name: { naturalAria: 'ascending', cmp: (a, b) => a.plant_name.localeCompare(b.plant_name) },
+    status: {
+      naturalAria: 'descending', // "worst first"
+      cmp: (a, b) => {
+        const r = STATUS_RANK[a.op_status] - STATUS_RANK[b.op_status]
+        if (r) return r
+        // inside-group ("status with time"): trouble groups float the
+        // longest-silent plant up; healthy groups float the most alerts up.
+        if (a.op_status === 'offline' || a.op_status === 'frozen') {
+          const am = readingMs(a) ?? -Infinity
+          const bm = readingMs(b) ?? -Infinity
+          if (am !== bm) return am - bm // stalest first
+        } else {
+          const w = alertWeight(b) - alertWeight(a)
+          if (w) return w
+        }
+        return 0
+      },
+    },
+    issues: { naturalAria: 'descending', cmp: (a, b) => alertWeight(b) - alertWeight(a) }, // most/red first
+    capacity: {
+      naturalAria: 'descending', // biggest first
+      cmp: (a, b) => {
+        const c = (Number(b.capacity_kw) || 0) - (Number(a.capacity_kw) || 0)
+        if (c) return c
+        const d = b.device_count - a.device_count
+        if (d) return d
+        return b.string_count - a.string_count
+      },
+    },
+    org: {
+      naturalAria: 'ascending',
+      cmp: (a, b) => {
+        const an = a.assigned_org?.name
+        const bn = b.assigned_org?.name
+        if (an && bn) return an.localeCompare(bn)
+        if (an) return -1
+        if (bn) return 1
+        return 0 // unassigned grouped last
+      },
+    },
+    provider: { naturalAria: 'ascending', cmp: (a, b) => providerLabelOf(a).localeCompare(providerLabelOf(b)) }, // display NAME, not internal code
   }
 
   const sortedPlants = useMemo(() => {
-    const dir = sortDir === 'asc' ? 1 : -1
-    const nullsLast = (a: number | null, b: number | null) => {
-      if (a == null && b == null) return 0
-      if (a == null) return 1
-      if (b == null) return -1
-      return null
-    }
-    return [...plants].sort((a, b) => {
-      if (sortKey === 'name')     return a.plant_name.localeCompare(b.plant_name) * dir
-      if (sortKey === 'capacity') {
-        const av = a.capacity_kw == null ? null : Number(a.capacity_kw)
-        const bv = b.capacity_kw == null ? null : Number(b.capacity_kw)
-        const n = nullsLast(av, bv); return n !== null ? n : (av! - bv!) * dir
-      }
-      if (sortKey === 'last_reading') {
-        const av = a.last_reading_at ? new Date(a.last_reading_at).getTime() : null
-        const bv = b.last_reading_at ? new Date(b.last_reading_at).getTime() : null
-        const n = nullsLast(av, bv); return n !== null ? n : (av! - bv!) * dir
-      }
-      if (sortKey === 'assigned') {
-        const av = a.assigned_org ? 0 : 1
-        const bv = b.assigned_org ? 0 : 1
-        if (av !== bv) return (av - bv) * dir
-        return a.plant_name.localeCompare(b.plant_name)
-      }
-      if (sortKey === 'provider') {
-        const av = a.provider || ''; const bv = b.provider || ''
-        if (av !== bv) return av.localeCompare(bv) * dir
-        return a.plant_name.localeCompare(b.plant_name)
-      }
-      return 0
+    const arr = [...plants]
+    if (!sortKey) return arr.sort(defaultLadder)
+    const { cmp } = SORT_CONFIG[sortKey]
+    const mul = sortDir === 'reversed' ? -1 : 1
+    return arr.sort((a, b) => {
+      const c = cmp(a, b) * mul
+      if (c) return c
+      return a.plant_name.localeCompare(b.plant_name) // stable, never flipped
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plants, sortKey, sortDir])
 
   // Active-sort always visible at full opacity; inactive columns reveal the
@@ -284,11 +336,15 @@ export default function AdminPlantsPage() {
   // aria-label on the button announcing what the click does.
   const SortButton = ({ k, label }: { k: SortKey; label: string }) => {
     const active = sortKey === k
-    const nextDir = active && sortDir === 'asc' ? 'descending' : 'ascending'
+    const nextAction = !active
+      ? 'sort'
+      : sortDir === 'natural'
+        ? 'reverse sort'
+        : 'reset to default order'
     return (
       <button
         onClick={() => toggleSort(k)}
-        aria-label={`Sort by ${label.toLowerCase()} ${nextDir}`}
+        aria-label={`${nextAction} by ${label.toLowerCase()}`}
         className="group inline-flex items-center gap-1 select-none"
       >
         <span className="text-slate-600 group-hover:text-slate-900 transition-colors">{label}</span>
@@ -298,7 +354,7 @@ export default function AdminPlantsPage() {
             active
               ? 'text-slate-700 opacity-100'
               : 'text-slate-400 opacity-30 group-hover:opacity-70 group-focus-visible:opacity-100'
-          } ${active && sortDir === 'asc' ? 'rotate-180' : ''}`}
+          } ${active && sortDir === 'reversed' ? 'rotate-180' : ''}`}
           strokeWidth={2.5}
         />
       </button>
@@ -309,8 +365,9 @@ export default function AdminPlantsPage() {
   // "ascending" / "descending" / "none" per WAI-ARIA grid pattern.
   const SortableHead = ({ k, label, className = '' }: { k: SortKey; label: string; className?: string }) => {
     const active = sortKey === k
+    const natural = SORT_CONFIG[k].naturalAria
     const ariaSort: 'ascending' | 'descending' | 'none' = active
-      ? (sortDir === 'asc' ? 'ascending' : 'descending')
+      ? (sortDir === 'natural' ? natural : natural === 'ascending' ? 'descending' : 'ascending')
       : 'none'
     return (
       <TableHead className={`px-4 py-2.5 ${className}`} aria-sort={ariaSort}>
@@ -444,12 +501,12 @@ export default function AdminPlantsPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-slate-50 hover:bg-slate-50">
-                <SortableHead k="name"         label="Plant" />
-                <SortableHead k="last_reading" label="Status" />
-                <TableHead className="px-4 py-2.5 hidden md:table-cell">Issues</TableHead>
-                <SortableHead k="capacity"     label="Devices · Strings · Capacity" className="hidden md:table-cell" />
-                <SortableHead k="assigned"     label="Organization"       className="hidden lg:table-cell" />
-                <SortableHead k="provider"     label="Provider"           className="hidden md:table-cell" />
+                <SortableHead k="name"     label="Plant" />
+                <SortableHead k="status"   label="Status" />
+                <SortableHead k="issues"   label="Issues" className="hidden md:table-cell" />
+                <SortableHead k="capacity" label="Devices · Strings · Capacity" className="hidden md:table-cell" />
+                <SortableHead k="org"      label="Organization" className="hidden lg:table-cell" />
+                <SortableHead k="provider" label="Provider"     className="hidden md:table-cell" />
                 <TableHead className="px-4 py-2.5 w-px">
                   <span className="sr-only">Actions</span>
                 </TableHead>
