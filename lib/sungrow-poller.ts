@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { SungrowClient } from '@/lib/sungrow-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, safeObject, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, alertsArmed } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, safeObject, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, alertsArmed, REVERSE_CURRENT_ALERT_A } from '@/lib/poller-utils'
 import { classifyDeviceWrite } from '@/lib/string-health'
 
 let lastPlantSync = 0
@@ -295,10 +295,11 @@ async function processSungrowDevice(
     // Sungrow MPPT topology: 2 strings share 1 MPPT, API reports current
     // on primary string only (odd-numbered). Secondary strings have voltage
     // but always 0 current — storing them creates misleading 0% health scores.
-    // Store any NON-ZERO current: positive is production, NEGATIVE is reverse
-    // current (backfeed/wiring fault — seen live at −17.46A on a Huawei unit
-    // 2026-06-05) and must reach the alert engine, not be silently dropped.
-    if (current !== 0) {
+    // Store positive current (production) — and NEGATIVE only when it is
+    // real reverse current (backfeed/wiring fault — seen live at −17.46A on
+    // a Huawei unit 2026-06-05), not sub-zero sensor noise: a −0.01A reading
+    // slipping through would mint a false open-circuit CRITICAL.
+    if (current > 0 || current <= -REVERSE_CURRENT_ALERT_A) {
       const vDec = new Decimal(voltage).toDecimalPlaces(2)
       const cDec = new Decimal(current).toDecimalPlaces(3)
       measurements.push({
