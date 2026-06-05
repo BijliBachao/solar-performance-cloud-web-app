@@ -197,6 +197,19 @@ describe('updateDailyAggregates — daily scoring gate (DQ v2)', () => {
     }
   })
 
+  it('hour-BOUNDARY straddle does not unlock scoring (first-dawn regression 2026-06-05)', async () => {
+    // Two writes 13 minutes apart straddling a clock-hour boundary = 2
+    // "buckets" but ~0 elapsed production — must stay unscored (span < 2h).
+    mockPrisma.string_measurements.findMany.mockResolvedValue(
+      measurementsAtHours(['2026-06-05T03:55:00Z', '2026-06-05T04:08:00Z']),
+    )
+    const { updateDailyAggregates } = await import('../poller-utils')
+    await updateDailyAggregates('dev1', 'plant1', 2, configs, { model: null, max_strings: 2 })
+    for (const [args] of mockPrisma.string_daily.upsert.mock.calls) {
+      expect(args.update.health_score).toBeNull()
+    }
+  })
+
   it('hours of near-zero power do not count as productive (night zeros stay unscored)', async () => {
     mockPrisma.string_measurements.findMany.mockResolvedValue(
       measurementsAtHours(['2026-06-05T03:05:00Z', '2026-06-05T04:05:00Z', '2026-06-05T05:05:00Z'], 5),

@@ -653,7 +653,15 @@ export async function updateDailyAggregates(
       if (h.avg_power_W > MIN_PRODUCTIVE_POWER_W) productiveHours.add(h.hour)
     }
   }
-  const dayIsScoreable = productiveHours.size >= MIN_PRODUCTIVE_HOURS_FOR_DAILY_SCORE
+  // SPAN, not bucket COUNT: two writes straddling a clock-hour boundary earn
+  // 2 "buckets" in 13 minutes — caught live at first dawn (2026-06-05 05:03
+  // PKT: 14 CSI strings scored off twilight scraps, 6 falsely critical).
+  // span >= N hour-keys ≈ at least N hours of elapsed production.
+  const hourKeys = [...productiveHours]
+  const productiveSpan = hourKeys.length > 1 ? Math.max(...hourKeys) - Math.min(...hourKeys) : 0
+  const dayIsScoreable =
+    productiveHours.size >= MIN_PRODUCTIVE_HOURS_FOR_DAILY_SCORE &&
+    productiveSpan >= MIN_PRODUCTIVE_HOURS_FOR_DAILY_SCORE
   type P2PResult = ReturnType<typeof scoreDailyP2P>[number]
   const p2pByString = new Map<number, P2PResult>(
     dayIsScoreable
