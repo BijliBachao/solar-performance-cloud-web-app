@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { CsiClient, CsiDevice, CsiDeviceData, parseRealData } from '@/lib/csi-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, resolveAlertsForUntrustedFeed } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, resolveAlertsForUntrustedFeed, alertsArmed } from '@/lib/poller-utils'
 import { classifyDeviceWrite } from '@/lib/string-health'
 import {
   PLANT_HEALTH_HEALTHY,
@@ -421,7 +421,7 @@ async function processCsiDevice(
   await recordDeviceFreshness(device.id, strings, vendorTs, device.last_reading_sig)
 
   const stringConfigs = await loadStringConfigs(device.id)
-  await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
+  await generateAlerts(device.id, device.plant_id, measurements, stringConfigs, alertsArmed(device.plants))
   await updateHourlyAggregates(device.id, device.plant_id, maxStringNumber, stringConfigs)
   await updateDailyAggregates(device.id, device.plant_id, maxStringNumber, stringConfigs, { model: device.model, max_strings: device.max_strings })
 

@@ -7,9 +7,11 @@ import {
   MAX_STRING_CURRENT_A, MAX_STRING_POWER_W, MS_PER_HOUR,
   MIN_PRODUCTIVE_HOURS_FOR_DAILY_SCORE, MIN_PRODUCTIVE_POWER_W,
   clampToFleetCoords,
-  type DeviceWriteAction,
+  classifyAlertSeverityWithHysteresis,
+  ALERT_MIN_SUN_ELEVATION_DEG, DEAD_STRING_RECOVERY_A,
+  type DeviceWriteAction, type AlertSeverity,
 } from '@/lib/string-health'
-import { isDaylight } from '@/lib/solar-geometry'
+import { isDaylight, solarElevationDeg } from '@/lib/solar-geometry'
 import { scoreDailyP2P, type DailyStringInput } from '@/lib/string-health-daily'
 
 /**
@@ -77,6 +79,21 @@ export function sunUpForWriteGate(
 ): boolean {
   const { lat, lng } = clampToFleetCoords(plants?.latitude, plants?.longitude)
   return isDaylight(lat, lng, now)
+}
+
+/**
+ * Alerts ARM only when the sun is comfortably up at the plant (clamped
+ * coords). Below ALERT_MIN_SUN_ELEVATION_DEG, strings wake/sleep minutes
+ * apart and the detectors mass-fire (283 false CRITICALs measured in this
+ * morning's first 35 minutes). Data is still WRITTEN at all hours — only the
+ * accusations wait for established daylight.
+ */
+export function alertsArmed(
+  plants: { latitude: unknown; longitude: unknown } | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  const { lat, lng } = clampToFleetCoords(plants?.latitude, plants?.longitude)
+  return solarElevationDeg(lat, lng, now) >= ALERT_MIN_SUN_ELEVATION_DEG
 }
 
 /**
@@ -279,7 +296,12 @@ export async function generateAlerts(
     power: Decimal
   }>,
   configs?: StringConfigSets,
+  /** Sun comfortably up at the plant (alertsArmed). Defaults true for
+   *  back-compat; pollers pass the real value. When false, NOTHING is
+   *  created or resolved — dawn/dusk readings are not verdict material. */
+  armed: boolean = true,
 ): Promise<void> {
+  if (!armed) return
   if (rawMeasurements.length === 0) return
 
   // Two admin flags affect alert generation differently:
@@ -310,6 +332,22 @@ export async function generateAlerts(
   const peerTotalCurrent = peerActive.reduce((sum, m) => sum + Number(m.current), 0)
   const peerAvgCurrent = peerActive.length > 0 ? peerTotalCurrent / peerActive.length : 0
 
+  // Open alerts are fetched BEFORE classification: (a) hysteresis needs the
+  // existing severity per string; (b) the old flow early-returned when no
+  // current issues existed, so a device whose LAST faulty string recovered
+  // never resolved its alert (it lingered until some other fault appeared) —
+  // fixed by always evaluating resolution below.
+  const openAlerts = await prisma.alerts.findMany({
+    where: { device_id: deviceId, resolved_at: null },
+  })
+  const existingSeverity = new Map<number, AlertSeverity>()
+  const existingDeadAlert = new Set<number>()
+  for (const a of openAlerts) {
+    existingSeverity.set(a.string_number, a.severity as AlertSeverity)
+    // gap_percent NULL discriminates dead-string alerts from peer-comparison
+    if (a.severity === 'CRITICAL' && a.gap_percent == null) existingDeadAlert.add(a.string_number)
+  }
+
   // Build severity map. gapPercent is null for non-peer-comparable alerts
   // (Part 2 fires on peer-excluded strings, OR when the peer pool is too thin
   // to compute a meaningful "% below peers" — a real dead string is still a
@@ -333,7 +371,13 @@ export async function generateAlerts(
       if (othersAvg <= 0) continue
 
       const gapPercent = computeGap(current, othersAvg)
-      const severity = classifyAlertSeverity(gapPercent)
+      // Hysteresis: an existing alert's severity is sticky until the gap
+      // clears the band boundary by ALERT_HYSTERESIS_PP — kills threshold-
+      // hover flapping (the 69-alerts/week string).
+      const severity = classifyAlertSeverityWithHysteresis(
+        gapPercent,
+        existingSeverity.get(measurement.string_number) ?? null,
+      )
       if (severity) {
         currentSeverities.set(measurement.string_number, { severity, gapPercent })
       }
@@ -349,7 +393,14 @@ export async function generateAlerts(
   // gapPercent is set ONLY when the string is in the peer pool AND the pool
   // is viable. Otherwise it's null — the alert message says "near-zero
   // current"; we don't claim a peer ratio when there isn't one.
-  const deadStrings = measurements.filter(m => !isActive(Number(m.current)))
+  // Dead detection with a recovery deadband: a string with an OPEN dead-
+  // string alert stays "dead" until its current clears 2x the active
+  // threshold (0.09A <-> 0.11A flap killer).
+  const deadStrings = measurements.filter(m => {
+    const amps = Number(m.current)
+    if (existingDeadAlert.has(m.string_number)) return amps <= DEAD_STRING_RECOVERY_A
+    return !isActive(amps)
+  })
   for (const measurement of deadStrings) {
     const sn = measurement.string_number
     const inPeerPool = !peerExcludedSet.has(sn)
@@ -363,11 +414,9 @@ export async function generateAlerts(
   }
 
   // ── Part 3: Resolve / Create alerts ────────────────────────────
-  if (currentSeverities.size === 0) return
-
-  const openAlerts = await prisma.alerts.findMany({
-    where: { device_id: deviceId, resolved_at: null },
-  })
+  // NOTE: no early return on empty currentSeverities — full recovery must
+  // resolve the device's remaining open alerts (pre-existing bug, fixed).
+  if (currentSeverities.size === 0 && openAlerts.length === 0) return
 
   // Resolve recovered or changed-severity alerts — ONE updateMany, not one
   // round-trip per alert. A fault-heavy morning at fleet scale used to fire

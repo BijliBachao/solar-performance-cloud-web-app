@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { huaweiClient } from '@/lib/huawei-client'
 import { Decimal } from '@prisma/client/runtime/library'
 import { PROVIDERS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches, safeArray, safeObject, safeFloat, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, resolveAlertsForUntrustedFeed } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches, safeArray, safeObject, safeFloat, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, resolveAlertsForUntrustedFeed, alertsArmed } from '@/lib/poller-utils'
 import { classifyDeviceWrite } from '@/lib/string-health'
 import { ACTIVE_CURRENT_THRESHOLD } from '@/lib/string-health'
 import { getHuaweiMaxStrings } from '@/lib/huawei-model-strings'
@@ -365,7 +365,7 @@ async function processHuaweiDeviceData(
     // getDeviceRealtimeData returns no usable data-timestamp, so vendor time is null.
     await recordDeviceFreshness(device.id, gateStrings, null, device.last_reading_sig)
     const stringConfigs = await loadStringConfigs(device.id)
-    await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
+    await generateAlerts(device.id, device.plant_id, measurements, stringConfigs, alertsArmed(device.plants))
     await updateHourlyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
     await updateDailyAggregates(device.id, device.plant_id, maxStrings, stringConfigs, { model: device.model, max_strings: device.max_strings })
   }

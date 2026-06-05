@@ -16,6 +16,7 @@ vi.mock('@/lib/prisma', () => ({
 
 import { prisma } from '@/lib/prisma'
 import { generateAlerts } from '../poller-utils'
+import { classifyAlertSeverityWithHysteresis } from '../string-health'
 
 const mockPrisma = prisma as unknown as {
   alerts: {
@@ -42,6 +43,66 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockPrisma.alerts.findMany.mockResolvedValue([])
   mockPrisma.string_configs.findMany.mockResolvedValue([])
+})
+
+describe('generateAlerts — sun-armed + hysteresis (2026-06-05)', () => {
+  it('disarmed (sun < 10°): NOTHING happens — no reads, creates, or resolves', async () => {
+    await generateAlerts('dev1', 'plant1',
+      [m(1, 10), m(2, 10), m(3, 10), m(4, 10), m(5, 0)], configs, false)
+    expect(mockPrisma.alerts.findMany).not.toHaveBeenCalled()
+    expect(mockPrisma.alerts.createMany).not.toHaveBeenCalled()
+    expect(mockPrisma.alerts.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('FULL-RECOVERY bug fix: last faulty string recovers → its alert resolves (used to linger forever)', async () => {
+    mockPrisma.alerts.findMany.mockResolvedValue([
+      { id: 21, string_number: 5, severity: 'CRITICAL', gap_percent: null },
+    ])
+    // every string healthy → currentSeverities empty → old code early-returned
+    await generateAlerts('dev1', 'plant1',
+      [m(1, 10), m(2, 10), m(3, 10), m(4, 10), m(5, 10)], configs)
+    expect(mockPrisma.alerts.updateMany).toHaveBeenCalledTimes(1)
+    expect(mockPrisma.alerts.updateMany.mock.calls[0][0].where.id.in).toEqual([21])
+  })
+
+  it('dead-string recovery deadband: 0.15A stays dead (no churn); 0.25A resolves', async () => {
+    // Peers kept LOW (below MIN_AVG_FOR_COMPARISON) to isolate the dead-string
+    // path — with 10A peers a 0.25A string would CORRECTLY stay alerted via
+    // peer comparison (~97% below), which is separate, intended behavior.
+    const openDead = [{ id: 31, string_number: 5, severity: 'CRITICAL', gap_percent: null }]
+    mockPrisma.alerts.findMany.mockResolvedValue(openDead)
+    await generateAlerts('dev1', 'plant1',
+      [m(1, 0.3), m(2, 0.3), m(3, 0.3), m(4, 0.3), m(5, 0.15)], configs)
+    expect(mockPrisma.alerts.updateMany).not.toHaveBeenCalled() // still dead — alert kept, no flap
+    expect(mockPrisma.alerts.createMany).not.toHaveBeenCalled()
+
+    vi.clearAllMocks()
+    mockPrisma.string_configs.findMany.mockResolvedValue([])
+    mockPrisma.alerts.findMany.mockResolvedValue(openDead)
+    await generateAlerts('dev1', 'plant1',
+      [m(1, 0.3), m(2, 0.3), m(3, 0.3), m(4, 0.3), m(5, 0.25)], configs)
+    expect(mockPrisma.alerts.updateMany).toHaveBeenCalledTimes(1) // genuinely recovered (cleared 2× threshold)
+  })
+})
+
+describe('classifyAlertSeverityWithHysteresis (pure)', () => {
+  it('sticky zone: existing CRITICAL at gap 48 stays CRITICAL (50−3 boundary)', () => {
+    expect(classifyAlertSeverityWithHysteresis(48, 'CRITICAL')).toBe('CRITICAL')
+    expect(classifyAlertSeverityWithHysteresis(46, 'CRITICAL')).toBe('WARNING') // < 47 → de-escalates
+  })
+  it('escalation needs boundary + margin: WARNING at gap 52 stays, 54 escalates', () => {
+    expect(classifyAlertSeverityWithHysteresis(52, 'WARNING')).toBe('WARNING')
+    expect(classifyAlertSeverityWithHysteresis(54, 'WARNING')).toBe('CRITICAL')
+  })
+  it('no existing alert → plain thresholds (enter)', () => {
+    expect(classifyAlertSeverityWithHysteresis(51, null)).toBe('CRITICAL')
+    expect(classifyAlertSeverityWithHysteresis(26, null)).toBe('WARNING')
+    expect(classifyAlertSeverityWithHysteresis(9, null)).toBeNull()
+  })
+  it('full recovery from INFO needs gap < 10−3', () => {
+    expect(classifyAlertSeverityWithHysteresis(8, 'INFO')).toBe('INFO')   // sticky
+    expect(classifyAlertSeverityWithHysteresis(6, 'INFO')).toBeNull()    // clear
+  })
 })
 
 describe('generateAlerts — batched writes', () => {

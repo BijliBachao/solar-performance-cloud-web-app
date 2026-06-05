@@ -735,6 +735,58 @@ export function classifyAlertSeverity(gapPercent: number): AlertSeverity | null 
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Alert quality (2026-06-05) — sun-armed generation + hysteresis
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Measured live this dawn: 283 false CRITICALs in the first 35 minutes of
+// daylight (strings wake minutes apart → dead-string detector mass-fires),
+// and the worst string flapped 69 alerts in 7 days from gap values hovering
+// at a threshold. Two fixes: (1) alerts only ARM when the sun is comfortably
+// up; (2) severity transitions need to cross a boundary by a margin.
+
+/** Alerts arm only above this sun elevation (~45 min after sunrise / before
+ *  sunset at Pakistani latitudes). Below it, production is establishing or
+ *  collapsing and peer/dead-string verdicts are dawn/dusk noise. */
+export const ALERT_MIN_SUN_ELEVATION_DEG = 10
+
+/** Hysteresis margin (percentage points): an existing alert keeps its
+ *  severity until the gap crosses the band boundary by more than this. */
+export const ALERT_HYSTERESIS_PP = 3
+
+/** Dead-string recovery deadband: a string alerted as dead (≤ ACTIVE_CURRENT_
+ *  THRESHOLD) only counts as recovered above 2× the threshold — kills the
+ *  0.09 A ↔ 0.11 A flap. */
+export const DEAD_STRING_RECOVERY_A = ACTIVE_CURRENT_THRESHOLD * 2
+
+/**
+ * Severity with hysteresis relative to an existing open alert for the same
+ * string. No existing alert → plain thresholds (enter). With one:
+ *   escalate   only when gap > newBandFloor + margin
+ *   de-escalate only when gap < currentBandFloor − margin
+ * In the sticky zone, the existing severity is kept — no churn.
+ */
+export function classifyAlertSeverityWithHysteresis(
+  gapPercent: number,
+  existing: AlertSeverity | null,
+): AlertSeverity | null {
+  const plain = classifyAlertSeverity(gapPercent)
+  const order: AlertSeverity[] = ['INFO', 'WARNING', 'CRITICAL']
+  if (existing == null || !order.includes(existing)) return plain
+  if (plain === existing) return existing
+  const bandFloor: Record<AlertSeverity, number> = {
+    INFO: GAP_INFO, WARNING: GAP_WARNING, CRITICAL: GAP_CRITICAL,
+  }
+  const exIdx = order.indexOf(existing)
+  const plIdx = plain == null ? -1 : order.indexOf(plain)
+  if (plIdx > exIdx) {
+    // escalation: must clear the higher band's floor by the margin
+    return gapPercent > bandFloor[plain as AlertSeverity] + ALERT_HYSTERESIS_PP ? plain : existing
+  }
+  // de-escalation (incl. full recovery): must drop clearly below the
+  // existing band's floor
+  return gapPercent < bandFloor[existing] - ALERT_HYSTERESIS_PP ? plain : existing
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // IEC 61724 Daily Scores
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 

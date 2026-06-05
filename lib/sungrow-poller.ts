@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { SungrowClient } from '@/lib/sungrow-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, safeObject, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, resolveAlertsForUntrustedFeed } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, safeObject, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, resolveAlertsForUntrustedFeed, alertsArmed } from '@/lib/poller-utils'
 import { classifyDeviceWrite } from '@/lib/string-health'
 
 let lastPlantSync = 0
@@ -348,7 +348,7 @@ async function processSungrowDevice(
     await recordDeviceFreshness(device.id, gateStrings, null, device.last_reading_sig)
 
     const stringConfigs = await loadStringConfigs(device.id)
-    await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
+    await generateAlerts(device.id, device.plant_id, measurements, stringConfigs, alertsArmed(device.plants))
     await updateHourlyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
     await updateDailyAggregates(device.id, device.plant_id, maxStrings, stringConfigs, { model: null, max_strings: device.max_strings })
   }

@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { GrowattClient } from '@/lib/growatt-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, resolveAlertsForUntrustedFeed } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, resolveAlertsForUntrustedFeed, alertsArmed } from '@/lib/poller-utils'
 import { classifyDeviceWrite } from '@/lib/string-health'
 import {
   PLANT_HEALTH_HEALTHY,
@@ -437,7 +437,7 @@ async function processDeviceData(
   if (measurements.length > 0) {
     const stringConfigs = await loadStringConfigs(device.id)
     const effectiveStrings = maxStrings || strings.length
-    await generateAlerts(device.id, device.plant_id, measurements, stringConfigs)
+    await generateAlerts(device.id, device.plant_id, measurements, stringConfigs, alertsArmed(device.plants))
     await updateHourlyAggregates(device.id, device.plant_id, effectiveStrings, stringConfigs)
     await updateDailyAggregates(device.id, device.plant_id, effectiveStrings, stringConfigs, { model: null, max_strings: device.max_strings })
   }
