@@ -27,6 +27,16 @@ async function pollAll() {
     else console.log(`[${name}] Poll complete`)
   })
 
+  // Zombie-alert sweep: offline devices get no poller cycle, so their open
+  // alerts would otherwise linger forever (frozen feeds self-clean per cycle
+  // on the gate path; this covers devices the vendor stops reporting at all).
+  try {
+    const { sweepAlertsOnDarkDevices } = await import('../lib/poller-utils')
+    await sweepAlertsOnDarkDevices()
+  } catch (err) {
+    console.error('[AlertSweep] Sweep failed:', err)
+  }
+
   // Cycle-duration visibility: when this approaches the 5-min cron interval,
   // the isPolling guard starts SILENTLY skipping cycles (dropping data
   // resolution) — make that observable before it happens. (CQ audit #5.)

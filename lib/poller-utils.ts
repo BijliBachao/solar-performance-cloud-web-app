@@ -112,6 +112,39 @@ export async function resolveAlertsForUntrustedFeed(deviceId: string): Promise<v
   })
 }
 
+/**
+ * The gap resolveAlertsForUntrustedFeed can't cover: an OFFLINE device gets no
+ * poller cycle at all (the vendor stops reporting it), so alerts opened before
+ * the feed died can never resolve. Found live 2026-06-05 06:05 PKT: ~96 zombie
+ * dusk-storm alerts on Ali Enterprises, dark since 20:10 the previous evening,
+ * dominating the /admin "Active Alerts" count.
+ *
+ * String judgments are only meaningful on a live feed — the outage itself is
+ * already represented by op_status (offline/frozen) on every screen. When the
+ * feed returns and a string is still faulty, the next trusted cycle re-opens
+ * its alert. Frozen devices are included as a belt-and-braces (their per-cycle
+ * gate path normally handles them); idle (night) devices are NOT — alerts on
+ * an honestly-sleeping plant persist until dawn re-evaluation.
+ *
+ * Runs once per pollAll() cycle from run-poller.ts.
+ */
+export async function sweepAlertsOnDarkDevices(): Promise<number> {
+  const { loadFleetConnectivity } = await import('@/lib/donut-data-loader')
+  const conn = await loadFleetConnectivity()
+  const darkIds = conn.devices
+    .filter((d) => d.status === 'offline' || d.status === 'frozen')
+    .map((d) => d.deviceId)
+  if (darkIds.length === 0) return 0
+  const res = await prisma.alerts.updateMany({
+    where: { device_id: { in: darkIds }, resolved_at: null },
+    data: { resolved_at: new Date(), resolved_by: 'system:dark-feed-sweep' },
+  })
+  if (res.count > 0) {
+    console.log(`[AlertSweep] Resolved ${res.count} zombie alert(s) across ${darkIds.length} dark device(s) (offline/frozen feeds)`)
+  }
+  return res.count
+}
+
 // One log line per device per stall (and one on recovery) — same pattern as the
 // CSI/Solis stale-feed logging. Keyed by deviceId (globally unique across providers).
 const writeGateLogState = new Map<string, DeviceWriteAction>()

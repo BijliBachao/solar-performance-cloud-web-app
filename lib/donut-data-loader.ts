@@ -915,10 +915,12 @@ export async function loadFleetConnectivity(orgId?: string): Promise<FleetConnec
 /** Unified plant status for EVERY plant (device-less plants → 'offline').
  *  Derived from the per-device connectivity engine + vendor-fault overlay via
  *  rollupPlantStatus — the same truth the NOC shows, rolled up per plant.
- *  Pages must consume this instead of inventing local status recipes. */
-export async function loadPlantOpStatuses(): Promise<Map<string, PlantOpStatus>> {
+ *  Pages must consume this instead of inventing local status recipes.
+ *  Pass a preloaded connectivity to avoid a second fleet scan when the caller
+ *  already has one (e.g. /api/admin/dashboard). */
+export async function loadPlantOpStatuses(preloaded?: FleetConnectivity): Promise<Map<string, PlantOpStatus>> {
   const [conn, healthRows] = await Promise.all([
-    loadFleetConnectivity(),
+    preloaded ?? loadFleetConnectivity(),
     prisma.plants.findMany({ select: { id: true, health_state: true } }),
   ])
   const devicesByPlant = new Map<string, ConnectivityStatus[]>()

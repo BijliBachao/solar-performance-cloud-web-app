@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getUserFromRequest, requireRole, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
-import { loadPlantOpStatuses } from '@/lib/donut-data-loader'
+import { loadFleetConnectivity, loadPlantOpStatuses, buildAttention } from '@/lib/donut-data-loader'
 
 export async function GET() {
   try {
@@ -19,7 +19,10 @@ export async function GET() {
       criticalAlerts,
       warningAlerts,
       infoAlerts,
-      plantHealth,
+      // ONE fleet scan feeds plant op_status, the inverter connectivity
+      // split, AND the needs-attention ledger (same engine as the NOC).
+      connectivity,
+      alertPlants,
       recentAlerts,
       assignedPlants,
       plantsByOrg,
@@ -35,9 +38,13 @@ export async function GET() {
       prisma.alerts.count({ where: { severity: 'CRITICAL', resolved_at: null } }),
       prisma.alerts.count({ where: { severity: 'WARNING', resolved_at: null } }),
       prisma.alerts.count({ where: { severity: 'INFO', resolved_at: null } }),
-      // Status Unification: plant status from the connectivity engine (same
-      // op_status as /admin/plants + the NOC) — NOT vendor health_state.
-      loadPlantOpStatuses(),
+      loadFleetConnectivity(),
+      // "154 alerts" alone over-alarms — "in N plants" is the actionable size.
+      prisma.alerts.findMany({
+        where: { resolved_at: null },
+        select: { plant_id: true },
+        distinct: ['plant_id'],
+      }),
       prisma.alerts.findMany({
         where: { resolved_at: null },
         orderBy: { created_at: 'desc' },
@@ -58,6 +65,21 @@ export async function GET() {
         },
       }),
     ])
+
+    // Status Unification: plant status from the connectivity engine (same
+    // op_status as /admin/plants + the NOC) — reusing the fleet scan above.
+    const plantHealth = await loadPlantOpStatuses(connectivity)
+
+    // Resolve plant names for the alert feed — a message without its plant is
+    // not actionable from the dashboard.
+    const alertPlantIds = [...new Set(recentAlerts.map(a => a.plant_id))]
+    const alertPlantRows = alertPlantIds.length > 0
+      ? await prisma.plants.findMany({
+          where: { id: { in: alertPlantIds } },
+          select: { id: true, plant_name: true },
+        })
+      : []
+    const alertPlantName = Object.fromEntries(alertPlantRows.map(p => [p.id, p.plant_name]))
 
     // Resolve org names for plantsByOrg
     const orgIds = plantsByOrg.map(p => p.organization_id)
@@ -93,12 +115,24 @@ export async function GET() {
         organizations: { total: activeOrgs + inactiveOrgs, active: activeOrgs, inactive: inactiveOrgs },
         users: { total: totalUsers, active: activeUsers, pending: pendingUsers },
         plants: { total: totalPlants, assigned: assignedPlants, unassigned: totalPlants - assignedPlants },
-        activeAlerts: { CRITICAL: criticalAlerts, WARNING: warningAlerts, INFO: infoAlerts },
+        activeAlerts: {
+          CRITICAL: criticalAlerts, WARNING: warningAlerts, INFO: infoAlerts,
+          plantsAffected: alertPlants.length,
+        },
       },
       plantHealth: healthMap,
+      // Inverter-level truth (the NOC's unit) — plant tiles above are
+      // worst-wins rollups, so both are shown with their own labels.
+      connectivity: connectivity.counts,
+      // Dark-feed ledger: frozen/offline devices grouped per plant, stalest
+      // first — the morning field-call list, same engine as the NOC.
+      needsAttention: buildAttention(connectivity, [], 6),
       plantsByOrganization,
       recentActivity,
-      recentAlerts,
+      recentAlerts: recentAlerts.map(a => ({
+        ...a,
+        plant_name: alertPlantName[a.plant_id] ?? a.plant_id,
+      })),
     })
   } catch (error) {
     if (error instanceof ApiAuthError) return createErrorResponse(error)

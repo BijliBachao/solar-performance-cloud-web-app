@@ -18,14 +18,19 @@ interface DashboardData {
     organizations: { total: number; active: number; inactive: number }
     users: { total: number; active: number; pending: number }
     plants: { total: number; assigned: number; unassigned: number }
-    activeAlerts: { CRITICAL: number; WARNING: number; INFO: number }
+    activeAlerts: { CRITICAL: number; WARNING: number; INFO: number; plantsAffected: number }
   }
   plantHealth: { live: number; idle: number; frozen: number; offline: number; faulty: number }
+  connectivity: { live: number; frozen: number; offline: number; idle: number }
+  needsAttention: Array<{
+    plantCode: string; plantName: string
+    frozen: number; offline: number; worstSince: string | null
+  }>
   plantsByOrganization: Array<{ organization: string; plantCount: number }>
   recentActivity: Array<{ type: string; message: string; timestamp: string; status: string }>
   recentAlerts: Array<{
     id: string; severity: string; message: string; created_at: string
-    plant_id: string; device_id: string; string_number: number
+    plant_id: string; plant_name: string; device_id: string; string_number: number
   }>
 }
 
@@ -174,9 +179,9 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          {/* Active Alerts */}
+          {/* Active Alerts — click lands on the NOC, where alerts are triaged */}
           <div
-            onClick={() => router.push('/admin/plants')}
+            onClick={() => router.push('/admin/noc')}
             className="relative bg-white rounded-sm border border-slate-200 hover:border-red-600 transition-colors cursor-pointer overflow-hidden"
           >
             <div className="absolute top-0 left-0 right-0 h-[2px] bg-red-600" />
@@ -192,7 +197,7 @@ export default function AdminDashboardPage() {
               </div>
               <div className="flex items-center gap-3 text-[11px]">
                 <span className="text-red-700 font-semibold">{data.stats.activeAlerts.CRITICAL} critical</span>
-                <span className="text-amber-700">{data.stats.activeAlerts.WARNING} warn</span>
+                <span className="text-slate-400">in {data.stats.activeAlerts.plantsAffected} plant{data.stats.activeAlerts.plantsAffected !== 1 ? 's' : ''}</span>
               </div>
             </div>
           </div>
@@ -259,20 +264,65 @@ export default function AdminDashboardPage() {
                   </div>
                 ))}
               </div>
+              {/* Inverter-level truth (NOC unit) — plant tiles above are
+                  worst-wins rollups, so a frozen plant can still contain live
+                  inverters. Click-through opens the NOC, whose donut counts
+                  in this same unit. */}
               {data.stats.totalDevices > 0 && (
-                <div className="mt-3 text-[11px] font-semibold text-slate-400 text-center">
-                  {data.stats.totalDevices} inverter{data.stats.totalDevices !== 1 ? 's' : ''} across all plants
+                <div
+                  onClick={() => router.push('/admin/noc')}
+                  className="mt-3 text-[11px] font-semibold text-slate-400 text-center cursor-pointer hover:text-slate-600 transition-colors"
+                >
+                  {data.stats.totalDevices} inverter{data.stats.totalDevices !== 1 ? 's' : ''}:{' '}
+                  <span className="text-spc-green">{data.connectivity.live} live</span>
+                  {data.connectivity.idle > 0 && <> · <span>{data.connectivity.idle} idle</span></>}
+                  {data.connectivity.frozen > 0 && <> · <span className="text-amber-700">{data.connectivity.frozen} frozen</span></>}
+                  {data.connectivity.offline > 0 && <> · <span className="text-red-700">{data.connectivity.offline} offline</span></>}
+                  <span className="text-slate-300"> → NOC</span>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Right: Recent Activity + Active Alerts */}
+          {/* Right: Needs Attention + New Users + Active Alerts */}
           <div className="space-y-4">
-            {/* Recent Activity */}
+            {/* Needs Attention — dark feeds (frozen/offline), the morning
+                field-call list. Same engine as the NOC, stalest first. */}
             <div className="bg-white rounded-sm border border-slate-200 p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">Recent Activity</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">Needs Attention</h3>
+                <span className="text-[11px] font-semibold text-slate-400">dark feeds</span>
+              </div>
+              <div className="space-y-1">
+                {data.needsAttention.length > 0 ? (
+                  data.needsAttention.map((p) => (
+                    <div
+                      key={p.plantCode}
+                      onClick={() => router.push(`/admin/plants/${encodeURIComponent(p.plantCode)}`)}
+                      className="flex items-center gap-2 py-2 border-b border-slate-100 last:border-0 cursor-pointer hover:bg-slate-50 -mx-1 px-1 rounded-sm transition-colors"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-700 leading-tight truncate">{p.plantName}</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          {p.offline > 0 && <span className="text-red-700 font-semibold">{p.offline} offline</span>}
+                          {p.offline > 0 && p.frozen > 0 && ' · '}
+                          {p.frozen > 0 && <span className="text-amber-700 font-semibold">{p.frozen} frozen</span>}
+                          {p.worstSince && <span> · since {formatTime(p.worstSince)}</span>}
+                        </p>
+                      </div>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-300 shrink-0" strokeWidth={2} />
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-slate-400 text-center py-2">All feeds healthy</p>
+                )}
+              </div>
+            </div>
+
+            {/* New Users (honest label — this feed is signups only) */}
+            <div className="bg-white rounded-sm border border-slate-200 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">New Users</h3>
                 <Clock className="w-3.5 h-3.5 text-slate-400" strokeWidth={2} />
               </div>
               <div className="space-y-1 max-h-48 overflow-y-auto">
@@ -289,7 +339,7 @@ export default function AdminDashboardPage() {
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-slate-400 text-center py-2">No recent activity</p>
+                  <p className="text-sm text-slate-400 text-center py-2">No recent signups</p>
                 )}
               </div>
             </div>
@@ -310,7 +360,9 @@ export default function AdminDashboardPage() {
                           {alert.severity}
                         </span>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm text-slate-600 leading-tight truncate">{alert.message}</p>
+                          <p className="text-sm text-slate-600 leading-tight truncate">
+                            <span className="font-semibold text-slate-700">{alert.plant_name}</span> — {alert.message}
+                          </p>
                           <p className="text-[11px] text-slate-400 mt-0.5">{formatTime(alert.created_at)}</p>
                         </div>
                       </div>
