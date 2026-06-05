@@ -396,10 +396,12 @@ async function processCsiDevice(
   logWriteGate('CSI', device.id, gate)
   if (gate !== 'write') {
     // last_seen_at ONLY — advancing a lying vendor ts here would classify
-    // the device "live" and hide the freeze. Untrusted data → open alerts
-    // resolved (re-open on recovery).
+    // the device "live" and hide the freeze. Do NOT resolve alerts here:
+    // one duplicate cycle is not a frozen feed (a live-but-static inverter
+    // alternates duplicate/write and would flap its alerts every cycle).
+    // sweepAlertsOnDarkDevices() resolves alerts only on SUSTAINED
+    // frozen/offline classification.
     await recordDeviceSeen(device.id, null)
-    await resolveAlertsForUntrustedFeed(device.id)
     return
   }
 

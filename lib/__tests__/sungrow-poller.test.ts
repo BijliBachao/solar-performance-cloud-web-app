@@ -16,7 +16,7 @@ const mockPrisma = {
   string_hourly: { upsert: vi.fn().mockResolvedValue({}) },
   string_daily: { upsert: vi.fn().mockResolvedValue({}) },
   device_daily: { upsert: vi.fn().mockResolvedValue({}) },
-  alerts: { findMany: vi.fn().mockResolvedValue([]), update: vi.fn(), create: vi.fn() },
+  alerts: { findMany: vi.fn().mockResolvedValue([]), update: vi.fn(), create: vi.fn(), updateMany: vi.fn(), createMany: vi.fn() },
   vendor_alarms: {
     findMany: vi.fn().mockResolvedValue([]),
     upsert: vi.fn().mockResolvedValue({}),
@@ -115,6 +115,34 @@ describe('pollSungrow — degraded-path resilience', () => {
     const { pollSungrow } = await import('@/lib/sungrow-poller')
     await expect(pollSungrow()).resolves.toBeUndefined()
     expect(mockPrisma.string_measurements.createMany).toHaveBeenCalled()
+  })
+
+  it('duplicate-skip does NOT resolve alerts (flap regression, Popular Sole INV-2 2026-06-05)', async () => {
+    // A live-but-static inverter alternates duplicate/write across cycles.
+    // The old code resolved ALL open alerts on every duplicate skip, so real
+    // dead-string CRITICALs flapped created→resolved every 5 minutes and the
+    // "open since" duration reset forever. Contract: a gate skip stamps
+    // last_seen_at and NOTHING else touches alerts — sustained-freeze
+    // resolution belongs to sweepAlertsOnDarkDevices() alone.
+    const { readingSignature } = await import('@/lib/string-health')
+    const sig = readingSignature([
+      { string_number: 1, voltage: 650.5, current: 6.5, power: 4228.25 },
+    ])
+    clientInstance.getPowerStationList.mockResolvedValue([])
+    clientInstance.getDeviceList.mockResolvedValue([])
+    clientInstance.getDeviceRealTimeData.mockResolvedValue([
+      { p1: '5200', p70: '6.5', p96: '650.5' },
+    ])
+    mockPrisma.devices.findMany.mockResolvedValue([
+      { id: 'A2482410490', plant_id: '1794632', max_strings: 1, last_reading_sig: sig, plants: { latitude: null, longitude: null } },
+    ])
+
+    const { pollSungrow } = await import('@/lib/sungrow-poller')
+    await expect(pollSungrow()).resolves.toBeUndefined()
+
+    expect(mockPrisma.string_measurements.createMany).not.toHaveBeenCalled() // gate held
+    expect(mockPrisma.alerts.updateMany).not.toHaveBeenCalled()              // alerts untouched
+    expect(mockPrisma.devices.update).toHaveBeenCalled()                     // last_seen_at stamped
   })
 
   it('skips poll entirely when SUNGROW_APP_KEY is unset (per sungrow-poller.ts gate)', async () => {

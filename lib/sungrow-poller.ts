@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { SungrowClient } from '@/lib/sungrow-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, safeObject, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, resolveAlertsForUntrustedFeed, alertsArmed } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, safeObject, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, alertsArmed } from '@/lib/poller-utils'
 import { classifyDeviceWrite } from '@/lib/string-health'
 
 let lastPlantSync = 0
@@ -329,10 +329,12 @@ async function processSungrowDevice(
     if (gate !== 'write') {
       // Still "saw" the device this cycle (frozen ≠ offline) — but the
       // untrusted snapshot must not advance the reading signature, create
-      // alerts, feed aggregates, or refresh the native daily counter. Open
-      // alerts rest on data we no longer trust → resolve (re-open on recovery).
+      // alerts, feed aggregates, or refresh the native daily counter.
+      // Do NOT resolve alerts here: one duplicate cycle is not a frozen feed
+      // (a live-but-static inverter alternates duplicate/write and would
+      // flap its alerts every cycle). sweepAlertsOnDarkDevices() resolves
+      // alerts only on SUSTAINED frozen/offline classification.
       await recordDeviceSeen(device.id, null)
-      await resolveAlertsForUntrustedFeed(device.id)
       return
     }
 

@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { huaweiClient } from '@/lib/huawei-client'
 import { Decimal } from '@prisma/client/runtime/library'
 import { PROVIDERS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches, safeArray, safeObject, safeFloat, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, resolveAlertsForUntrustedFeed, alertsArmed } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, getPKTDateForDB, loadStringConfigs, processInBatches, safeArray, safeObject, safeFloat, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, alertsArmed } from '@/lib/poller-utils'
 import { classifyDeviceWrite } from '@/lib/string-health'
 import { ACTIVE_CURRENT_THRESHOLD } from '@/lib/string-health'
 import { getHuaweiMaxStrings } from '@/lib/huawei-model-strings'
@@ -349,8 +349,13 @@ async function processHuaweiDeviceData(
     const gate = classifyDeviceWrite(gateStrings, device.last_reading_sig, sunUp)
     logWriteGate('Huawei', device.id, gate)
     if (gate !== 'write') {
+      // last_seen_at ONLY. Do NOT resolve alerts here: one duplicate cycle is
+      // not a frozen feed — a live-but-static inverter alternates duplicate/
+      // write and would flap its alerts every 5 min (seen live on Popular
+      // Sole INV-2, 2026-06-05: 7 real dead-string CRITICALs created/resolved
+      // 5× in an hour). sweepAlertsOnDarkDevices() resolves alerts only on
+      // SUSTAINED frozen/offline classification.
       await recordDeviceSeen(device.id, null)
-      await resolveAlertsForUntrustedFeed(device.id)
       return
     }
 

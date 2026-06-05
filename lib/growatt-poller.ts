@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { GrowattClient } from '@/lib/growatt-client'
 import { PROVIDERS, DEVICE_TYPE_IDS, POLLER_DEVICE_CONCURRENCY } from '@/lib/constants'
-import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, resolveAlertsForUntrustedFeed, alertsArmed } from '@/lib/poller-utils'
+import { generateAlerts, updateHourlyAggregates, updateDailyAggregates, safeFloat, getPKTDateForDB, loadStringConfigs, processInBatches, recordDeviceFreshness, recordDeviceSeen, logWriteGate, sunUpForWriteGate, alertsArmed } from '@/lib/poller-utils'
 import { classifyDeviceWrite } from '@/lib/string-health'
 import {
   PLANT_HEALTH_HEALTHY,
@@ -415,10 +415,12 @@ async function processDeviceData(
       // vendor ts — a lying clock (ts advancing while values replay) would
       // otherwise classify the device "live" and hide the freeze. Skip
       // measurements/alerts/aggregates/fault codes/native counter — all
-      // would be echoes of the replayed snapshot. Open alerts rest on data
-      // we no longer trust → resolve (re-open on recovery).
+      // would be echoes of the replayed snapshot. Do NOT resolve alerts
+      // here: one duplicate cycle is not a frozen feed (a live-but-static
+      // inverter alternates duplicate/write and would flap its alerts every
+      // cycle). sweepAlertsOnDarkDevices() resolves alerts only on
+      // SUSTAINED frozen/offline classification.
       await recordDeviceSeen(device.id, null)
-      await resolveAlertsForUntrustedFeed(device.id)
       return
     }
 
