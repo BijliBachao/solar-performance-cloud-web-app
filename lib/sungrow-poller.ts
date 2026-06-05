@@ -360,7 +360,11 @@ async function processSungrowDevice(
 
   // Save hardware daily counter — p1 = Today's Energy (当日发电), per-device, unit = Wh
   const nativeKwh = safeFloat(dp['p1']) / 1000 // convert Wh → kWh
-  if (nativeKwh > 0) {
+  // Native counter only from a TRUSTED cycle: gate-skip paths return early,
+  // so measurements.length > 0 here proves the gate passed. Without this, a
+  // replayed snapshot that parses zero usable strings falls through and
+  // overwrites today's counter (Qadir replayed 738.8 kWh for 2 days, Jun 3-4).
+  if (measurements.length > 0 && nativeKwh > 0) {
     await prisma.device_daily.upsert({
       where: { device_id_date: { device_id: device.id, date: getPKTDateForDB() } },
       update: { native_kwh: new Decimal(nativeKwh) },

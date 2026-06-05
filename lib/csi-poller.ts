@@ -427,7 +427,8 @@ async function processCsiDevice(
   await updateHourlyAggregates(device.id, device.plant_id, maxStringNumber, stringConfigs)
   await updateDailyAggregates(device.id, device.plant_id, maxStringNumber, stringConfigs, { model: device.model, max_strings: device.max_strings })
 
-  if (dailyEnergyKwh !== null && dailyEnergyKwh > 0) {
+  // Trusted-cycle guard (see sungrow-poller): no measurements ⇒ gate never ran.
+  if (measurements.length > 0 && dailyEnergyKwh !== null && dailyEnergyKwh > 0) {
     await prisma.device_daily.upsert({
       where: { device_id_date: { device_id: device.id, date: getPKTDateForDB() } },
       update: { native_kwh: new Decimal(dailyEnergyKwh) },

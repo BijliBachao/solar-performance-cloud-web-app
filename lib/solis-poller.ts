@@ -351,7 +351,8 @@ async function processSolisDevice(
 
   // Save hardware daily counter — source of truth for "today's energy" display
   const eToday = Number(detail.eToday ?? 0)
-  if (eToday > 0) {
+  // Trusted-cycle guard (see sungrow-poller): no measurements ⇒ gate never ran.
+  if (measurements.length > 0 && eToday > 0) {
     await prisma.device_daily.upsert({
       where: { device_id_date: { device_id: device.id, date: getPKTDateForDB() } },
       update: { native_kwh: new Decimal(eToday) },

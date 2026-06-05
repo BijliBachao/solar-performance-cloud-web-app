@@ -74,6 +74,7 @@ export async function GET(
         lastContactMs,
         sunUp,
         now,
+        clamped, // noon-dead feeds stay frozen through the night
       )
       return { ...d, connectivity: conn.status, effective_fresh_at: conn.effectiveFreshAt }
     })

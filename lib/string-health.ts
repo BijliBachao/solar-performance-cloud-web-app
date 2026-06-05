@@ -342,11 +342,20 @@ export function classifyDeviceWrite(
  *   frozen  — stale data ≥2h but still receiving rows (<STALE_MS): stuck-but-responding.
  *   offline — stale data and not receiving rows (or never any): no response / gated-stopped.
  */
+/** A feed whose last real data is older than this has missed at least one
+ *  full daylight period — even at night that is a broken feed, not sleep.
+ *  Longest Pakistani winter night ≈ 14h; +2h staleness margin. */
+export const FEED_DEAD_BEYOND_NIGHT_MS = 16 * 60 * 60 * 1000
+
 export function classifyConnectivity(
   effectiveFreshAtMs: number | null,
   lastWriteAtMs: number | null,
   sunUp: boolean,
   nowMs: number = Date.now(),
+  /** Was the sun solidly up at the plant when the feed produced its LAST real
+   *  data? true ⇒ the feed died during production hours. Computed by the
+   *  caller from plant coords (deviceConnectivity). */
+  effWasProductionHours: boolean = false,
 ): ConnectivityStatus {
   // 'live' is checked BEFORE 'idle': fresh data is empirical proof the inverter
   // is alive, which must win over the sun-elevation calc. This keeps the status
@@ -355,9 +364,18 @@ export function classifyConnectivity(
   // daytime plant to 'idle'). age <= 2h is "live" — matches isVendorFeedStale's
   // `age > 2h` staleness cutoff (a feed the gate calls fresh is live here).
   if (effectiveFreshAtMs != null && nowMs - effectiveFreshAtMs <= VENDOR_FEED_STALE_MS) return 'live'
-  // No fresh data + sun down → expected dark, not an alarm.
-  if (!sunUp) return 'idle'
-  // Sun up, no fresh data: still receiving rows (stuck values) = frozen, else offline.
+  if (!sunUp) {
+    // Night does NOT amnesty a broken feed (24/7 doctrine, audit 2026-06-05):
+    // a feed that died in PRODUCTION hours — or missed a whole daylight period
+    // (Qadir: 3 days) — must stay frozen/offline overnight, or the NOC's
+    // frozen count silently drops to zero at dusk and "re-discovers" the same
+    // faults at dawn. Only honest dusk-sleepers (last real data near sunset)
+    // read idle.
+    const missedDaylight =
+      effectiveFreshAtMs != null && nowMs - effectiveFreshAtMs > FEED_DEAD_BEYOND_NIGHT_MS
+    if (!(effWasProductionHours || missedDaylight)) return 'idle'
+  }
+  // No fresh data: still receiving rows (stuck values) = frozen, else offline.
   if (lastWriteAtMs != null && nowMs - lastWriteAtMs < STALE_MS) return 'frozen'
   return 'offline'
 }

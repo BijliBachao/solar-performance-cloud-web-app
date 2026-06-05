@@ -892,6 +892,7 @@ export async function loadFleetConnectivity(orgId?: string): Promise<FleetConnec
       lastContactMs,
       sunUp,
       now,
+      { lat, lng }, // clamped — lets a noon-dead feed stay frozen through the night
     )
     counts[conn.status] += 1
     return {

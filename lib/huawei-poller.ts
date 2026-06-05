@@ -377,7 +377,8 @@ async function processHuaweiDeviceData(
 
   // Save hardware daily counter — source of truth for "today's energy" display
   const nativeKwh = dim['day_cap'] ?? dim['e_day'] ?? null
-  if (nativeKwh !== null && safeFloat(nativeKwh) > 0) {
+  // Trusted-cycle guard (see sungrow-poller): no measurements ⇒ gate never ran.
+  if (measurements.length > 0 && nativeKwh !== null && safeFloat(nativeKwh) > 0) {
     await prisma.device_daily.upsert({
       where: { device_id_date: { device_id: device.id, date: getPKTDateForDB() } },
       update: { native_kwh: new Decimal(nativeKwh) },

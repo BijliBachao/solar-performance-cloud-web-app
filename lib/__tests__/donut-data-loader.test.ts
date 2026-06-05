@@ -475,17 +475,43 @@ describe('loadFleetConnectivity', () => {
   it('idle at PKT night for a sleeping device — even with garbage Beijing coords (clamp)', async () => {
     // 2026-05-23T21:00:00Z = 02:00 PKT (night in Pakistan; Beijing sunrise
     // hits ~01:45 PKT, which previously flipped these devices to OFFLINE).
+    // Last real data 7h ago ≈ 19:00 PKT ≈ sunset — an honest dusk-sleeper
+    // (sun below the 8° production-hours floor at its final reading).
     vi.setSystemTime(new Date('2026-05-23T21:00:00Z'))
     const now = Date.now()
     const hAgo = (h: number) => new Date(now - h * 3600e3)
     mockPrisma.$queryRaw.mockResolvedValue([
       { device_id: 'd-sleep', plant_code: 'p1', inverter_name: 'INV-SLEEP', provider: 'huawei',
-        vendor_last_data_at: hAgo(8), reading_changed_at: null, last_write_at: hAgo(8),
+        vendor_last_data_at: hAgo(7), reading_changed_at: null, last_write_at: hAgo(7),
         latitude: new Decimal('39.906922'), longitude: new Decimal('116.397551') },
     ])
     const { loadFleetConnectivity } = await import('@/lib/donut-data-loader')
     const result = await loadFleetConnectivity()
     expect(result.counts).toEqual({ live: 0, frozen: 0, offline: 0, idle: 1 })
+  })
+
+  it('night does NOT amnesty broken feeds: noon-dead and multi-day freezes stay frozen at 02:00 PKT', async () => {
+    // Audit 2026-06-05: the idle branch preceded the frozen check, so every
+    // frozen feed was reclassified "Idle · night" at dusk — the NOC frozen
+    // count silently dropped to zero overnight (Qadir's 3-day freeze) and
+    // "re-discovered" the same faults at dawn. 24/7 doctrine: night must not
+    // hide a feed that was already broken in daylight.
+    vi.setSystemTime(new Date('2026-05-23T21:00:00Z')) // 02:00 PKT
+    const now = Date.now()
+    const hAgo = (h: number) => new Date(now - h * 3600e3)
+    mockPrisma.$queryRaw.mockResolvedValue([
+      // Feed died ~13:00 PKT (13h ago, sun solidly up at its last reading).
+      { device_id: 'd-noon-dead', plant_code: 'p1', inverter_name: 'INV-ND', provider: 'sungrow',
+        vendor_last_data_at: null, reading_changed_at: hAgo(13), last_write_at: hAgo(0.05),
+        latitude: new Decimal('31.5'), longitude: new Decimal('74.3') },
+      // Qadir pattern: last real data 3 DAYS ago — missed whole daylight periods.
+      { device_id: 'd-qadir', plant_code: 'p2', inverter_name: 'INV-Q', provider: 'sungrow',
+        vendor_last_data_at: null, reading_changed_at: hAgo(72), last_write_at: hAgo(0.05),
+        latitude: new Decimal('31.5'), longitude: new Decimal('74.3') },
+    ])
+    const { loadFleetConnectivity } = await import('@/lib/donut-data-loader')
+    const result = await loadFleetConnectivity()
+    expect(result.counts).toEqual({ live: 0, frozen: 2, offline: 0, idle: 0 })
   })
 })
 
