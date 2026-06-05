@@ -333,6 +333,31 @@ export function NocConsole() {
     [data],
   )
 
+  // ── Inverter mode (2026-06-05) ──────────────────────────────────
+  // The connectivity donut counts INVERTERS — clicking it must show
+  // inverters. The old behavior filtered the STRINGS table, which is
+  // structurally empty for frozen/offline devices (a stalled feed produces
+  // no scored strings today — found live: 'Frozen 12' click showed nothing).
+  // Pure connectivity selection (no health buckets) now renders the matching
+  // DEVICE list from the payload we already have; combining with a health
+  // bucket returns to the strings table (the AND power-feature).
+  const inverterMode = filters.conn.length > 0 && filters.buckets.length === 0
+  const inverterRows = useMemo(() => {
+    if (!inverterMode || !data?.connectivity) return []
+    const rank: Record<ConnectivityStatus, number> = { offline: 0, frozen: 1, live: 2, idle: 3 }
+    return data.connectivity.devices
+      .filter((d) => filters.conn.includes(d.status))
+      .sort((a, b) => {
+        const r = rank[a.status] - rank[b.status]
+        if (r) return r
+        // stalest first within a status — the longest-dead inverter on top
+        const am = a.effectiveFreshAt ? Date.parse(a.effectiveFreshAt) : 0
+        const bm = b.effectiveFreshAt ? Date.parse(b.effectiveFreshAt) : 0
+        if (am !== bm) return am - bm
+        return a.plantName.localeCompare(b.plantName)
+      })
+  }, [inverterMode, data, filters.conn])
+
   return (
     <div className="space-y-4">
       {/* Header bar */}
@@ -395,17 +420,26 @@ export function NocConsole() {
 
         {/* Table pane (right) */}
         <div className="bg-white border border-slate-200 rounded-sm shadow-card overflow-hidden">
-          <FilterChips filters={filters} setFilters={setFilters} setQInput={setQInput} onClearAll={clearFacets} total={data?.rows.total ?? 0} isLoading={firstLoad || filterPending} />
+          <FilterChips
+            filters={filters} setFilters={setFilters} setQInput={setQInput} onClearAll={clearFacets}
+            total={inverterMode ? inverterRows.length : data?.rows.total ?? 0}
+            unitLabel={inverterMode ? 'Inverters · worst first' : 'Strings · worst first'}
+            isLoading={firstLoad || filterPending}
+          />
           <div className={cn('transition-opacity duration-150', filterPending && 'opacity-50 pointer-events-none')}>
             {firstLoad ? (
               <SkeletonTable />
+            ) : inverterMode ? (
+              inverterRows.length === 0
+                ? <EmptyTable hasFacets onClearAll={clearFacets} />
+                : <InvertersTable devices={inverterRows} />
             ) : data && data.rows.items.length === 0 ? (
               <EmptyTable hasFacets={hasActiveFacets(filters)} onClearAll={clearFacets} />
             ) : data ? (
               <StringsTable rows={data.rows.items} frozenDeviceIds={frozenDeviceIds} />
             ) : null}
           </div>
-          {data && data.rows.total > data.rows.pageSize && (
+          {!inverterMode && data && data.rows.total > data.rows.pageSize && (
             <Pagination
               page={filters.page}
               pageSize={data.rows.pageSize}
@@ -681,6 +715,7 @@ function FilterChips({
   setQInput,
   onClearAll,
   total,
+  unitLabel = 'Strings · worst first',
   isLoading,
 }: {
   filters: Filters
@@ -688,6 +723,7 @@ function FilterChips({
   setQInput: (v: string) => void
   onClearAll: () => void
   total: number
+  unitLabel?: string
   isLoading: boolean
 }) {
   const chips: Array<{ key: string; label: string; onRemove: () => void; cls: string }> = []
@@ -721,7 +757,7 @@ function FilterChips({
     <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-3 flex-wrap">
       <div className="flex items-center gap-2 min-w-0 flex-wrap">
         <h2 className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
-          Strings · worst first
+          {unitLabel}
         </h2>
         <span className="text-[11px] font-mono tabular-nums text-slate-400">
           ({isLoading ? '…' : total.toLocaleString()})
@@ -951,6 +987,68 @@ function ConnectivityDonut({
           {idle.toLocaleString()} idle — night
         </p>
       )}
+    </div>
+  )
+}
+
+// ─── Inverters table (connectivity-facet view) ──────────────────────
+// Shown when ONLY connectivity slices are selected: the donut counts
+// inverters, so its click lists inverters — plant, provider, status, and
+// since-when. Click-through opens the plant page.
+
+function InvertersTable({ devices }: { devices: ConnectivityDevice[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead className="bg-slate-50 border-b border-slate-200">
+          <tr>
+            <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[10px] text-slate-500">Plant</th>
+            <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[10px] text-slate-500">Inverter</th>
+            <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[10px] text-slate-500">Provider</th>
+            <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[10px] text-slate-500">Status</th>
+            <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[10px] text-slate-500">Last real data</th>
+            <th className="px-3 py-2 text-right font-bold uppercase tracking-wider text-[10px] text-slate-500"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {devices.map((d) => {
+            const style = STATUS_STYLES[statusKeyFromConnectivity(d.status)]
+            const href = `/admin/plants/${encodeURIComponent(d.plantCode)}`
+            return (
+              <tr
+                key={d.deviceId}
+                onClick={() => window.open(href, '_blank', 'noopener')}
+                className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer"
+              >
+                <td className="px-3 py-2 text-slate-900 font-medium truncate max-w-[200px]">{d.plantName}</td>
+                <td className="px-3 py-2 text-slate-700 font-mono truncate max-w-[160px]">{d.inverterName}</td>
+                <td className="px-3 py-2 text-slate-500 uppercase text-[10px] font-bold">{d.provider}</td>
+                <td className="px-3 py-2">
+                  <span className={cn('inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider', style.fg)}>
+                    <span className={cn('w-1.5 h-1.5 rounded-full', style.dot)} />
+                    {style.label}
+                  </span>
+                </td>
+                <td className="px-3 py-2 font-mono tabular-nums text-slate-600">
+                  {d.effectiveFreshAt ? `${sinceLabel(d.effectiveFreshAt)} ago` : '—'}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex items-center text-slate-400 hover:text-slate-900"
+                    aria-label={`Open ${d.plantName} in new tab`}
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }
