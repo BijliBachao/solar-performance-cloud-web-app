@@ -96,6 +96,15 @@ export function alertsArmed(
   return solarElevationDeg(lat, lng, now) >= ALERT_MIN_SUN_ELEVATION_DEG
 }
 
+// Alert message taxonomy thresholds (alert-system audit 2026-06-05).
+// Reverse current: sustained negative amps = backfeed through the string
+// (failed bypass diode / wiring fault) — 0.5A floor keeps sensor noise out.
+// Open circuit: a string showing real array voltage but no current is a
+// broken conductor/fuse/connector, not a dead panel — 50V floor is far above
+// measurement noise yet far below any operating string voltage (300-700V).
+export const REVERSE_CURRENT_ALERT_A = 0.5
+export const OPEN_CIRCUIT_MIN_VOLTAGE_V = 50
+
 /**
  * When the write gate (or a vendor-ts stale gate) rejects a device's feed, the
  * data behind its open string-health alerts is no longer trusted — resolve
@@ -108,7 +117,9 @@ export function alertsArmed(
 export async function resolveAlertsForUntrustedFeed(deviceId: string): Promise<void> {
   await prisma.alerts.updateMany({
     where: { device_id: deviceId, resolved_at: null },
-    data: { resolved_at: new Date() },
+    // resolved_by discriminates "feed went untrusted" from "string actually
+    // recovered" in the alert history (alert-system audit 2026-06-05).
+    data: { resolved_at: new Date(), resolved_by: 'system:untrusted-feed' },
   })
 }
 
@@ -460,10 +471,23 @@ export async function generateAlerts(
     return !currentState || currentState.severity !== alert.severity
   })
   if (toResolve.length > 0) {
-    await prisma.alerts.updateMany({
-      where: { id: { in: toResolve.map((a) => a.id) } },
-      data: { resolved_at: new Date() },
-    })
+    // Two resolution reasons, stamped separately so the history can tell
+    // them apart: the string genuinely recovered vs the alert was superseded
+    // by a different-severity row (band change). Usually only one group is
+    // non-empty, so this stays a single write in practice.
+    const recovered = toResolve.filter((a) => !currentSeverities.get(a.string_number))
+    const reclassified = toResolve.filter((a) => currentSeverities.get(a.string_number))
+    for (const [group, reason] of [
+      [recovered, 'system:recovered'],
+      [reclassified, 'system:severity-change'],
+    ] as const) {
+      if (group.length > 0) {
+        await prisma.alerts.updateMany({
+          where: { id: { in: group.map((a) => a.id) } },
+          data: { resolved_at: new Date(), resolved_by: reason },
+        })
+      }
+    }
   }
   const resolvedSet = new Set(toResolve.map((a) => `${a.string_number}:${a.severity}`))
 
@@ -485,9 +509,20 @@ export async function generateAlerts(
     if (!measurement) continue
 
     const current = Number(measurement.current)
-    const message = !isActive(current)
-      ? `String ${stringNumber} producing near-zero current (${current.toFixed(3)}A)`
-      : `String ${stringNumber} is ${(state.gapPercent ?? 0).toFixed(1)}% below average`
+    const voltage = Number(measurement.voltage)
+    // Message taxonomy (alert-system audit 2026-06-05): the system already
+    // measures voltage, so say what the data shows instead of one generic
+    // "near-zero" — reverse current (backfeed/wiring, seen live at −17.46A on
+    // Popular Sole INV-2) and open circuit (full voltage, no current: fuse/
+    // connector) are the two most field-actionable diagnoses.
+    const message =
+      current <= -REVERSE_CURRENT_ALERT_A
+        ? `String ${stringNumber} showing reverse current (${current.toFixed(3)}A) — possible backfeed/wiring fault`
+        : !isActive(current)
+          ? voltage >= OPEN_CIRCUIT_MIN_VOLTAGE_V
+            ? `String ${stringNumber} open circuit suspected — ${voltage.toFixed(0)}V but near-zero current (${current.toFixed(3)}A)`
+            : `String ${stringNumber} producing near-zero current (${current.toFixed(3)}A)`
+          : `String ${stringNumber} is ${(state.gapPercent ?? 0).toFixed(1)}% below average`
 
     // gap_percent NULL on the alert row also serves as the discriminator for
     // peer-comparison vs dead-string alerts — used by the admin auto-resolve

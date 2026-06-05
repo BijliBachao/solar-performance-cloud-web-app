@@ -87,14 +87,25 @@ export function getSeverityConfig(severity: string): SeverityConfig {
   }
 }
 
+// The fleet lives in Pakistan (PKT = UTC+5, no DST). Day grouping and the
+// Today/Yesterday headers must share ONE calendar: keying groups by UTC day
+// while labeling with browser-local days put any alert from 00:00–05:00 PKT
+// under the wrong header (alert-system audit 2026-06-05).
+const PKT_OFFSET_MS = 5 * 60 * 60 * 1000
+
+/** PKT calendar day (YYYY-MM-DD) for a timestamp. */
+function pktDayKey(d: Date): string {
+  return new Date(d.getTime() + PKT_OFFSET_MS).toISOString().split('T')[0]
+}
+
 /**
- * Group alerts by date (YYYY-MM-DD)
+ * Group alerts by PKT date (YYYY-MM-DD)
  */
 export function groupAlertsByDate(alerts: AlertData[]): Map<string, AlertData[]> {
   const grouped = new Map<string, AlertData[]>()
 
   for (const alert of alerts) {
-    const dateKey = new Date(alert.created_at).toISOString().split('T')[0]
+    const dateKey = pktDayKey(new Date(alert.created_at))
     if (!grouped.has(dateKey)) {
       grouped.set(dateKey, [])
     }
@@ -110,25 +121,26 @@ export function groupAlertsByDate(alerts: AlertData[]): Map<string, AlertData[]>
 }
 
 /**
- * Format date for display headers
+ * Format a PKT day key (from groupAlertsByDate) for display headers —
+ * compared against today/yesterday in PKT, not browser-local time.
  */
 export function formatDateHeader(dateStr: string): string {
+  const now = new Date()
+  const todayKey = pktDayKey(now)
+  const yesterdayKey = pktDayKey(new Date(now.getTime() - 24 * 60 * 60 * 1000))
+
+  if (dateStr === todayKey) return 'Today'
+  if (dateStr === yesterdayKey) return 'Yesterday'
+
+  // dateStr is date-only → parsed as UTC midnight; format in UTC so the
+  // label can never shift a day in browsers behind UTC.
   const date = new Date(dateStr)
-  const today = new Date()
-  const yesterday = new Date(today)
-  yesterday.setDate(yesterday.getDate() - 1)
-
-  const isToday = date.toDateString() === today.toDateString()
-  const isYesterday = date.toDateString() === yesterday.toDateString()
-
-  if (isToday) return 'Today'
-  if (isYesterday) return 'Yesterday'
-
   return date.toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
-    year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined
+    year: date.getUTCFullYear() !== parseInt(todayKey.slice(0, 4)) ? 'numeric' : undefined,
+    timeZone: 'UTC',
   })
 }
 

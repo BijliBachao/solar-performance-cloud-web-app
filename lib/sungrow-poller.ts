@@ -295,8 +295,10 @@ async function processSungrowDevice(
     // Sungrow MPPT topology: 2 strings share 1 MPPT, API reports current
     // on primary string only (odd-numbered). Secondary strings have voltage
     // but always 0 current — storing them creates misleading 0% health scores.
-    // Only store strings that have measurable current (real individual data).
-    if (current > 0) {
+    // Store any NON-ZERO current: positive is production, NEGATIVE is reverse
+    // current (backfeed/wiring fault — seen live at −17.46A on a Huawei unit
+    // 2026-06-05) and must reach the alert engine, not be silently dropped.
+    if (current !== 0) {
       const vDec = new Decimal(voltage).toDecimalPlaces(2)
       const cDec = new Decimal(current).toDecimalPlaces(3)
       measurements.push({

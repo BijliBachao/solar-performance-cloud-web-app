@@ -295,8 +295,10 @@ async function processSolisDevice(
     // Solis MPPT topology: 2 strings share 1 MPPT, API reports current
     // on primary string only. Secondary strings have voltage but always
     // 0 current — storing them creates false "0 A Fault" alerts.
-    // Only store strings that have measurable current.
-    if (current > 0) {
+    // Store any NON-ZERO current: positive is production, NEGATIVE is
+    // reverse current (backfeed/wiring fault) and must reach the alert
+    // engine, not be silently dropped.
+    if (current !== 0) {
       measurements.push({
         device_id: device.id,
         plant_id: device.plant_id,

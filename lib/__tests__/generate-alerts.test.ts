@@ -119,8 +119,32 @@ describe('generateAlerts — batched writes', () => {
     for (const r of rows) {
       expect(r.severity).toBe('CRITICAL')
       expect(r.device_id).toBe('dev1')
-      expect(r.message).toMatch(/near-zero current/)
+      // Fixture strings carry 600V at 0A — full array voltage with no
+      // current is an open-circuit signature, not a generic dead string.
+      expect(r.message).toMatch(/open circuit suspected/)
     }
+  })
+
+  it('message taxonomy: reverse current / open circuit / near-zero are distinguished', async () => {
+    const reverse = { string_number: 5, current: new Decimal('-1.400'), voltage: new Decimal('15'), power: new Decimal('-21') }
+    const collapsed = { string_number: 6, current: new Decimal('0.000'), voltage: new Decimal('2'), power: new Decimal('0') }
+    await generateAlerts('dev1', 'plant1',
+      [m(1, 10), m(2, 10), m(3, 10), m(4, 10), reverse as any, collapsed as any], configs)
+    const rows = mockPrisma.alerts.createMany.mock.calls[0][0].data
+    const byString = Object.fromEntries(rows.map((r: any) => [r.string_number, r.message]))
+    expect(byString[5]).toMatch(/reverse current \(-1\.400A\)/)
+    expect(byString[6]).toMatch(/near-zero current/)   // 2V → no open-circuit claim
+    expect(byString[6]).not.toMatch(/open circuit/)
+  })
+
+  it('system resolutions are attributed: recovery stamps resolved_by', async () => {
+    mockPrisma.alerts.findMany.mockResolvedValue([
+      { id: 21, string_number: 5, severity: 'CRITICAL', gap_percent: null },
+    ])
+    await generateAlerts('dev1', 'plant1',
+      [m(1, 10), m(2, 10), m(3, 10), m(4, 10), m(5, 10)], configs)
+    const arg = mockPrisma.alerts.updateMany.mock.calls[0][0]
+    expect(arg.data.resolved_by).toBe('system:recovered')
   })
 
   it('resolves MULTIPLE recovered alerts with ONE updateMany (never per-row update)', async () => {

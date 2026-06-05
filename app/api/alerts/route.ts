@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest, requireOrganization, createErrorResponse, ApiAuthError, plantScopeWhere } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
+import { VALID_SEVERITIES } from '@/lib/api-validation'
 
 function isValidISODate(dateStr: string): boolean {
   const date = new Date(dateStr)
@@ -20,8 +21,14 @@ export async function GET(request: NextRequest) {
     const severity = searchParams.get('severity')
     const plantId = searchParams.get('plant_id')
     const resolved = searchParams.get('resolved')
+    // parseInt('abc') is NaN and `NaN < 1` is false — without the integer
+    // checks below, NaN page/limit slips past the guards into Prisma (500).
     const page = parseInt(searchParams.get('page') || '1')
-    const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100) // Max 100
+    const limitRaw = parseInt(searchParams.get('limit') || '20')
+    if (!Number.isInteger(limitRaw) || limitRaw < 1) {
+      return NextResponse.json({ error: 'limit must be a positive integer' }, { status: 400 })
+    }
+    const limit = Math.min(limitRaw, 100) // Max 100
     const skip = (page - 1) * limit
 
     // New date range filters
@@ -63,8 +70,17 @@ export async function GET(request: NextRequest) {
     }
 
     // Validate pagination
-    if (page < 1) {
+    if (!Number.isInteger(page) || page < 1) {
       return NextResponse.json({ error: 'page must be a positive integer' }, { status: 400 })
+    }
+
+    // Validate severity against the shared vocab — a typo'd value used to
+    // return 0 rows with 200 OK instead of a 400.
+    if (severity && !(VALID_SEVERITIES as readonly string[]).includes(severity)) {
+      return NextResponse.json(
+        { error: `severity must be one of: ${VALID_SEVERITIES.join(', ')}` },
+        { status: 400 }
+      )
     }
 
     // Get user's plant IDs

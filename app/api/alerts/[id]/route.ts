@@ -26,6 +26,12 @@ export async function PATCH(
     // Verify access — SUPER_ADMIN passes, ORG_USER checked via plant_assignments
     await requirePlantAccess(userContext, alert.plant_id)
 
+    // Idempotent: re-resolving must NOT overwrite who first resolved it and
+    // when — the audit trail of the original resolution is preserved.
+    if (alert.resolved_at) {
+      return NextResponse.json(alert)
+    }
+
     const updated = await prisma.alerts.update({
       where: { id: alertId },
       data: {
