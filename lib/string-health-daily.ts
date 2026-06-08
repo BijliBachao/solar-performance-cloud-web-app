@@ -205,13 +205,21 @@ export function scoreDailyP2P(
   }
   const fallbackPoolValid = deviceWideFallback.length >= MIN_PEERS_FOR_MPPT_GROUP
 
-  // ── Step 3: Median per-panel-W per group ────────────────────────────
+  // ── Step 3: Median (anchor) + MAX (low-irradiance gate) per-panel-W per group ──
+  // The ratio anchors on the MEDIAN, but the deep-shade gate reads the group
+  // MAX — identical to scoreLiveSr (audit 2026-06-08), so a borderline group is
+  // suppressed on the daily/NOC donut exactly when it is on the live donut.
   const medianByGroup = new Map<string, number>()
+  const maxByGroup = new Map<string, number>()
   for (const [key, pool] of groupedPool) {
     medianByGroup.set(key, median(pool.map((a) => a.per_panel_W!)))
+    maxByGroup.set(key, Math.max(...pool.map((a) => a.per_panel_W!)))
   }
   const fallbackMedian = fallbackPoolValid
     ? median(deviceWideFallback.map((a) => a.per_panel_W!))
+    : 0
+  const fallbackMax = fallbackPoolValid
+    ? Math.max(...deviceWideFallback.map((a) => a.per_panel_W!))
     : 0
 
   // ── Step 4: Score each string ───────────────────────────────────────
@@ -240,8 +248,10 @@ export function scoreDailyP2P(
     }
 
     const medianW = inMpptGroup ? medianByGroup.get(a.mpptGroupKey)! : fallbackMedian
-    if (medianW < MIN_PER_PANEL_W_FOR_COMPARISON) {
-      // Whole group barely producing in the peak window — comparison meaningless.
+    const maxW = inMpptGroup ? maxByGroup.get(a.mpptGroupKey)! : fallbackMax
+    if (maxW < MIN_PER_PANEL_W_FOR_COMPARISON) {
+      // Even the best string in the group is barely producing — comparison
+      // meaningless. Gate on MAX (mirrors scoreLiveSr) so live and daily agree.
       return { ...base, p2p: null, score_persisted: null, bucket: null, status: 'NORMAL', no_score_reason: 'low_irradiance_group' }
     }
 

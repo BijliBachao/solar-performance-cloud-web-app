@@ -19,7 +19,7 @@ import {
   perPanelPower,
   bucketSrScore,
   MIN_PEERS_FOR_MPPT_GROUP,
-  MIN_PER_PANEL_W_FOR_COMPARISON,
+  SR_LIVE_MIN_PER_PANEL_W,
   ACTIVE_CURRENT_THRESHOLD,
   type StringStatus,
 } from '@/lib/string-health'
@@ -303,8 +303,10 @@ export function scoreLiveSr(
       }
     }
 
-    if (peerMax < MIN_PER_PANEL_W_FOR_COMPARISON) {
-      // Whole MPPT group is in low-light / deep shade — can't compare
+    if (peerMax < SR_LIVE_MIN_PER_PANEL_W) {
+      // Group not yet in meaningful production (morning/evening ramp, heavy
+      // cloud) — comparison would flag healthy uneven-warm-up strings. Skip
+      // with no verdict ("warming up"); dead/open-circuit already handled above.
       return {
         string_number: s.string_number,
         sr: null,

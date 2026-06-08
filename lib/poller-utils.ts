@@ -7,7 +7,7 @@ import {
   MAX_STRING_CURRENT_A, MAX_STRING_POWER_W, MS_PER_HOUR,
   MIN_PRODUCTIVE_HOURS_FOR_DAILY_SCORE, MIN_PRODUCTIVE_POWER_W,
   clampToFleetCoords,
-  classifyAlertSeverityWithHysteresis,
+  classifyAlertSeverityWithHysteresis, classifySrAlertSeverityWithHysteresis,
   ALERT_MIN_SUN_ELEVATION_DEG, DEAD_STRING_RECOVERY_A,
   type DeviceWriteAction, type AlertSeverity,
 } from '@/lib/string-health'
@@ -459,10 +459,12 @@ export async function generateAlerts(
   for (const r of srResults) {
     if (r.sr == null) continue // open-circuit/offline/excluded/too-few-peers → Part 2 or no fault
     const gapPercent = Math.max(0, Math.min((1 - r.sr) * 100, 100))
-    // Hysteresis: an existing alert's severity is sticky until the gap clears
-    // the band boundary by ALERT_HYSTERESIS_PP — kills threshold-hover flapping.
-    const severity = classifyAlertSeverityWithHysteresis(
-      gapPercent,
+    // Severity maps to the SAME SR buckets as the donut (critical→CRITICAL,
+    // abnormal→WARNING) so the coloured ring and the alert list never
+    // contradict each other (audit 2026-06-08). SR-level hysteresis kills
+    // threshold-hover flapping.
+    const severity = classifySrAlertSeverityWithHysteresis(
+      r.sr,
       existingSeverity.get(r.string_number) ?? null,
     )
     if (severity) {
@@ -483,27 +485,23 @@ export async function generateAlerts(
   // not we have peers to compare against, and even an inverter with all
   // strings flagged peer-excluded should still surface a real cable break.
   //
-  // gapPercent is set ONLY when the string is in the peer pool AND the pool
-  // is viable. Otherwise it's null — the alert message says "near-zero
-  // current"; we don't claim a peer ratio when there isn't one.
-  // Dead detection with a recovery deadband: a string with an OPEN dead-
-  // string alert stays "dead" until its current clears 2x the active
-  // threshold (0.09A <-> 0.11A flap killer).
+  // Dead-string alerts ALWAYS carry gap_percent=null — this is the discriminator
+  // that lets the NEXT cycle's existingDeadAlert recognise them and apply the
+  // recovery deadband (audit 2026-06-08 #2: storing a peer gap here when a peer
+  // pool existed made existingDeadAlert miss the alert, re-enabling the 0.1A
+  // flap). A dead string's "gap" isn't a peer ratio anyway — the message says
+  // "near-zero current". Dead detection with a recovery deadband: a string with
+  // an OPEN dead-string alert stays "dead" until its current clears 2x the
+  // active threshold (0.09A <-> 0.11A flap killer).
   const deadStrings = measurements.filter(m => {
     const amps = Number(m.current)
     if (existingDeadAlert.has(m.string_number)) return amps <= DEAD_STRING_RECOVERY_A
     return !isActive(amps)
   })
   for (const measurement of deadStrings) {
-    const sn = measurement.string_number
-    const inPeerPool = !peerExcludedSet.has(sn)
-    if (canDoComparison && inPeerPool) {
-      const current = Number(measurement.current)
-      const gapPercent = Math.min(computeGap(current, peerAvgCurrent), 100)
-      currentSeverities.set(sn, { severity: 'CRITICAL', gapPercent })
-    } else {
-      currentSeverities.set(sn, { severity: 'CRITICAL', gapPercent: null })
-    }
+    // Part 2 runs AFTER Part 1, so this overwrites any peer-comparison entry —
+    // a near-zero string is reported as dead (gap null), not as "% below".
+    currentSeverities.set(measurement.string_number, { severity: 'CRITICAL', gapPercent: null })
   }
 
   // ── Part 3: Resolve / Create alerts ────────────────────────────
@@ -598,6 +596,11 @@ export async function generateAlerts(
     // gap_percent NULL on the alert row also serves as the discriminator for
     // peer-comparison vs dead-string alerts — used by the admin auto-resolve
     // logic to scope which alerts get cleared on flag toggles.
+    // Guard against non-finite values reaching the DB: new Decimal(NaN/Infinity)
+    // does NOT throw at construction but rejects the whole createMany, which
+    // would silently drop the device's entire alert batch (audit 2026-06-08).
+    const finiteDec = (n: number | null | undefined, dp: number): Decimal | null =>
+      n != null && Number.isFinite(n) ? new Decimal(n.toFixed(dp)) : null
     creates.push({
       device_id: deviceId,
       plant_id: plantId,
@@ -605,10 +608,10 @@ export async function generateAlerts(
       severity: state.severity,
       message,
       expected_value: state.expectedCurrent != null
-        ? new Decimal(state.expectedCurrent.toFixed(3))
-        : (state.gapPercent !== null ? new Decimal(peerAvgCurrent.toFixed(3)) : null),
+        ? finiteDec(state.expectedCurrent, 3)
+        : (state.gapPercent !== null ? finiteDec(peerAvgCurrent, 3) : null),
       actual_value: measurement.current,
-      gap_percent: state.gapPercent !== null ? new Decimal(state.gapPercent.toFixed(1)) : null,
+      gap_percent: state.gapPercent !== null ? finiteDec(state.gapPercent, 1) : null,
     })
   }
   if (creates.length > 0) {

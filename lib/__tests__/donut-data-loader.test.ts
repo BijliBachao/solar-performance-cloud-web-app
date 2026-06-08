@@ -233,10 +233,10 @@ describe('loadPlantDonutLast3h', () => {
   })
 
   it('scores strings by SR over hourly per-panel power; equal strings → Healthy', async () => {
-    // Two strings, equal per-panel power (1600W / 16 panels = 100 W/panel) → SR 1.0 each.
+    // Two strings, equal per-panel power (6400W / 16 panels = 400 W/panel, above the live floor) → SR 1.0 each.
     mockLast3h([
-      hRow(1, '2026-05-24T02:00:00Z', 1600), hRow(1, '2026-05-24T03:00:00Z', 1600), hRow(1, '2026-05-24T04:00:00Z', 1600),
-      hRow(2, '2026-05-24T02:00:00Z', 1600), hRow(2, '2026-05-24T03:00:00Z', 1600), hRow(2, '2026-05-24T04:00:00Z', 1600),
+      hRow(1, '2026-05-24T02:00:00Z', 6400), hRow(1, '2026-05-24T03:00:00Z', 6400), hRow(1, '2026-05-24T04:00:00Z', 6400),
+      hRow(2, '2026-05-24T02:00:00Z', 6400), hRow(2, '2026-05-24T03:00:00Z', 6400), hRow(2, '2026-05-24T04:00:00Z', 6400),
     ])
     const { loadPlantDonutLast3h } = await import('@/lib/donut-data-loader')
 
@@ -248,11 +248,11 @@ describe('loadPlantDonutLast3h', () => {
   })
 
   it('one string far below its MPPT peers (per-panel) → Critical', async () => {
-    // s1,s2 = 100 W/panel; s3 = 40 W/panel → SR 0.4 vs best → Critical.
+    // s1,s2 = 400 W/panel; s3 = 160 W/panel → SR 0.4 vs median → Critical (group max 400 > live floor).
     mockLast3h([
-      hRow(1, '2026-05-24T02:00:00Z', 1600), hRow(1, '2026-05-24T03:00:00Z', 1600), hRow(1, '2026-05-24T04:00:00Z', 1600),
-      hRow(2, '2026-05-24T02:00:00Z', 1600), hRow(2, '2026-05-24T03:00:00Z', 1600), hRow(2, '2026-05-24T04:00:00Z', 1600),
-      hRow(3, '2026-05-24T02:00:00Z', 640),  hRow(3, '2026-05-24T03:00:00Z', 640),  hRow(3, '2026-05-24T04:00:00Z', 640),
+      hRow(1, '2026-05-24T02:00:00Z', 6400), hRow(1, '2026-05-24T03:00:00Z', 6400), hRow(1, '2026-05-24T04:00:00Z', 6400),
+      hRow(2, '2026-05-24T02:00:00Z', 6400), hRow(2, '2026-05-24T03:00:00Z', 6400), hRow(2, '2026-05-24T04:00:00Z', 6400),
+      hRow(3, '2026-05-24T02:00:00Z', 2560),  hRow(3, '2026-05-24T03:00:00Z', 2560),  hRow(3, '2026-05-24T04:00:00Z', 2560),
     ])
     const { loadPlantDonutLast3h } = await import('@/lib/donut-data-loader')
 
@@ -260,6 +260,20 @@ describe('loadPlantDonutLast3h', () => {
 
     expect(result.counts.critical).toBeGreaterThanOrEqual(1)
     expect(result.counts.healthy).toBe(2)
+  })
+
+  it('morning ramp (below the live production floor) → no critical verdicts (dawn/ramp flood guard)', async () => {
+    // All strings at 100 W/panel (1600W/16) — below SR_LIVE_MIN_PER_PANEL_W=150.
+    // Uneven warm-up would otherwise flag the lagger; the floor suppresses any
+    // verdict during the ramp (audit 2026-06-08: 100 false alerts at sun 17°).
+    mockLast3h([
+      hRow(1, '2026-05-24T02:00:00Z', 1600), hRow(1, '2026-05-24T03:00:00Z', 1600), hRow(1, '2026-05-24T04:00:00Z', 1600),
+      hRow(2, '2026-05-24T02:00:00Z', 1600), hRow(2, '2026-05-24T03:00:00Z', 1600), hRow(2, '2026-05-24T04:00:00Z', 1600),
+      hRow(3, '2026-05-24T02:00:00Z', 640),  hRow(3, '2026-05-24T03:00:00Z', 640),  hRow(3, '2026-05-24T04:00:00Z', 640),
+    ])
+    const { loadPlantDonutLast3h } = await import('@/lib/donut-data-loader')
+    const result = await loadPlantDonutLast3h('plantX')
+    expect(result.counts.critical).toBe(0) // no false red while warming up
   })
 
   it('falls back to since-sunrise label when fewer than 3 hours available', async () => {
@@ -290,8 +304,8 @@ describe('loadPlantDonutLast3h', () => {
     // 3 strings reporting; string #3 has no power/current for all hours.
     // Should appear as Abnormal/no-data, not vanish.
     mockLast3h([
-      hRow(1, '2026-05-24T02:00:00Z', 1600), hRow(1, '2026-05-24T03:00:00Z', 1600), hRow(1, '2026-05-24T04:00:00Z', 1600),
-      hRow(2, '2026-05-24T02:00:00Z', 1600), hRow(2, '2026-05-24T03:00:00Z', 1600), hRow(2, '2026-05-24T04:00:00Z', 1600),
+      hRow(1, '2026-05-24T02:00:00Z', 6400), hRow(1, '2026-05-24T03:00:00Z', 6400), hRow(1, '2026-05-24T04:00:00Z', 6400),
+      hRow(2, '2026-05-24T02:00:00Z', 6400), hRow(2, '2026-05-24T03:00:00Z', 6400), hRow(2, '2026-05-24T04:00:00Z', 6400),
       hRow(3, '2026-05-24T02:00:00Z', null), hRow(3, '2026-05-24T03:00:00Z', null), hRow(3, '2026-05-24T04:00:00Z', null),
     ])
     const { loadPlantDonutLast3h } = await import('@/lib/donut-data-loader')

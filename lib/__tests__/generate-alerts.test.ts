@@ -66,10 +66,13 @@ describe('generateAlerts — sun-armed + hysteresis (2026-06-05)', () => {
     expect(mockPrisma.alerts.updateMany.mock.calls[0][0].where.id.in).toEqual([21])
   })
 
-  it('dead-string recovery deadband: 0.15A stays dead (no churn); 0.25A resolves', async () => {
-    // Peers kept LOW (below MIN_AVG_FOR_COMPARISON) to isolate the dead-string
-    // path — with 10A peers a 0.25A string would CORRECTLY stay alerted via
-    // peer comparison (~97% below), which is separate, intended behavior.
+  it('dead-string recovery deadband: 0.15A stays dead (no churn); recovery to peer level resolves', async () => {
+    // Dead-string alerts always carry gap_percent=null, so existingDeadAlert
+    // recognises them and the deadband applies even with a viable peer pool
+    // (audit 2026-06-08 #2). To RESOLVE, the string must clear BOTH the deadband
+    // (>2× threshold) AND peer comparison — so recovery is to peer level (0.3A);
+    // a partial recovery (e.g. 0.25A vs 0.3A peers = 83%) would CORRECTLY stay
+    // critical via the donut-aligned SR comparison, which is intended.
     const openDead = [{ id: 31, string_number: 5, severity: 'CRITICAL', gap_percent: null }]
     mockPrisma.alerts.findMany.mockResolvedValue(openDead)
     await generateAlerts('dev1', 'plant1',
@@ -78,11 +81,12 @@ describe('generateAlerts — sun-armed + hysteresis (2026-06-05)', () => {
     expect(mockPrisma.alerts.createMany).not.toHaveBeenCalled()
 
     vi.clearAllMocks()
+    __resetAlertPersistence()
     mockPrisma.string_configs.findMany.mockResolvedValue([])
     mockPrisma.alerts.findMany.mockResolvedValue(openDead)
     await generateAlerts('dev1', 'plant1',
-      [m(1, 0.3), m(2, 0.3), m(3, 0.3), m(4, 0.3), m(5, 0.25)], configs)
-    expect(mockPrisma.alerts.updateMany).toHaveBeenCalledTimes(1) // genuinely recovered (cleared 2× threshold)
+      [m(1, 0.3), m(2, 0.3), m(3, 0.3), m(4, 0.3), m(5, 0.3)], configs)
+    expect(mockPrisma.alerts.updateMany).toHaveBeenCalledTimes(1) // recovered: cleared deadband AND healthy vs peers
   })
 })
 

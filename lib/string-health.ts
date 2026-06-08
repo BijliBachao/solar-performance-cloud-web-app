@@ -462,9 +462,23 @@ export const PEAK_WINDOW_THRESHOLD = 0.5
 /**
  * Per-panel power floor (W) below which we consider production "too low to
  * meaningfully compare". Avoids dividing by ~0 when a whole MPPT group is in
- * deep shade.
+ * deep shade. Used by the DAILY scorer, which already restricts to the peak
+ * window, so this only needs to be a near-zero backstop.
  */
 export const MIN_PER_PANEL_W_FOR_COMPARISON = 5
+
+/**
+ * Per-panel power floor (W) for the LIVE/real-time SR scorer (live chart,
+ * Last-3h donut, alerts). Unlike the daily scorer it has no peak-window, so it
+ * needs a "meaningful production" floor to skip the morning/evening RAMP, where
+ * strings on one MPPT warm up unevenly and low-angle row-shading makes healthy
+ * strings legitimately lag — producing a flood of transient false "below-peer"
+ * verdicts (live 2026-06-08: 100 peer-alerts across 27 plants at sun 17°).
+ * Picked from live data: ramp tops out ~130 W/panel (p90) while midday p10 is
+ * ~232, so 150 excludes ~96% of ramp strings and ~0% of midday GROUPS. Below
+ * this the live scorer returns no verdict ("warming up"); dead-string and
+ * open-circuit detection are unaffected (a dead string is dead at any light). */
+export const SR_LIVE_MIN_PER_PANEL_W = 150
 
 /** Upper clamp for an SR/P2P ratio — keeps arithmetic stable when a peer pool
  * has a very weak anchor (a string can read ≥1.5× the group median/max). */
@@ -802,6 +816,35 @@ export function classifyAlertSeverityWithHysteresis(
   // de-escalation (incl. full recovery): must drop clearly below the
   // existing band's floor
   return gapPercent < bandFloor[existing] - ALERT_HYSTERESIS_PP ? plain : existing
+}
+
+/** Hysteresis margin in SR units (~3pp of gap) for the SR-bucket alert mapping. */
+export const SR_ALERT_HYSTERESIS = 0.03
+
+/** Map an SR ratio to an alert severity using the SAME boundaries as the donut
+ *  buckets (bucketSrScore), so the donut's coloured ring and the alert list can
+ *  never contradict each other (audit 2026-06-08): donut 'critical' (sr <
+ *  SR_ABNORMAL) ⇒ CRITICAL alert; donut 'abnormal' (SR_ABNORMAL ≤ sr <
+ *  SR_HEALTHY) ⇒ WARNING; donut 'healthy' ⇒ no alert. Sticky hysteresis on the
+ *  SR boundaries prevents threshold-hover flap. (INFO is unused for peer alerts;
+ *  it has no donut counterpart.) */
+export function classifySrAlertSeverityWithHysteresis(
+  sr: number,
+  existing: AlertSeverity | null,
+): AlertSeverity | null {
+  const plain: AlertSeverity | null =
+    sr < SR_ABNORMAL ? 'CRITICAL' : sr < SR_HEALTHY ? 'WARNING' : null
+  if (existing !== 'WARNING' && existing !== 'CRITICAL') return plain
+  if (plain === existing) return existing
+  if (existing === 'WARNING' && plain === 'CRITICAL') {
+    // escalate only when sr drops clearly below the critical boundary
+    return sr < SR_ABNORMAL - SR_ALERT_HYSTERESIS ? 'CRITICAL' : 'WARNING'
+  }
+  // de-escalation / recovery: sr must rise clearly above the EXISTING bucket's
+  // upper boundary before we relax it (CRITICAL→ above SR_ABNORMAL, WARNING→
+  // above SR_HEALTHY).
+  const existingUpper = existing === 'CRITICAL' ? SR_ABNORMAL : SR_HEALTHY
+  return sr >= existingUpper + SR_ALERT_HYSTERESIS ? plain : existing
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
