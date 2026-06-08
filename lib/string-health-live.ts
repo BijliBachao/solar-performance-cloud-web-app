@@ -52,10 +52,6 @@ export interface LiveStringResult {
   panel_count_is_default: boolean
   /** True if the MPPT topology was a max-strings fallback (lower confidence) */
   topology_is_fallback: boolean
-  /** True when a critical SR verdict was suppressed because the string is at or
-   *  above its peer-group MEDIAN — the max-anchor pinned by one overperformer
-   *  cannot make a median-or-better string "the weak one" (audit 2026-06-07). */
-  contradiction_suppressed?: boolean
   /** Reason the score is null when applicable (UX badge text) */
   no_score_reason?:
     | 'string_excluded_unused'
@@ -178,33 +174,32 @@ export function scoreLiveSr(
   // The fallback pool itself needs to meet MIN_PEERS — otherwise just don't compare
   const fallbackPoolValid = deviceWideFallback.length >= MIN_PEERS_FOR_MPPT_GROUP
 
-  // ── Step 3: Compute peer max per group ──
-  const peerMaxByGroup = new Map<string, number>()
-  for (const [key, pool] of groupedPool) {
-    const maxW = Math.max(...pool.map((s) => s.per_panel_W))
-    peerMaxByGroup.set(key, maxW)
-  }
-
-  const fallbackPeerMax = fallbackPoolValid
-    ? Math.max(...deviceWideFallback.map((s) => s.per_panel_W))
-    : 0
-
-  // Group MEDIANS — the contradiction guard's reference. The SR anchor is the
-  // group MAX (one overperformer can pin it high); a string flagged critical
-  // against that max while sitting at/above the group MEDIAN is a max-anchor
-  // false positive, not a real fault, so we suppress it (audit 2026-06-07).
+  // ── Step 3: per-group anchors ──
+  // ANCHOR = group MEDIAN (audit 2026-06-08). The industry standard for "this
+  // string is below its peers" is the cohort MEDIAN, not the max: IEC 61724 O&M
+  // practice and SolarEdge/Huawei/Sungrow all anchor on median because it
+  // resists one overperformer pinning the bar (a MAX anchor made every healthy
+  // sibling read ~80% and falsely "critical" — the FANZ daytime over-flag).
+  // Median also matches the daily P2P scorer, so the live donut and the daily
+  // view now agree by construction. A separate group MAX is kept only for the
+  // low-irradiance gate (if even the best string is in deep shade, don't score).
   const median = (arr: number[]): number => {
     if (arr.length === 0) return 0
     const sorted = [...arr].sort((a, b) => a - b)
     const mid = Math.floor(sorted.length / 2)
     return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
   }
-  const peerMedianByGroup = new Map<string, number>()
+  const peerAnchorByGroup = new Map<string, number>()
+  const peerMaxByGroup = new Map<string, number>()
   for (const [key, pool] of groupedPool) {
-    peerMedianByGroup.set(key, median(pool.map((s) => s.per_panel_W)))
+    peerAnchorByGroup.set(key, median(pool.map((s) => s.per_panel_W)))
+    peerMaxByGroup.set(key, Math.max(...pool.map((s) => s.per_panel_W)))
   }
-  const fallbackPeerMedian = fallbackPoolValid
+  const fallbackPeerAnchor = fallbackPoolValid
     ? median(deviceWideFallback.map((s) => s.per_panel_W))
+    : 0
+  const fallbackPeerMax = fallbackPoolValid
+    ? Math.max(...deviceWideFallback.map((s) => s.per_panel_W))
     : 0
 
   // ── Step 4: Score each string ──
@@ -285,8 +280,12 @@ export function scoreLiveSr(
       }
     }
 
-    // Determine which peer pool to use
+    // Determine which peer pool to use. Anchor = group MEDIAN (robust); the
+    // group MAX is used only to gate out a whole group sitting in deep shade.
     const inMpptGroup = groupedPool.has(s.mpptGroupKey)
+    const peerAnchor = inMpptGroup
+      ? peerAnchorByGroup.get(s.mpptGroupKey)!
+      : fallbackPeerAnchor
     const peerMax = inMpptGroup
       ? peerMaxByGroup.get(s.mpptGroupKey)!
       : fallbackPeerMax
@@ -316,33 +315,19 @@ export function scoreLiveSr(
       }
     }
 
-    const sr = s.per_panel_W / peerMax
-    const cappedSr = Math.min(sr, 1.5) // keep arithmetic stable
-    let bucket = bucketSrScore(cappedSr)
-
-    // Contradiction guard: a string can only be "critical" if it is genuinely
-    // below its peers. If it is flagged critical against the group MAX yet sits
-    // at/above the group MEDIAN, the max was pinned by an outlier overperformer
-    // and this string is not the weak one — suppress to healthy + flag.
-    let contradictionSuppressed = false
-    if (bucket === 'critical') {
-      const med = inMpptGroup
-        ? peerMedianByGroup.get(s.mpptGroupKey)!
-        : fallbackPeerMedian
-      if (med > 0 && s.per_panel_W >= med) {
-        bucket = 'healthy'
-        contradictionSuppressed = true
-      }
-    }
+    // SR = per-panel power vs the cohort MEDIAN (capped). Anchoring on the median
+    // makes "critical-but-at/above-median" impossible by construction, so the
+    // max-anchor false positives the old code produced cannot occur.
+    const sr = peerAnchor > 0 ? Math.min(s.per_panel_W / peerAnchor, 1.5) : null
+    const bucket = sr != null ? bucketSrScore(sr) : null
 
     return {
       string_number: s.string_number,
-      sr: cappedSr,
+      sr,
       bucket,
       status: 'NORMAL',
       panel_count_is_default: s.panel_count_is_default,
       topology_is_fallback: topologyIsFallback,
-      ...(contradictionSuppressed ? { contradiction_suppressed: true } : {}),
     }
   })
 }

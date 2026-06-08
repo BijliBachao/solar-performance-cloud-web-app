@@ -61,28 +61,31 @@ describe('scoreLiveSr — happy path', () => {
     expect(result[1].bucket).toBe('healthy')
   })
 
-  it('one string outperforms peer → outperformer Healthy, weaker still healthy near threshold', () => {
+  it('one string slightly below peer → both Healthy (median anchor)', () => {
+    // MEDIAN anchor (2-member group → median = mean). S2 at 5700 vs median 5850
+    // = 0.974 → healthy. Under the old MAX anchor this read 0.95.
     const result = scoreLiveSr(
       [
-        s(1, 600, 10, 6000),   // peer (the max)
-        s(2, 600, 9.5, 5700),  // 95% — should be Healthy (>= SR_HEALTHY 0.94)
+        s(1, 600, 10, 6000),
+        s(2, 600, 9.5, 5700),
       ],
       huaweiInverter,
     )
     expect(result[0].bucket).toBe('healthy')
     expect(result[1].bucket).toBe('healthy')
-    expect(result[1].sr).toBeCloseTo(0.95, 2)
+    expect(result[1].sr).toBeCloseTo(0.974, 2)
   })
 
-  it('one string at 85% of peer → Abnormal', () => {
+  it('one string well below peer → Abnormal (median anchor)', () => {
+    // S2 at 5100 vs median 5550 = 0.919 → abnormal (>=0.85, <0.94).
     const result = scoreLiveSr(
       [
         s(1, 600, 10, 6000),
-        s(2, 600, 8.5, 5100), // 85% — boundary; should bucket Abnormal
+        s(2, 600, 8.5, 5100),
       ],
       huaweiInverter,
     )
-    expect(result[1].sr).toBeCloseTo(0.85, 2)
+    expect(result[1].sr).toBeCloseTo(0.919, 2)
     expect(result[1].bucket).toBe('abnormal')
   })
 
@@ -387,40 +390,38 @@ describe('scoreLiveSr — sun-elevation arming (armed=false)', () => {
 })
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Contradiction guard — critical-but-above-median is a max-anchor false positive
+// MEDIAN anchor — robust to one overperformer (was the max-anchor false-red)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-describe('scoreLiveSr — contradiction guard (max-anchor false positive)', () => {
-  it('a string at/above the group MEDIAN is never critical even if one peer overperforms hugely', () => {
-    // Device-wide fallback group (all singleton MPPTs): one huge overperformer
-    // pins the max; a median-or-better string would read <0.85 of max → critical
-    // under the raw max-anchor. The guard must suppress that to healthy.
-    // per_panel_W (pc=16): A=375, B=375, C=375 (median 375), MAX D=625.
-    // C/maxD = 375/625 = 0.60 → critical by max-anchor, but C == median → suppress.
+describe('scoreLiveSr — median anchor (robust to overperformer)', () => {
+  it('a typical string is NOT critical when one peer overperforms hugely (the FANZ daytime over-flag)', () => {
+    // Device-wide fallback group (singleton MPPTs): three normal strings + one
+    // outlier overperformer. Under the OLD max anchor, the normal strings read
+    // 375/625 = 0.60 → falsely CRITICAL. Under the median anchor (median 375),
+    // they read 375/375 = 1.0 → healthy. This is the daytime fix.
     const result = scoreLiveSr(
       [
-        s(1, 600, 10, 6000),   // 375 W/panel
-        s(3, 600, 10, 6000),   // 375 (different MPPT → singletons → fallback pool)
-        s(5, 600, 10, 6000),   // 375
-        s(7, 600, 16.7, 10000), // 625 — outlier overperformer pins the max
+        s(1, 600, 10, 6000),    // 375 W/panel
+        s(3, 600, 10, 6000),    // 375 (different MPPT → singletons → fallback pool)
+        s(5, 600, 10, 6000),    // 375
+        s(7, 600, 16.7, 10000), // 625 — outlier overperformer (would pin a max anchor)
       ],
       { deviceId: 'devX', inverterModel: null, inverterMaxStrings: 8, armed: true },
     )
     const c = result.find((r) => r.string_number === 5)!
+    expect(c.sr).toBeCloseTo(1.0, 2)
     expect(c.bucket).toBe('healthy')
-    expect(c.contradiction_suppressed).toBe(true)
   })
 
-  it('a genuinely below-median string is STILL critical (guard does not mask real faults)', () => {
-    // MPPT pair: peer 6000W (375/panel), broken 1700W (106/panel). 106 < median
-    // (which is between them) → stays critical, no suppression.
+  it('a genuinely below-median string is STILL critical (median anchor does not mask real faults)', () => {
+    // MPPT pair: peer 6000W (375/panel), broken 1700W (106/panel). median 240.5;
+    // 106/240.5 = 0.44 → critical. Real faults still caught.
     const result = scoreLiveSr(
       [s(1, 600, 10, 6000), s(2, 600, 2.83, 1700)],
       huaweiInverter,
     )
     const broken = result.find((r) => r.string_number === 2)!
     expect(broken.bucket).toBe('critical')
-    expect(broken.contradiction_suppressed).toBeUndefined()
   })
 })
 
