@@ -423,7 +423,7 @@ async function processCsiDevice(
   await recordDeviceFreshness(device.id, strings, vendorTs, device.last_reading_sig)
 
   const stringConfigs = await loadStringConfigs(device.id)
-  await generateAlerts(device.id, device.plant_id, measurements, stringConfigs, alertsArmed(device.plants))
+  await generateAlerts(device.id, device.plant_id, measurements, stringConfigs, alertsArmed(device.plants), { model: device.model ?? null, max_strings: device.max_strings ?? null })
   await updateHourlyAggregates(device.id, device.plant_id, maxStringNumber, stringConfigs)
   await updateDailyAggregates(device.id, device.plant_id, maxStringNumber, stringConfigs, { model: device.model, max_strings: device.max_strings })
 

@@ -13,6 +13,7 @@ import {
 } from '@/lib/string-health'
 import { isDaylight, solarElevationDeg } from '@/lib/solar-geometry'
 import { scoreDailyP2P, type DailyStringInput } from '@/lib/string-health-daily'
+import { scoreLiveSr, type LiveStringInput } from '@/lib/string-health-live'
 
 /**
  * Persist per-device freshness signals (for connectivity status on the plant
@@ -344,6 +345,10 @@ export async function generateAlerts(
    *  back-compat; pollers pass the real value. When false, NOTHING is
    *  created or resolved — dawn/dusk readings are not verdict material. */
   armed: boolean = true,
+  /** Inverter model + max_strings, so Part-1 peer comparison uses the SAME
+   *  per-MPPT / per-panel-power / median engine as the donut (scoreLiveSr).
+   *  Optional for back-compat; null → device-wide fallback grouping. */
+  deviceMeta?: { model: string | null; max_strings: number | null },
 ): Promise<void> {
   if (!armed) return
   if (rawMeasurements.length === 0) return
@@ -358,7 +363,7 @@ export async function generateAlerts(
   //     (wall, east/west, shaded). Lower output is expected, not a fault. Removed
   //     from the PEER POOL only — still gets dead-string detection (Part 2) so a
   //     real 0 A fault on a wall-mounted string is still flagged.
-  const { unusedSet, peerExcludedSet } = configs ?? (await loadStringConfigs(deviceId))
+  const { unusedSet, peerExcludedSet, panelCountByString } = configs ?? (await loadStringConfigs(deviceId))
   const usedRaw = unusedSet.size > 0
     ? rawMeasurements.filter(m => !unusedSet.has(m.string_number))
     : rawMeasurements
@@ -403,28 +408,42 @@ export async function generateAlerts(
 
   const canDoComparison = peerActive.length >= MIN_PEERS_FOR_COMPARISON && peerAvgCurrent >= MIN_AVG_FOR_COMPARISON
 
-  // ── Part 1: Compare peer-pool strings against each other (leave-one-out) ──
-  // Peer-excluded strings are not in peerActive, so they're skipped.
-  if (canDoComparison) {
-    for (const measurement of peerActive) {
-      const current = Number(measurement.current)
-      const othersTotal = peerTotalCurrent - current
-      const othersCount = peerActive.length - 1
-      if (othersCount <= 0) continue
-      const othersAvg = othersTotal / othersCount
-      if (othersAvg <= 0) continue
-
-      const gapPercent = computeGap(current, othersAvg)
-      // Hysteresis: an existing alert's severity is sticky until the gap
-      // clears the band boundary by ALERT_HYSTERESIS_PP — kills threshold-
-      // hover flapping (the 69-alerts/week string).
-      const severity = classifyAlertSeverityWithHysteresis(
-        gapPercent,
-        existingSeverity.get(measurement.string_number) ?? null,
-      )
-      if (severity) {
-        currentSeverities.set(measurement.string_number, { severity, gapPercent })
-      }
+  // ── Part 1: Peer comparison via the SHARED engine (scoreLiveSr) ──
+  // Alerts now use the SAME comparison as the donut/live view: per-MPPT,
+  // per-panel POWER, MEDIAN anchor (audit 2026-06-08). This replaces the old
+  // raw-current, whole-inverter, leave-one-out compare that flagged healthy
+  // low-current strings as "below average" (different panel counts / V-I
+  // operating points / MPPTs) — the FANZ-class false positives. The gap fed to
+  // the hysteresis bands is the SR deficit (1 - sr), so a string at 70% of its
+  // peer-group median = 30% gap. Dead/open-circuit strings return null sr here
+  // and are handled by Part 2 (absolute near-zero current, with deadband).
+  const srInputs: LiveStringInput[] = measurements.map((m) => ({
+    string_number: m.string_number,
+    voltage: Number(m.voltage),
+    current: Number(m.current),
+    power: Number(m.power),
+    panel_count: panelCountByString.get(m.string_number) ?? null,
+    is_used: true, // unused already filtered out above
+    exclude_from_peer_comparison: peerExcludedSet.has(m.string_number),
+    stale: false,
+  }))
+  const srResults = scoreLiveSr(srInputs, {
+    deviceId,
+    inverterModel: deviceMeta?.model ?? null,
+    inverterMaxStrings: deviceMeta?.max_strings ?? null,
+    armed: true, // generateAlerts already returned early when disarmed
+  })
+  for (const r of srResults) {
+    if (r.sr == null) continue // open-circuit/offline/excluded/too-few-peers → Part 2 or no fault
+    const gapPercent = Math.max(0, Math.min((1 - r.sr) * 100, 100))
+    // Hysteresis: an existing alert's severity is sticky until the gap clears
+    // the band boundary by ALERT_HYSTERESIS_PP — kills threshold-hover flapping.
+    const severity = classifyAlertSeverityWithHysteresis(
+      gapPercent,
+      existingSeverity.get(r.string_number) ?? null,
+    )
+    if (severity) {
+      currentSeverities.set(r.string_number, { severity, gapPercent })
     }
   }
 

@@ -439,7 +439,7 @@ async function processDeviceData(
   if (measurements.length > 0) {
     const stringConfigs = await loadStringConfigs(device.id)
     const effectiveStrings = maxStrings || strings.length
-    await generateAlerts(device.id, device.plant_id, measurements, stringConfigs, alertsArmed(device.plants))
+    await generateAlerts(device.id, device.plant_id, measurements, stringConfigs, alertsArmed(device.plants), { model: null, max_strings: device.max_strings ?? null })
     await updateHourlyAggregates(device.id, device.plant_id, effectiveStrings, stringConfigs)
     await updateDailyAggregates(device.id, device.plant_id, effectiveStrings, stringConfigs, { model: null, max_strings: device.max_strings })
   }

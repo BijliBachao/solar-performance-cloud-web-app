@@ -105,6 +105,36 @@ describe('classifyAlertSeverityWithHysteresis (pure)', () => {
   })
 })
 
+describe('generateAlerts — peer comparison via shared engine (power, not current)', () => {
+  // Custom measurement with explicit voltage (the m() helper fixes 600V).
+  const mv = (sn: number, v: number, i: number) => ({
+    string_number: sn,
+    voltage: new Decimal(v.toFixed(2)),
+    current: new Decimal(i.toFixed(3)),
+    power: new Decimal((v * i).toFixed(2)),
+  })
+
+  it('a low-CURRENT but healthy-POWER string is NOT flagged (the FANZ false-positive class)', async () => {
+    // Same MPPT pair (max_strings=2 → fallback 2/MPPT). S1 runs high-volts/
+    // low-amps, S2 low-volts/high-amps — both healthy power. Old raw-current
+    // compare flagged S1 (8A vs 9A avg); per-panel-power median does not.
+    await generateAlerts('dev1', 'plant1',
+      [mv(1, 800, 8), mv(2, 600, 10)], configs, true,
+      { model: null, max_strings: 2 })
+    expect(mockPrisma.alerts.createMany).not.toHaveBeenCalled()
+  })
+
+  it('a genuinely low-POWER string in its MPPT group IS still flagged', async () => {
+    // S1 6400W vs S2 ~2000W on the same MPPT — S2 is the real underperformer.
+    await generateAlerts('dev1', 'plant1',
+      [mv(1, 800, 8), mv(2, 600, 3.3)], configs, true,
+      { model: null, max_strings: 2 })
+    expect(mockPrisma.alerts.createMany).toHaveBeenCalledTimes(1)
+    const rows = mockPrisma.alerts.createMany.mock.calls[0][0].data
+    expect(rows.map((r: any) => r.string_number)).toContain(2)
+  })
+})
+
 describe('generateAlerts — batched writes', () => {
   it('creates MULTIPLE new alerts with ONE createMany (never per-row create)', async () => {
     // 4 healthy peers at 10A + two dead strings → 2 CRITICAL alerts expected

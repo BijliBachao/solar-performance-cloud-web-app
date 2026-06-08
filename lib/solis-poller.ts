@@ -342,7 +342,7 @@ async function processSolisDevice(
       })),
     })
     const stringConfigs = await loadStringConfigs(device.id)
-    await generateAlerts(device.id, device.plant_id, measurements, stringConfigs, alertsArmed(device.plants))
+    await generateAlerts(device.id, device.plant_id, measurements, stringConfigs, alertsArmed(device.plants), { model: null, max_strings: device.max_strings ?? null })
     await updateHourlyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
     await updateDailyAggregates(device.id, device.plant_id, maxStrings, stringConfigs, { model: null, max_strings: device.max_strings })
     // Connectivity freshness: vendor time + value-change signature.
