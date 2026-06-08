@@ -433,7 +433,8 @@ export default function DashboardAnalysisPage() {
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-200 border border-orange-300" /> {HEALTH_WARNING}%-{HEALTH_CAUTION - 1}%</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-200 border border-red-300" /> {HEALTH_SEVERE}%-{HEALTH_WARNING - 1}%</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500" /> &lt;{HEALTH_SEVERE}%</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-100 border border-gray-200" /> No data</span>
+          <span className="flex items-center gap-1" title="No score for this day (string did not report or was not scoreable). Gray means 'unscored', NOT 'OK'."><span className="w-3 h-3 rounded bg-gray-100 border border-gray-200" /> No data / unscored</span>
+          <span className="flex items-center gap-1" title="Non-standard orientation/shade — excluded from peer comparison, so no comparable score. Counted separately, not in Healthy/Warning/Critical."><span className="w-3 h-3 rounded bg-indigo-50 border border-indigo-200" /> Non-standard (excluded)</span>
         </div>
         <div className="flex items-center gap-4 text-[10px] text-gray-500">
           <span>Column guide:</span>

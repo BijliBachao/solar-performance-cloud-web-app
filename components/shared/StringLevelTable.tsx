@@ -2,6 +2,8 @@
 
 import { PerformanceCell } from './PerformanceCell'
 import { cn } from '@/lib/utils'
+import { STATUS_STYLES } from '@/lib/design-tokens'
+import { providerLabel } from '@/lib/constants'
 import { HEALTH_HEALTHY, HEALTH_CAUTION, HEALTH_WARNING, PANEL_COUNT_DEFAULT } from '@/lib/string-health'
 
 interface StringRow {
@@ -9,6 +11,10 @@ interface StringRow {
   plant_name: string
   device_id: string
   device_name: string
+  /** Inverter brand (huawei|solis|growatt|sungrow|csi) — shown as a chip. */
+  provider?: string | null
+  /** Inverter model string, if known — shown in the chip tooltip. */
+  model?: string | null
   string_number: number
   mppt: number
   kw_per_string: number | null
@@ -19,6 +25,12 @@ interface StringRow {
   type?: 'active' | 'inactive' | 'unused'
   /** False when the string has no admin-entered panel_count (scoring used the default). */
   panel_count_set?: boolean
+  /**
+   * Admin flag: non-standard orientation/shade — excluded from peer comparison,
+   * so its stored P2P health_score is NULL and the daily cells render blank.
+   * We surface a "Non-standard" chip so the blank cells aren't read as "OK".
+   */
+  peer_excluded?: boolean
 }
 
 interface StringLevelTableProps {
@@ -128,7 +140,17 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
                 )}
               >
                 <td className="sticky left-0 z-10 bg-white group-hover:bg-blue-50/50 px-3 py-1.5 text-xs text-gray-700 border-r border-gray-200 whitespace-nowrap transition-colors">
-                  <div className="font-medium text-gray-900">{row.device_name}</div>
+                  <div className="font-medium text-gray-900 flex items-center gap-1.5">
+                    {row.device_name}
+                    {isFirstOfDevice && row.provider && (
+                      <span
+                        title={row.model ? `${providerLabel(row.provider)} · ${row.model}` : providerLabel(row.provider)}
+                        className="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[9px] font-semibold text-slate-600"
+                      >
+                        {providerLabel(row.provider)}
+                      </span>
+                    )}
+                  </div>
                   {row.string_number === 1 && (
                     <div className="text-[10px] text-gray-400">{row.plant_name}</div>
                   )}
@@ -139,6 +161,22 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
                         className="inline-flex items-center rounded border border-amber-200 bg-amber-50 px-1 py-0.5 text-[9px] font-medium text-amber-700"
                       >
                         panel count {panelInfo!.missing}/{panelInfo!.total}
+                      </span>
+                    </div>
+                  )}
+                  {row.peer_excluded && (
+                    <div className="mt-0.5">
+                      <span
+                        title={STATUS_STYLES['peer-excluded'].fullDesc}
+                        className={cn(
+                          'inline-flex items-center gap-1 rounded border px-1 py-0.5 text-[9px] font-medium',
+                          STATUS_STYLES['peer-excluded'].fg,
+                          STATUS_STYLES['peer-excluded'].bg,
+                          STATUS_STYLES['peer-excluded'].border,
+                        )}
+                      >
+                        <span className={cn('w-1 h-1 rounded-full', STATUS_STYLES['peer-excluded'].dot)} />
+                        {STATUS_STYLES['peer-excluded'].label}
                       </span>
                     </div>
                   )}

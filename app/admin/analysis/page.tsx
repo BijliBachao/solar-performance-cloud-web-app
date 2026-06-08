@@ -13,6 +13,13 @@ type Tab = 'string' | 'inverter'
 interface PlantOption {
   id: string
   plant_name: string
+  organization_id: string | null
+  organization_name: string | null
+}
+
+interface OrgOption {
+  id: string
+  name: string
 }
 
 interface DeviceOption {
@@ -35,32 +42,43 @@ export default function AnalysisPage() {
   const [tab, setTab] = useState<Tab>('string')
   const [from, setFrom] = useState(getDefaultFrom)
   const [to, setTo] = useState(getDefaultTo)
+  const [orgId, setOrgId] = useState('')
   const [plantId, setPlantId] = useState('')
   const [deviceId, setDeviceId] = useState('')
 
   // Data
   const [stringData, setStringData] = useState<{ dates: string[]; rows: any[]; summary?: any } | null>(null)
-  const [inverterData, setInverterData] = useState<{ dates: string[]; rows: any[] } | null>(null)
+  const [inverterData, setInverterData] = useState<{ dates: string[]; rows: any[]; truncated?: boolean } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   // Filter options
   const [plants, setPlants] = useState<PlantOption[]>([])
+  const [orgs, setOrgs] = useState<OrgOption[]>([])
   const [devices, setDevices] = useState<DeviceOption[]>([])
 
-  // Load plant list for filter dropdown
+  // Load plant list for filter dropdown + derive the organization list
   useEffect(() => {
     fetch('/api/admin/plants', { credentials: 'include' })
       .then(r => r.json())
       .then(data => {
-        const pl = (data.plants || []).map((p: any) => ({
+        const pl: PlantOption[] = (data.plants || []).map((p: any) => ({
           id: p.id,
           plant_name: p.plant_name,
+          organization_id: p.assigned_org?.id ?? null,
+          organization_name: p.assigned_org?.name ?? null,
         }))
         setPlants(pl)
+        // Derive the org dropdown from assigned plants (only orgs with plants).
+        const orgMap = new Map<string, string>()
+        for (const p of pl) if (p.organization_id) orgMap.set(p.organization_id, p.organization_name || p.organization_id)
+        setOrgs(Array.from(orgMap, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)))
       })
       .catch(() => {})
   }, [])
+
+  // Plants shown in the Plant dropdown — narrowed to the selected organization.
+  const visiblePlants = orgId ? plants.filter(p => p.organization_id === orgId) : plants
 
   // Load device list when plant changes
   useEffect(() => {
@@ -115,6 +133,7 @@ export default function AnalysisPage() {
 
     try {
       const params = new URLSearchParams({ from, to })
+      if (orgId) params.set('organization_id', orgId)
       if (plantId) params.set('plant_id', plantId)
 
       if (tab === 'string') {
@@ -150,7 +169,7 @@ export default function AnalysisPage() {
   }, [autoFetchKey])
 
   // When plant/device/tab changes, trigger auto-fetch
-  useEffect(() => { setAutoFetchKey(k => k + 1) }, [plantId, deviceId, tab])
+  useEffect(() => { setAutoFetchKey(k => k + 1) }, [orgId, plantId, deviceId, tab])
 
   // Quick date presets — auto-fetch after setting
   function setPreset(days: number) {
@@ -212,6 +231,21 @@ export default function AnalysisPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-3">
+        {/* Organization filter */}
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Organization</label>
+          <select
+            value={orgId}
+            onChange={(e) => { setOrgId(e.target.value); setPlantId(''); setDeviceId('') }}
+            className="text-sm border border-gray-300 rounded-md px-2 py-1.5 bg-white min-w-[180px]"
+          >
+            <option value="">All Organizations</option>
+            {orgs.map(o => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
+          </select>
+        </div>
+
         {/* Plant filter */}
         <div>
           <label className="block text-xs text-gray-500 mb-1">Plant</label>
@@ -220,8 +254,8 @@ export default function AnalysisPage() {
             onChange={(e) => { setPlantId(e.target.value); setDeviceId('') }}
             className="text-sm border border-gray-300 rounded-md px-2 py-1.5 bg-white min-w-[180px]"
           >
-            <option value="">All Plants</option>
-            {plants.map(p => (
+            <option value="">{orgId ? 'All Plants in Org' : 'All Plants'}</option>
+            {visiblePlants.map(p => (
               <option key={p.id} value={p.id}>{p.plant_name}</option>
             ))}
           </select>
@@ -366,7 +400,8 @@ export default function AnalysisPage() {
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-200 border border-orange-300" /> {HEALTH_WARNING}%-{HEALTH_CAUTION - 1}%</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-200 border border-red-300" /> {HEALTH_SEVERE}%-{HEALTH_WARNING - 1}%</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500" /> &lt;{HEALTH_SEVERE}%</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-100 border border-gray-200" /> No data</span>
+          <span className="flex items-center gap-1" title="No score for this day (string did not report or was not scoreable). Gray means 'unscored', NOT 'OK'. The NOC donut folds these into its 'Abnormal' slice."><span className="w-3 h-3 rounded bg-gray-100 border border-gray-200" /> No data / unscored</span>
+          <span className="flex items-center gap-1" title="Non-standard orientation/shade — excluded from peer comparison, so no comparable score. Counted separately, not in Healthy/Warning/Critical."><span className="w-3 h-3 rounded bg-indigo-50 border border-indigo-200" /> Non-standard (excluded)</span>
         </div>
         <div className="flex items-center gap-4 text-[10px] text-gray-500">
           <span>Column guide:</span>
@@ -385,11 +420,18 @@ export default function AnalysisPage() {
           loading={loading}
         />
       ) : (
-        <InverterLevelTable
-          dates={inverterData?.dates || []}
-          rows={inverterData?.rows || []}
-          loading={loading}
-        />
+        <>
+          {inverterData?.truncated && (
+            <div className="mb-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              Showing the first 500 inverters only — filter by organization or plant to narrow the view.
+            </div>
+          )}
+          <InverterLevelTable
+            dates={inverterData?.dates || []}
+            rows={inverterData?.rows || []}
+            loading={loading}
+          />
+        </>
       )}
     </div>
   )

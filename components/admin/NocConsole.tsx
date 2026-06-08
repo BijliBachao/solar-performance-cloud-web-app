@@ -502,7 +502,7 @@ function NocHeader({
       <div className="flex items-center gap-3">
         <Activity className="w-5 h-5 text-emerald-600" strokeWidth={2} />
         <div>
-          <h1 className="text-lg font-bold text-slate-900 leading-tight">NOC — Fleet Triage</h1>
+          <h1 className="text-lg font-bold text-slate-900 leading-tight">NOC — Site Triage</h1>
           <p className="text-[11px] text-slate-500 font-mono">
             {timeBasisLabel ?? 'Loading…'}
           </p>
@@ -662,7 +662,7 @@ function KpiStrip({
         { key: 'frozen', value: String(kpis.frozenInverters ?? 0), label: 'feeds frozen', tone: (kpis.frozenInverters ?? 0) > 0 ? 'orange' : 'slate', onClick: () => applyConn('frozen'), active: frozenActive },
         { key: 'critical', value: String(kpis.criticalStrings), label: 'critical strings', tone: kpis.criticalStrings > 0 ? 'red' : 'slate', onClick: applyCritical, active: critActive },
         { key: 'plants', value: String(kpis.plantsWithIssues), label: 'plants w/ issues', tone: kpis.plantsWithIssues > 0 ? 'orange' : 'slate' },
-        { key: 'live', value: kpis.livePct === null ? '—' : `${kpis.livePct}%`, label: 'fleet live', tone: 'emerald' },
+        { key: 'live', value: kpis.livePct === null ? '—' : `${kpis.livePct}%`, label: 'sites live', tone: 'emerald' },
       ]
 
   const toneCls: Record<string, string> = {
@@ -1210,7 +1210,7 @@ function AttentionPanel({ attention, mode }: { attention: AttentionPlant[]; mode
         </h2>
         <span className="text-[11px] text-slate-400">
           {mode === 'today'
-            ? '— fleet-wide, unaffected by filters'
+            ? '— all sites, unaffected by filters'
             : '— yesterday’s settled scores · critical strings only'}
         </span>
       </div>

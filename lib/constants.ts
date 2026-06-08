@@ -1,6 +1,21 @@
 export const PROVIDERS = { HUAWEI: 'huawei', SOLIS: 'solis', GROWATT: 'growatt', SUNGROW: 'sungrow', CSI: 'csi' } as const
 export type Provider = typeof PROVIDERS[keyof typeof PROVIDERS]
 
+/** Human-readable inverter-brand labels for the provider column chip. */
+export const PROVIDER_LABELS: Record<string, string> = {
+  huawei: 'Huawei',
+  solis: 'Solis',
+  growatt: 'Growatt',
+  sungrow: 'Sungrow',
+  csi: 'Canadian Solar',
+}
+
+/** Display label for a provider code; falls back to a capitalized code. */
+export function providerLabel(provider?: string | null): string {
+  if (!provider) return 'Unknown'
+  return PROVIDER_LABELS[provider] ?? provider.charAt(0).toUpperCase() + provider.slice(1)
+}
+
 export const DEVICE_TYPE_IDS = {
   HUAWEI_STRING_INVERTER: 1,
   HUAWEI_RESIDENTIAL_INVERTER: 38,

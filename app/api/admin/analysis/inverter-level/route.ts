@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
     const from = searchParams.get('from')
     const to = searchParams.get('to')
     const plantId = searchParams.get('plant_id')
+    const organizationId = searchParams.get('organization_id')
 
     if (!from || !to) {
       return NextResponse.json({ error: 'from and to are required' }, { status: 400 })
@@ -20,6 +21,12 @@ export async function GET(request: NextRequest) {
 
     const fromDate = new Date(from)
     const toDate = new Date(to)
+
+    // Reject unparseable dates BEFORE the range check — NaN comparisons are
+    // always false, so a malformed date would slip past the guard below.
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+      return NextResponse.json({ error: 'Invalid from/to date' }, { status: 400 })
+    }
 
     const diffDays = (toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)
     if (diffDays > MAX_DATE_RANGE_DAYS || diffDays < 0) {
@@ -32,13 +39,38 @@ export async function GET(request: NextRequest) {
     }
     if (plantId) deviceWhere.plant_id = plantId
 
-    const devices = await prisma.devices.findMany({
+    // Optional org scope — restrict to the plants assigned to this organization.
+    if (organizationId) {
+      const orgAssignments = await prisma.plant_assignments.findMany({
+        where: { organization_id: organizationId },
+        select: { plant_id: true },
+      })
+      const orgPlantIds = orgAssignments.map(a => a.plant_id)
+      if (orgPlantIds.length === 0) {
+        return NextResponse.json({ dates: [], rows: [], truncated: false })
+      }
+      deviceWhere.plant_id = plantId
+        ? (orgPlantIds.includes(plantId) ? plantId : '__none__')
+        : { in: orgPlantIds }
+    }
+
+    // The inverter overview is one row per inverter (bounded), but cap as a
+    // backstop so an unscoped request can't grow unboundedly against the shared
+    // RDS as the never-delete data moat expands. Fetch cap+1 to detect truncation.
+    const MAX_INVERTERS = 500
+    const devicesRaw = await prisma.devices.findMany({
       where: deviceWhere,
       include: {
         plants: { select: { id: true, plant_name: true, capacity_kw: true } },
       },
       orderBy: [{ plant_id: 'asc' }, { device_name: 'asc' }],
+      take: MAX_INVERTERS + 1,
     })
+    const truncated = devicesRaw.length > MAX_INVERTERS
+    const devices = truncated ? devicesRaw.slice(0, MAX_INVERTERS) : devicesRaw
+    if (truncated) {
+      console.warn(`[Admin Analysis Inverter-Level] exceeded ${MAX_INVERTERS} inverters — truncated. Narrow by organization or plant.`)
+    }
 
     if (devices.length === 0) {
       return NextResponse.json({ dates: [], rows: [] })
@@ -111,12 +143,14 @@ export async function GET(request: NextRequest) {
         plant_name: dev.plants?.plant_name || 'Unknown',
         device_id: dev.id,
         device_name: dev.device_name || dev.id,
+        provider: dev.provider,
+        model: dev.model,
         kw: kwPerInverter,
         scores,
       })
     }
 
-    return NextResponse.json({ dates, rows })
+    return NextResponse.json({ dates, rows, truncated })
   } catch (error) {
     if (error instanceof ApiAuthError) return createErrorResponse(error)
     console.error('[Admin Analysis Inverter-Level]', error)

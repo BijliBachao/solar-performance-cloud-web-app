@@ -313,7 +313,7 @@ export default function LandingPage() {
       {/* ══ SOCIAL PROOF — Vodafone ticker (1 dominant + 3 satellite) */}
       <section className="py-24 md:py-32 px-6">
         <div className="max-w-6xl mx-auto">
-          <EyebrowDot>Trusted across Pakistan&apos;s solar fleet</EyebrowDot>
+          <EyebrowDot>Trusted across Pakistan&apos;s solar sites</EyebrowDot>
           <div className="mt-6 grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-10 md:gap-16 items-end">
             {/* Dominant metric */}
             <div>
@@ -502,7 +502,7 @@ export default function LandingPage() {
           <div className="space-y-16 md:space-y-24">
             {[
               { step: '01', title: 'On-Site Installation', desc: 'Our field engineer visits your plant. We install the SPC monitoring device, compatible with Huawei, Solis, Growatt, and Sungrow. Under an hour per site.', icon: MapPin, flip: false },
-              { step: '02', title: 'Automatic Discovery', desc: 'The device auto-discovers every inverter and string. No manual configuration, no device IDs, no port numbers. Your full fleet is visible within minutes.', icon: Zap, flip: true },
+              { step: '02', title: 'Automatic Discovery', desc: 'The device auto-discovers every inverter and string. No manual configuration, no device IDs, no port numbers. All your sites are visible within minutes.', icon: Zap, flip: true },
               { step: '03', title: 'Live Monitoring', desc: 'Real-time data every 5 minutes. Health scores, alerts, fault diagnosis — all immediate. Dashboard access forever, from any device.', icon: Activity, flip: false },
             ].map((item) => (
               <div key={item.step} className={`grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-14 items-center ${item.flip ? 'md:[&>*:first-child]:order-2' : ''}`}>
@@ -536,7 +536,7 @@ export default function LandingPage() {
               Real faults. Real numbers. <br className="hidden md:block"/>Real recoveries.
             </h2>
             <p className="mt-4 text-sm text-warm-muted font-medium">
-              Representative scenarios from our active fleet · client names anonymized for privacy
+              Representative scenarios from our active sites · client names anonymized for privacy
             </p>
           </div>
 
@@ -637,7 +637,7 @@ export default function LandingPage() {
           <div className="mb-14 max-w-2xl">
             <EyebrowDot>Who we serve</EyebrowDot>
             <h2 className="mt-4 text-3xl md:text-4xl lg:text-5xl font-bold tracking-[-0.02em] text-warm-text leading-[1.1]">
-              Built for Pakistan&apos;s <br className="hidden md:block"/>commercial solar fleet.
+              Built for Pakistan&apos;s <br className="hidden md:block"/>commercial solar sites.
             </h2>
           </div>
 
@@ -648,7 +648,7 @@ export default function LandingPage() {
               { icon: Building2, title: 'Shopping Malls', desc: 'Multi-tenant rooftops, air-con load, peak-hour tariffs. Protect the solar offset.' },
               { icon: Home, title: 'Housing Societies', desc: 'Community solar for common-area lighting and lifts. Residents notice when generation drops — you get notified first.' },
               { icon: HeartPulse, title: 'Hospitals & Data Centers', desc: 'Zero downtime tolerance, 24/7 load. String-level visibility means no hidden degradation.' },
-              { icon: Network, title: 'Multi-Site Operators', desc: 'Fleet owners with 5+ plants across cities. One dashboard, all sites, one alert stream.' },
+              { icon: Network, title: 'Multi-Site Operators', desc: 'Owners with 5+ plants across cities. One dashboard, all sites, one alert stream.' },
             ].map((s) => (
               <div key={s.title} className="bg-warm-cream-lifted border border-warm-divider rounded-2xl p-6 hover:border-bb-green-400 transition-all">
                 <div className="flex items-center gap-3 mb-3">
@@ -863,7 +863,7 @@ export default function LandingPage() {
               Ready to see every string on your plant?
             </h2>
             <p className="text-base md:text-lg text-bb-green-50 leading-relaxed font-medium mb-8 max-w-xl">
-              Our engineer visits your plant, assesses your inverter fleet, and shows you a live demo on your actual data. If we&apos;re not a fit, we walk away.
+              Our engineer visits your plant, assesses your inverters, and shows you a live demo on your actual data. If we&apos;re not a fit, we walk away.
             </p>
 
             {/* Founder trust chip with real photo */}
@@ -1010,7 +1010,7 @@ function MiniDashboard() {
       {/* Top KPI strip — 2x2 on mobile, 4 across on desktop */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-slate-200 border-b border-slate-200">
         {[
-          { label: 'Fleet Health', value: '96%', trend: '+2.1%', color: 'text-bb-green-700' },
+          { label: 'Portfolio Health', value: '96%', trend: '+2.1%', color: 'text-bb-green-700' },
           { label: 'Energy Today', value: '47,283 kWh', trend: '+12% vs yest.', color: 'text-bb-green-700' },
           { label: 'Inverters Online', value: '44 / 44', trend: 'All online', color: 'text-bb-green-700' },
           { label: 'Active Alerts', value: '3', trend: '1 critical', color: 'text-red-600' },
@@ -1026,7 +1026,7 @@ function MiniDashboard() {
       {/* Sparkline row */}
       <div className="px-4 sm:px-5 py-4 border-b border-slate-200 bg-white">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-2">
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">24h Fleet Power</p>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">24h Total Power</p>
           <p className="text-[10px] font-mono text-slate-500">Peak: <span className="text-solar-gold-700 font-bold">11.2 MW @ 12:15 PKT</span></p>
         </div>
         <Sparkline />
@@ -1151,7 +1151,7 @@ function HeroDashPeek() {
           <div className="w-4 h-4 rounded-sm bg-gradient-to-br from-solar-gold-400 to-solar-gold-600 flex items-center justify-center">
             <Sun className="w-2 h-2 text-white" />
           </div>
-          <span className="text-[9px] font-bold text-warm-text">Fleet overview · 48 plants</span>
+          <span className="text-[9px] font-bold text-warm-text">Sites overview · 48 plants</span>
         </div>
         <div className="flex items-center gap-1 px-1.5 py-0.5 bg-bb-green-50 border border-bb-green-200 rounded-sm">
           <span className="w-1 h-1 bg-bb-green-500 rounded-full animate-pulse" />
@@ -1163,7 +1163,7 @@ function HeroDashPeek() {
       <div className="grid grid-cols-4 gap-1">
         {[
           { v: '96%', l: 'Health', c: 'text-bb-green-700' },
-          { v: '2.2 MW', l: 'Fleet', c: 'text-warm-text' },
+          { v: '2.2 MW', l: 'All Sites', c: 'text-warm-text' },
           { v: '44/48', l: 'Live', c: 'text-bb-green-700' },
           { v: '3', l: 'Alerts', c: 'text-red-600' },
         ].map((k) => (
@@ -1177,7 +1177,7 @@ function HeroDashPeek() {
       {/* Mini spark */}
       <div className="flex-1 min-h-0 bg-warm-cream rounded-sm border border-warm-divider p-2 flex flex-col">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-[7px] font-bold text-warm-muted uppercase tracking-wider">24h Fleet Power</span>
+          <span className="text-[7px] font-bold text-warm-muted uppercase tracking-wider">24h Total Power</span>
           <span className="text-[7px] font-mono text-solar-gold-700 font-bold">Peak 11.2 MW</span>
         </div>
         <div className="flex-1 relative">
@@ -1240,7 +1240,7 @@ function MiniAlertFeed() {
             <AlertTriangle className="w-3.5 h-3.5 text-solar-gold-600" />
             Live Alerts
           </p>
-          <p className="text-[10px] text-slate-500 font-mono mt-0.5">Fleet-wide · 5 active</p>
+          <p className="text-[10px] text-slate-500 font-mono mt-0.5">All sites · 5 active</p>
         </div>
         <div className="flex items-center gap-1 px-2 py-0.5 bg-red-50 border border-red-200 rounded-sm">
           <span className="w-1 h-1 bg-red-500 rounded-full animate-pulse" />

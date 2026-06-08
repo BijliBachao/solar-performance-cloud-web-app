@@ -33,6 +33,12 @@ export async function GET(request: NextRequest) {
     const fromDate = new Date(from)
     const toDate = new Date(to)
 
+    // Reject unparseable dates BEFORE the range check — NaN comparisons are
+    // always false, so a malformed date would slip past the guard below.
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+      return NextResponse.json({ error: 'Invalid from/to date' }, { status: 400 })
+    }
+
     const diffDays = (toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)
     if (diffDays > MAX_DATE_RANGE_DAYS || diffDays < 0) {
       return NextResponse.json({ error: `Date range must be 1-${MAX_DATE_RANGE_DAYS} days` }, { status: 400 })
@@ -122,6 +128,8 @@ export async function GET(request: NextRequest) {
         plant_name: dev.plants?.plant_name || 'Unknown',
         device_id: dev.id,
         device_name: dev.device_name || dev.id,
+        provider: dev.provider,
+        model: dev.model,
         kw: kwPerInverter,
         scores,
       })

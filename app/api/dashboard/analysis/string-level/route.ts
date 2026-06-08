@@ -34,6 +34,13 @@ export async function GET(request: NextRequest) {
     const fromDate = new Date(from)
     const toDate = new Date(to)
 
+    // Reject unparseable dates BEFORE the range check — NaN comparisons are
+    // always false, so a malformed date would otherwise slip past the guard
+    // below and reach Prisma as an Invalid Date (500 + empty result).
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+      return NextResponse.json({ error: 'Invalid from/to date' }, { status: 400 })
+    }
+
     const diffDays = (toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)
     if (diffDays > MAX_DATE_RANGE_DAYS || diffDays < 0) {
       return NextResponse.json({ error: `Date range must be 1-${MAX_DATE_RANGE_DAYS} days` }, { status: 400 })
@@ -161,10 +168,14 @@ export async function GET(request: NextRequest) {
     for (const row of dailyData) {
       const dateStr = new Date(row.date).toISOString().split('T')[0]
       const key = `${row.device_id}:${row.string_number}:${dateStr}`
-      scoreMap.set(key, row.health_score ? Number(row.health_score) : null)
-      perfMap.set(key, row.performance ? Number(row.performance) : null)
-      availMap.set(key, row.availability ? Number(row.availability) : null)
-      if (row.energy_kwh) energyMap.set(key, Number(row.energy_kwh))
+      // Explicit null check — a real health_score of 0 (string dead at peak vs a
+      // healthy peer group) is the single most important value this feature
+      // surfaces. Truthiness (`x ? .. : null`) would coerce 0 → null and the
+      // worst string would vanish into 'no_data' instead of 'critical'.
+      scoreMap.set(key, row.health_score == null ? null : Number(row.health_score))
+      perfMap.set(key, row.performance == null ? null : Number(row.performance))
+      availMap.set(key, row.availability == null ? null : Number(row.availability))
+      if (row.energy_kwh != null) energyMap.set(key, Number(row.energy_kwh))
     }
 
     // Exclude admin-flagged unused from the 'active' bucket — they still
@@ -222,6 +233,8 @@ export async function GET(request: NextRequest) {
         plant_name: device.plants?.plant_name || 'Unknown',
         device_id: devId,
         device_name: device.device_name || devId,
+        provider: device.provider,
+        model: device.model,
         string_number: Number(strNum),
         mppt: Math.ceil(Number(strNum) / 2),
         kw_per_string: kwPerString,
@@ -241,10 +254,26 @@ export async function GET(request: NextRequest) {
     }
     for (const key of Array.from(unusedStringSet).sort(sortByPlantDeviceString)) buildRow(key, 'unused')
 
+    // Summary tally — aligned with the central NOC donut (lib/string-health-donut.ts).
+    // The donut EXCLUDES peer-excluded ("non-standard orientation") strings from
+    // its total entirely (excluded.nonStandard) because their P2P score is NULL
+    // and non-comparable. We mirror that here: peer-excluded rows still render in
+    // the table (with a "Non-standard" chip) but are kept OUT of the
+    // healthy/warning/critical/no_data tally and out of active_strings, so the
+    // counts an operator cross-checks against the donut match. They are surfaced
+    // separately via peer_excluded_strings (analogous to unused).
     let healthy = 0, warning = 0, critical = 0, noData = 0
-    const latestDate = dates[dates.length - 1]
     const activeRows = rows.filter(r => r.type === 'active')
-    for (const row of activeRows) {
+    const scoredRows = activeRows.filter(r => !r.peer_excluded)
+    // Anchor the summary on the most recent date that actually has scores. The
+    // default range ends "today", and today's daily aggregate may not be written
+    // yet — without this, every active string would read "No Data" until the
+    // scorer runs. Falls back to the last calendar date if nothing scored.
+    let latestDate = dates[dates.length - 1]
+    for (let i = dates.length - 1; i >= 0; i--) {
+      if (scoredRows.some(r => r.scores[dates[i]] != null)) { latestDate = dates[i]; break }
+    }
+    for (const row of scoredRows) {
       const score = row.scores[latestDate]
       const bucket = bucketHealthScore(score)
       if (bucket === 'no_data') noData++
@@ -256,13 +285,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       dates, rows,
       summary: {
-        active_strings: activeRows.length, healthy, warning, critical, no_data: noData,
+        // active_strings = scored, peer-comparable strings (healthy+warning+critical+no_data).
+        active_strings: scoredRows.length, healthy, warning, critical, no_data: noData,
         inactive_strings: rows.filter(r => r.type === 'inactive').length,
         unused_strings: rows.filter(r => r.type === 'unused').length,
-        // Subset of active_strings — these still appear in healthy/warning/critical
-        // counts (their stored health_score is currently peer-derived), but the UI
-        // can tag them so users understand the score is provisional until Phase 2
-        // PR-based scoring lands.
+        // Peer-excluded strings — NULL/no_data P2P score, kept out of the tally
+        // above (mirrors the donut's excluded.nonStandard). The UI tags these rows
+        // so users understand the score is provisional until PR-based scoring lands.
         peer_excluded_strings: rows.filter(r => r.peer_excluded).length,
       },
     })

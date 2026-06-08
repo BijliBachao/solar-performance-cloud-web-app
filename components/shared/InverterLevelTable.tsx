@@ -2,12 +2,17 @@
 
 import { PerformanceCell } from './PerformanceCell'
 import { cn } from '@/lib/utils'
+import { providerLabel } from '@/lib/constants'
 
 interface InverterRow {
   plant_id: string
   plant_name: string
   device_id: string
   device_name: string
+  /** Inverter brand (huawei|solis|growatt|sungrow|csi) — shown as a chip. */
+  provider?: string | null
+  /** Inverter model string, if known — shown in the chip tooltip. */
+  model?: string | null
   kw: number | null
   scores: Record<string, number | null>
 }
@@ -86,7 +91,17 @@ export function InverterLevelTable({ dates, rows, loading }: InverterLevelTableP
                   <span className="font-medium text-gray-900">{row.plant_name}</span>
                 </td>
                 <td className="sticky left-[160px] z-10 bg-white group-hover:bg-blue-50/50 px-3 py-1.5 text-xs text-gray-700 border-r border-gray-200 whitespace-nowrap transition-colors">
-                  {row.device_name}
+                  <span className="flex items-center gap-1.5">
+                    {row.device_name}
+                    {row.provider && (
+                      <span
+                        title={row.model ? `${providerLabel(row.provider)} · ${row.model}` : providerLabel(row.provider)}
+                        className="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[9px] font-semibold text-slate-600"
+                      >
+                        {providerLabel(row.provider)}
+                      </span>
+                    )}
+                  </span>
                 </td>
                 <td className="sticky left-[300px] z-10 bg-white group-hover:bg-blue-50/50 px-2 py-1.5 text-xs text-gray-600 text-right border-r border-gray-200 transition-colors">
                   {row.kw ? `${row.kw} kW` : '—'}
