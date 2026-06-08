@@ -16,7 +16,7 @@ vi.mock('@/lib/prisma', () => ({
 
 import { prisma } from '@/lib/prisma'
 import { generateAlerts, __resetAlertPersistence } from '../poller-utils'
-import { classifyAlertSeverityWithHysteresis } from '../string-health'
+import { classifyAlertSeverityWithHysteresis, classifySrAlertSeverityWithHysteresis } from '../string-health'
 
 const mockPrisma = prisma as unknown as {
   alerts: {
@@ -107,6 +107,27 @@ describe('classifyAlertSeverityWithHysteresis (pure)', () => {
   it('full recovery from INFO needs gap < 10−3', () => {
     expect(classifyAlertSeverityWithHysteresis(8, 'INFO')).toBe('INFO')   // sticky
     expect(classifyAlertSeverityWithHysteresis(6, 'INFO')).toBeNull()    // clear
+  })
+})
+
+describe('classifySrAlertSeverityWithHysteresis (pure) — donut-aligned severity', () => {
+  it('no existing alert → maps to donut buckets (CRITICAL<0.85, WARNING<0.94, else none)', () => {
+    expect(classifySrAlertSeverityWithHysteresis(0.80, null)).toBe('CRITICAL')
+    expect(classifySrAlertSeverityWithHysteresis(0.84, null)).toBe('CRITICAL') // donut-critical → alert CRITICAL
+    expect(classifySrAlertSeverityWithHysteresis(0.90, null)).toBe('WARNING')  // donut-abnormal → alert WARNING
+    expect(classifySrAlertSeverityWithHysteresis(0.96, null)).toBeNull()       // healthy → no alert
+  })
+  it('escalation WARNING→CRITICAL only past the boundary + margin (0.85−0.03)', () => {
+    expect(classifySrAlertSeverityWithHysteresis(0.83, 'WARNING')).toBe('WARNING') // sticky in 0.82..0.85
+    expect(classifySrAlertSeverityWithHysteresis(0.81, 'WARNING')).toBe('CRITICAL')
+  })
+  it('de-escalation CRITICAL→ requires rising above 0.85+margin', () => {
+    expect(classifySrAlertSeverityWithHysteresis(0.87, 'CRITICAL')).toBe('CRITICAL') // sticky in 0.85..0.88
+    expect(classifySrAlertSeverityWithHysteresis(0.90, 'CRITICAL')).toBe('WARNING')  // clears critical, now abnormal
+  })
+  it('full recovery from WARNING needs sr above 0.94+margin', () => {
+    expect(classifySrAlertSeverityWithHysteresis(0.95, 'WARNING')).toBe('WARNING') // sticky in 0.94..0.97
+    expect(classifySrAlertSeverityWithHysteresis(0.98, 'WARNING')).toBeNull()      // recovered
   })
 })
 

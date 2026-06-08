@@ -7,7 +7,7 @@ import {
   MAX_STRING_CURRENT_A, MAX_STRING_POWER_W, MS_PER_HOUR,
   MIN_PRODUCTIVE_HOURS_FOR_DAILY_SCORE, MIN_PRODUCTIVE_POWER_W,
   clampToFleetCoords,
-  classifyAlertSeverityWithHysteresis, classifySrAlertSeverityWithHysteresis,
+  classifySrAlertSeverityWithHysteresis,
   ALERT_MIN_SUN_ELEVATION_DEG, DEAD_STRING_RECOVERY_A,
   type DeviceWriteAction, type AlertSeverity,
 } from '@/lib/string-health'
