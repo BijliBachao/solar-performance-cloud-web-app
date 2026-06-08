@@ -26,10 +26,11 @@ import {
 } from '@/lib/string-health'
 import { scoreLiveSr, type LiveStringInput } from '@/lib/string-health-live'
 import { deviceConnectivity } from '@/lib/connectivity'
-import { isDaylight } from '@/lib/solar-geometry'
+import { isDaylight, solarElevationDeg } from '@/lib/solar-geometry'
 import {
   clampToFleetCoords,
   rollupPlantStatus,
+  ALERT_MIN_SUN_ELEVATION_DEG,
   type ConnectivityStatus,
   type PlantOpStatus,
 } from '@/lib/string-health'
@@ -279,6 +280,8 @@ interface PlantLast3hRow {
   panel_count: number | null
   model: string | null
   max_strings: number | null
+  latitude: Prisma.Decimal | number | null
+  longitude: Prisma.Decimal | number | null
 }
 
 export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonutResult> {
@@ -301,11 +304,14 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
         COALESCE(sc.exclude_from_peer_comparison, false) as exclude_from_peer_comparison,
         sc.panel_count,
         d.model,
-        d.max_strings
+        d.max_strings,
+        p.latitude,
+        p.longitude
       FROM string_hourly sh
       LEFT JOIN string_configs sc
         ON sc.device_id = sh.device_id AND sc.string_number = sh.string_number
       JOIN devices d ON d.id = sh.device_id
+      JOIN plants p ON p.id = sh.plant_id
       WHERE sh.plant_id = ${plantCode}
         AND sh.hour >= ${windowStart}
         AND sh.hour < ${windowEnd}
@@ -374,9 +380,16 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
   const hoursCovered = allHours.size
   const mean = (a: number[]) => (a.length > 0 ? a.reduce((s, n) => s + n, 0) / a.length : 0)
 
+  // Sun-elevation arming (audit 2026-06-07): one plant ⇒ one armed value. Below
+  // the floor the live SR scorer must not flag standby voltage (~0 A) as
+  // open-circuit critical. Clamped coords guard vendor-default (Beijing) values.
+  const { lat: plantLat, lng: plantLng } = clampToFleetCoords(rows[0].latitude, rows[0].longitude)
+  const armed = solarElevationDeg(plantLat, plantLng, new Date()) >= ALERT_MIN_SUN_ELEVATION_DEG
+
   // Per device: collapse to one mean reading per string, score with scoreLiveSr,
   // map the SR ratio → 0-100 health_score for the donut's bucketing.
   const inputs: DonutInput[] = []
+  let lowConfidenceScored = 0
   for (const [deviceId, stringMap] of byDeviceString) {
     const topo = deviceTopology.get(deviceId) ?? { model: null, maxStrings: null }
     const liveInputs: LiveStringInput[] = []
@@ -396,6 +409,7 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
       deviceId,
       inverterModel: topo.model,
       inverterMaxStrings: topo.maxStrings,
+      armed,
     })
     for (const r of results) {
       const s = stringMap.get(r.string_number)!
@@ -405,6 +419,10 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
         peerExcluded: s.peerExcluded,
         openCircuit: r.status === 'OPEN_CIRCUIT',
       })
+      // Confidence tracking: count scored strings resting on guessed config.
+      if (r.bucket != null && (r.panel_count_is_default || r.topology_is_fallback)) {
+        lowConfidenceScored += 1
+      }
     }
   }
 
@@ -421,6 +439,16 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
     })
   } else {
     label = `Last 3 hours`
+  }
+
+  // Confidence badge (audit 2026-06-07): verdict confidence must track data
+  // confidence. When scored strings rest on a guessed panel count or fallback
+  // MPPT topology, say so instead of rendering a fully-confident donut.
+  if (lowConfidenceScored > 0) {
+    warnings.push({
+      code: 'INCOMPLETE_CONFIG',
+      message: `${lowConfidenceScored} string${lowConfidenceScored === 1 ? '' : 's'} scored with incomplete config (default panel count or inferred MPPT layout) — verdict confidence reduced. Complete per-string config for exact results.`,
+    })
   }
 
   const endsAt = new Date()

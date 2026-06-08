@@ -6,9 +6,10 @@ import { Prisma } from '@prisma/client'
 import { Decimal } from '@prisma/client/runtime/library'
 import { INVERTER_DEVICE_TYPE_IDS } from '@/lib/constants'
 import {
-  isStale, activeAvg,
+  isStale, activeAvg, clampToFleetCoords, ALERT_MIN_SUN_ELEVATION_DEG,
   type StringStatus, type StringReading,
 } from '@/lib/string-health'
+import { solarElevationDeg } from '@/lib/solar-geometry'
 import { scoreLiveSr, type LiveStringInput, type LiveStringResult } from '@/lib/string-health-live'
 
 // Map the SR scorer's result to the 5-value StringStatus the UI renders.
@@ -73,6 +74,16 @@ export async function GET(
       where: { plant_id: params.code, device_type_id: { in: INVERTER_DEVICE_TYPE_IDS } },
       select: { id: true, device_name: true, max_strings: true, model: true },
     })
+
+    // Sun-elevation arming for the live SR scorer (audit 2026-06-07): below the
+    // floor, standby voltage with ~0 A is NOT an open-circuit fault. Clamped
+    // coords guard against vendor-default (Beijing) coordinates.
+    const plantRow = await prisma.plants.findUnique({
+      where: { id: params.code },
+      select: { latitude: true, longitude: true },
+    })
+    const { lat: plantLat, lng: plantLng } = clampToFleetCoords(plantRow?.latitude, plantRow?.longitude)
+    const liveArmed = solarElevationDeg(plantLat, plantLng, new Date()) >= ALERT_MIN_SUN_ELEVATION_DEG
 
     // Fetch all string configs for these devices in one query (LEFT JOIN equivalent)
     const deviceIds = devices.map(d => d.id)
@@ -202,6 +213,7 @@ export async function GET(
           deviceId: device.id,
           inverterModel: device.model,
           inverterMaxStrings: device.max_strings,
+          armed: liveArmed,
         }).map((r) => [r.string_number, r]),
       )
 

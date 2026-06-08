@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { Decimal } from '@prisma/client/runtime/library'
 
 // Lock the contracts that two production deploys (4c8d530, f373084) landed:
@@ -12,6 +12,7 @@ import { Decimal } from '@prisma/client/runtime/library'
 
 const mockPrisma = {
   devices: { findMany: vi.fn() },
+  plants: { findUnique: vi.fn().mockResolvedValue({ latitude: 31.5, longitude: 74.3 }) },
   string_configs: { findMany: vi.fn().mockResolvedValue([]) },
   device_daily: { findMany: vi.fn().mockResolvedValue([]) },
   string_measurements: { findMany: vi.fn().mockResolvedValue([]) },
@@ -72,10 +73,19 @@ async function invoke(plantId: string) {
 describe('GET /api/plants/[code]/strings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Pin the clock to the fixtures' `now` (17:00 PKT, sun well up) so the live
+    // SR sun-gate is ARMED — otherwise the suite fails at night when the real
+    // sun is down and every string is correctly suppressed to OFFLINE.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(now)
+    mockPrisma.plants.findUnique.mockResolvedValue({ latitude: 31.5, longitude: 74.3 })
     mockPrisma.string_configs.findMany.mockResolvedValue([])
     mockPrisma.device_daily.findMany.mockResolvedValue([])
     mockPrisma.string_measurements.findMany.mockResolvedValue([])
     mockPrisma.$queryRaw.mockResolvedValue([])
+  })
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('returns { devices: [] } and skips the latest-measurements query when the plant has no inverters', async () => {

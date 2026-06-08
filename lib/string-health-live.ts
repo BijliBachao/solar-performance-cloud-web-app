@@ -52,6 +52,10 @@ export interface LiveStringResult {
   panel_count_is_default: boolean
   /** True if the MPPT topology was a max-strings fallback (lower confidence) */
   topology_is_fallback: boolean
+  /** True when a critical SR verdict was suppressed because the string is at or
+   *  above its peer-group MEDIAN — the max-anchor pinned by one overperformer
+   *  cannot make a median-or-better string "the weak one" (audit 2026-06-07). */
+  contradiction_suppressed?: boolean
   /** Reason the score is null when applicable (UX badge text) */
   no_score_reason?:
     | 'string_excluded_unused'
@@ -61,6 +65,7 @@ export interface LiveStringResult {
     | 'string_offline'
     | 'insufficient_peers'
     | 'low_irradiance_group'
+    | 'low_sun'
 }
 
 export interface LiveScoringContext {
@@ -69,6 +74,13 @@ export interface LiveScoringContext {
   inverterModel: string | null
   /** Inverter max_strings (used for fallback topology when model is null) */
   inverterMaxStrings: number | null
+  /** Sun-elevation arming for the plant. When false (sun below the string-health
+   *  floor), NO string is scored — open-circuit standby (V present, ~0 A) and the
+   *  dawn/dusk ramp are NOT faults. Computed by the caller from clamped plant
+   *  coords, exactly like the alert path's alertsArmed (audit 2026-06-07: the
+   *  live donut had no sun gate, so CSI standby voltage read as a sea of
+   *  "open-circuit critical" at FANZ). */
+  armed: boolean
 }
 
 /**
@@ -177,10 +189,45 @@ export function scoreLiveSr(
     ? Math.max(...deviceWideFallback.map((s) => s.per_panel_W))
     : 0
 
+  // Group MEDIANS — the contradiction guard's reference. The SR anchor is the
+  // group MAX (one overperformer can pin it high); a string flagged critical
+  // against that max while sitting at/above the group MEDIAN is a max-anchor
+  // false positive, not a real fault, so we suppress it (audit 2026-06-07).
+  const median = (arr: number[]): number => {
+    if (arr.length === 0) return 0
+    const sorted = [...arr].sort((a, b) => a - b)
+    const mid = Math.floor(sorted.length / 2)
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+  }
+  const peerMedianByGroup = new Map<string, number>()
+  for (const [key, pool] of groupedPool) {
+    peerMedianByGroup.set(key, median(pool.map((s) => s.per_panel_W)))
+  }
+  const fallbackPeerMedian = fallbackPoolValid
+    ? median(deviceWideFallback.map((s) => s.per_panel_W))
+    : 0
+
   // ── Step 4: Score each string ──
   const topologyIsFallback = !ctx.inverterModel || ctx.inverterModel.trim() === ''
 
   return annotated.map((s) => {
+    // Sun gate (uniform with the alert path): below the elevation floor no string
+    // is scored. CSI inverters hold standby voltage with ~0 A overnight/at dawn,
+    // which the OPEN_CIRCUIT override would otherwise flag CRITICAL for every
+    // string. Suppress to an unscored OFFLINE state (status OFFLINE ⇒ the donut's
+    // openCircuit flag is false ⇒ counts as no-data, never critical).
+    if (!ctx.armed) {
+      return {
+        string_number: s.string_number,
+        sr: null,
+        bucket: null,
+        status: 'OFFLINE',
+        panel_count_is_default: s.panel_count_is_default,
+        topology_is_fallback: topologyIsFallback,
+        no_score_reason: 'low_sun',
+      }
+    }
+
     // Handle exclusions / non-comparable states first
     if (!s.is_used) {
       return {
@@ -271,7 +318,22 @@ export function scoreLiveSr(
 
     const sr = s.per_panel_W / peerMax
     const cappedSr = Math.min(sr, 1.5) // keep arithmetic stable
-    const bucket = bucketSrScore(cappedSr)
+    let bucket = bucketSrScore(cappedSr)
+
+    // Contradiction guard: a string can only be "critical" if it is genuinely
+    // below its peers. If it is flagged critical against the group MAX yet sits
+    // at/above the group MEDIAN, the max was pinned by an outlier overperformer
+    // and this string is not the weak one — suppress to healthy + flag.
+    let contradictionSuppressed = false
+    if (bucket === 'critical') {
+      const med = inMpptGroup
+        ? peerMedianByGroup.get(s.mpptGroupKey)!
+        : fallbackPeerMedian
+      if (med > 0 && s.per_panel_W >= med) {
+        bucket = 'healthy'
+        contradictionSuppressed = true
+      }
+    }
 
     return {
       string_number: s.string_number,
@@ -280,6 +342,7 @@ export function scoreLiveSr(
       status: 'NORMAL',
       panel_count_is_default: s.panel_count_is_default,
       topology_is_fallback: topologyIsFallback,
+      ...(contradictionSuppressed ? { contradiction_suppressed: true } : {}),
     }
   })
 }

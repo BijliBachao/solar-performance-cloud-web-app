@@ -31,12 +31,14 @@ const huaweiInverter: LiveScoringContext = {
   deviceId: 'dev1',
   inverterModel: 'SUN2000-100KTL-INM0', // 10 MPPTs × 2 strings/MPPT
   inverterMaxStrings: 20,
+  armed: true,
 }
 
 const csiInverter36: LiveScoringContext = {
   deviceId: 'devCSI',
   inverterModel: null, // CSI has no model in DB → falls back to max-strings
   inverterMaxStrings: 36,
+  armed: true,
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -347,6 +349,78 @@ describe('scoreLiveSr — edge cases', () => {
     )
     expect(result.find((r) => r.string_number === 4)?.bucket).toBe('healthy')   // 15-panel not falsely flagged
     expect(result.find((r) => r.string_number === 5)?.bucket).toBe('critical')   // genuine fault
+  })
+})
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Sun-elevation arming (FANZ low-sun open-circuit false-red, audit 2026-06-07)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+describe('scoreLiveSr — sun-elevation arming (armed=false)', () => {
+  it('FANZ night standby (167V, 0A) does NOT flag open-circuit critical when disarmed', () => {
+    // Replayed live 2026-06-07: every CSI string ~167V/0A at low sun. With the
+    // old (gateless) path this was a sea of "open-circuit critical".
+    const result = scoreLiveSr(
+      [
+        s(1, 167, 0, 0),
+        s(2, 167, 0, 0),
+        s(3, 167, 0, 0),
+        s(4, 167, 0, 0),
+      ],
+      { ...csiInverter36, armed: false },
+    )
+    for (const r of result) {
+      expect(r.bucket).toBeNull()                      // NOT critical
+      expect(r.status).toBe('OFFLINE')                 // donut openCircuit flag → false
+      expect(r.no_score_reason).toBe('low_sun')
+    }
+  })
+
+  it('same standby readings WHEN ARMED (daytime) still flag open-circuit — a real daytime fault is not suppressed', () => {
+    const result = scoreLiveSr(
+      [s(1, 167, 0, 0), s(2, 600, 10, 6000), s(3, 600, 10, 6000)],
+      { ...csiInverter36, armed: true },
+    )
+    expect(result.find((r) => r.string_number === 1)?.bucket).toBe('critical')
+    expect(result.find((r) => r.string_number === 1)?.status).toBe('OPEN_CIRCUIT')
+  })
+})
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Contradiction guard — critical-but-above-median is a max-anchor false positive
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+describe('scoreLiveSr — contradiction guard (max-anchor false positive)', () => {
+  it('a string at/above the group MEDIAN is never critical even if one peer overperforms hugely', () => {
+    // Device-wide fallback group (all singleton MPPTs): one huge overperformer
+    // pins the max; a median-or-better string would read <0.85 of max → critical
+    // under the raw max-anchor. The guard must suppress that to healthy.
+    // per_panel_W (pc=16): A=375, B=375, C=375 (median 375), MAX D=625.
+    // C/maxD = 375/625 = 0.60 → critical by max-anchor, but C == median → suppress.
+    const result = scoreLiveSr(
+      [
+        s(1, 600, 10, 6000),   // 375 W/panel
+        s(3, 600, 10, 6000),   // 375 (different MPPT → singletons → fallback pool)
+        s(5, 600, 10, 6000),   // 375
+        s(7, 600, 16.7, 10000), // 625 — outlier overperformer pins the max
+      ],
+      { deviceId: 'devX', inverterModel: null, inverterMaxStrings: 8, armed: true },
+    )
+    const c = result.find((r) => r.string_number === 5)!
+    expect(c.bucket).toBe('healthy')
+    expect(c.contradiction_suppressed).toBe(true)
+  })
+
+  it('a genuinely below-median string is STILL critical (guard does not mask real faults)', () => {
+    // MPPT pair: peer 6000W (375/panel), broken 1700W (106/panel). 106 < median
+    // (which is between them) → stays critical, no suppression.
+    const result = scoreLiveSr(
+      [s(1, 600, 10, 6000), s(2, 600, 2.83, 1700)],
+      huaweiInverter,
+    )
+    const broken = result.find((r) => r.string_number === 2)!
+    expect(broken.bucket).toBe('critical')
+    expect(broken.contradiction_suppressed).toBeUndefined()
   })
 })
 
