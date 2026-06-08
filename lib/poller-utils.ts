@@ -403,7 +403,7 @@ export async function generateAlerts(
   // dead string regardless of whether we have healthy peers to compare to).
   const currentSeverities = new Map<
     number,
-    { severity: string; gapPercent: number | null }
+    { severity: string; gapPercent: number | null; expectedCurrent?: number }
   >()
 
   const canDoComparison = peerActive.length >= MIN_PEERS_FOR_COMPARISON && peerAvgCurrent >= MIN_AVG_FOR_COMPARISON
@@ -443,7 +443,14 @@ export async function generateAlerts(
       existingSeverity.get(r.string_number) ?? null,
     )
     if (severity) {
-      currentSeverities.set(r.string_number, { severity, gapPercent })
+      // expected_value stays in AMPS (the UI's unit) and reconciles exactly
+      // with gap_percent: expected = actualCurrent / sr, so actual/expected = sr
+      // and (1 - actual/expected)*100 = gap_percent. Within an MPPT the shared
+      // voltage makes the current ratio == the per-panel-power ratio.
+      const meas = measurements.find((m) => m.string_number === r.string_number)
+      const cur = meas ? Number(meas.current) : 0
+      const expectedCurrent = r.sr > 0 ? cur / r.sr : undefined
+      currentSeverities.set(r.string_number, { severity, gapPercent, expectedCurrent })
     }
   }
 
@@ -552,7 +559,9 @@ export async function generateAlerts(
       string_number: stringNumber,
       severity: state.severity,
       message,
-      expected_value: state.gapPercent !== null ? new Decimal(peerAvgCurrent.toFixed(3)) : null,
+      expected_value: state.expectedCurrent != null
+        ? new Decimal(state.expectedCurrent.toFixed(3))
+        : (state.gapPercent !== null ? new Decimal(peerAvgCurrent.toFixed(3)) : null),
       actual_value: measurement.current,
       gap_percent: state.gapPercent !== null ? new Decimal(state.gapPercent.toFixed(1)) : null,
     })
