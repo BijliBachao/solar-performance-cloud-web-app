@@ -383,7 +383,7 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
   // Sun-elevation arming (audit 2026-06-07): one plant ⇒ one armed value. Below
   // the floor the live SR scorer must not flag standby voltage (~0 A) as
   // open-circuit critical. Clamped coords guard vendor-default (Beijing) values.
-  const { lat: plantLat, lng: plantLng } = clampToFleetCoords(rows[0].latitude, rows[0].longitude)
+  const { lat: plantLat, lng: plantLng } = clampToFleetCoords(rows[0]?.latitude, rows[0]?.longitude)
   const armed = solarElevationDeg(plantLat, plantLng, new Date()) >= ALERT_MIN_SUN_ELEVATION_DEG
 
   // Per device: collapse to one mean reading per string, score with scoreLiveSr,
