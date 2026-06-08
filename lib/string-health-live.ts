@@ -3,7 +3,8 @@
  *
  * Used for the Plant-tab live chart and the Last-3h donut. Computes
  * per-panel power for each string, groups by MPPT (or inverter if unknown),
- * and compares each string against the BEST peer in its group.
+ * and compares each string against its group's MEDIAN per-panel power (robust
+ * to one overperformer; matches the daily P2P scorer — audit 2026-06-08).
  *
  * Industry anchor:
  *   - Buerhop et al. 2023 (Progress in Photovoltaics, Forschungszentrum Jülich):
@@ -90,7 +91,7 @@ export interface LiveScoringContext {
  *   4. For each MPPT group:
  *        - If group has < MIN_PEERS, merge with other strings on the inverter (fallback)
  *        - If group has 0 producing peers, mark all in group as low_irradiance_group (no score)
- *        - Else: SR_string = string.per_panel_W / max(peer.per_panel_W)
+ *        - Else: SR_string = string.per_panel_W / median(group.per_panel_W)
  *
  * Overrides (applied AFTER scoring):
  *   - is_used = false        → no score, status = OFFLINE (excluded entirely)

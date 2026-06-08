@@ -16,11 +16,10 @@
  * Result: a genuinely weak string (the client's CSI PV10 — worst at peak)
  * reads ~98.6 % "Healthy". This module fixes all of that.
  *
- * Median (not max) anchoring: daily scores feed overnight summaries/alerts and
- * must be stable — a single misreading-high string shouldn't drag the whole
- * group's reference up. (The LIVE algorithm is max-anchored because the
- * operator wants the most sensitive instantaneous signal — see
- * lib/string-health-live.ts.)
+ * Median (not max) anchoring: a single misreading-high string shouldn't drag
+ * the whole group's reference up. The LIVE scorer (lib/string-health-live.ts)
+ * uses the SAME group-median anchor (since 2026-06-08), so the live donut and
+ * the daily view agree by construction.
  *
  * Industry anchor: Alcañiz et al. 2022 (Performance-to-Peers, median-anchored);
  * SolarEdge ±6 % mismatch threshold.
