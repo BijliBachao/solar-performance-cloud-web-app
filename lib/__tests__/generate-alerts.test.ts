@@ -15,7 +15,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 import { prisma } from '@/lib/prisma'
-import { generateAlerts } from '../poller-utils'
+import { generateAlerts, __resetAlertPersistence } from '../poller-utils'
 import { classifyAlertSeverityWithHysteresis } from '../string-health'
 
 const mockPrisma = prisma as unknown as {
@@ -41,6 +41,7 @@ const configs = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  __resetAlertPersistence() // module-level map survives between tests — clear it
   mockPrisma.alerts.findMany.mockResolvedValue([])
   mockPrisma.string_configs.findMany.mockResolvedValue([])
 })
@@ -189,7 +190,7 @@ describe('generateAlerts — batched writes', () => {
     const reverse = { string_number: 5, current: new Decimal('-1.400'), voltage: new Decimal('15'), power: new Decimal('-21') }
     const collapsed = { string_number: 6, current: new Decimal('0.000'), voltage: new Decimal('2'), power: new Decimal('0') }
     await generateAlerts('dev1', 'plant1',
-      [m(1, 10), m(2, 10), m(3, 10), m(4, 10), reverse as any, collapsed as any], configs)
+      [m(1, 10), m(2, 10), m(3, 10), m(4, 10), reverse as any, collapsed as any], configs, true, undefined, 1)
     const rows = mockPrisma.alerts.createMany.mock.calls[0][0].data
     const byString = Object.fromEntries(rows.map((r: any) => [r.string_number, r.message]))
     expect(byString[5]).toMatch(/reverse current \(-1\.400A\)/)

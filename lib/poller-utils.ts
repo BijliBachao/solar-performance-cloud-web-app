@@ -171,6 +171,12 @@ export async function sweepAlertsOnDarkDevices(): Promise<number> {
 export const ALERT_PERSISTENCE_CYCLES = 2
 const alertPersistenceState = new Map<string, number>()
 
+/** Test-only: clear the process-local persistence counters so each test starts
+ *  from a clean slate (the map is module-level and survives between calls). */
+export function __resetAlertPersistence(): void {
+  alertPersistenceState.clear()
+}
+
 // One log line per device per stall (and one on recovery) — same pattern as the
 // CSI/Solis stale-feed logging. Keyed by deviceId (globally unique across providers).
 const writeGateLogState = new Map<string, DeviceWriteAction>()
@@ -541,7 +547,10 @@ export async function generateAlerts(
   for (const m of measurements) {
     const key = `${deviceId}:${m.string_number}`
     if (currentSeverities.has(m.string_number)) {
-      alertPersistenceState.set(key, (alertPersistenceState.get(key) ?? 0) + 1)
+      // Cap at the gate threshold — once it's high enough to fire, growing the
+      // counter further is meaningless (avoids unbounded ints on a long fault).
+      const next = Math.min((alertPersistenceState.get(key) ?? 0) + 1, minPersistenceCycles)
+      alertPersistenceState.set(key, next)
     } else {
       alertPersistenceState.delete(key)
     }
