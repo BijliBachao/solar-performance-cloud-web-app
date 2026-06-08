@@ -128,10 +128,40 @@ describe('generateAlerts — peer comparison via shared engine (power, not curre
     // S1 6400W vs S2 ~2000W on the same MPPT — S2 is the real underperformer.
     await generateAlerts('dev1', 'plant1',
       [mv(1, 800, 8), mv(2, 600, 3.3)], configs, true,
-      { model: null, max_strings: 2 })
+      { model: null, max_strings: 2 }, 1) // minPersistenceCycles=1 → immediate
     expect(mockPrisma.alerts.createMany).toHaveBeenCalledTimes(1)
     const rows = mockPrisma.alerts.createMany.mock.calls[0][0].data
     expect(rows.map((r: any) => r.string_number)).toContain(2)
+  })
+})
+
+describe('generateAlerts — persistence gate (dawn-ramp guard)', () => {
+  const mv = (sn: number, v: number, i: number) => ({
+    string_number: sn,
+    voltage: new Decimal(v.toFixed(2)),
+    current: new Decimal(i.toFixed(3)),
+    power: new Decimal((v * i).toFixed(2)),
+  })
+
+  it('a below-peer string does NOT alert on the first cycle, but DOES after it persists', async () => {
+    // Default minPersistenceCycles (2). One genuinely-low string on an MPPT pair.
+    const meas = [mv(7, 600, 10), mv(8, 600, 3.3)] // S8 ~ a third of S7
+    // Cycle 1 — problem seen once → no new alert yet
+    await generateAlerts('dev-persist', 'plant1', meas, configs, true, { model: null, max_strings: 2 })
+    expect(mockPrisma.alerts.createMany).not.toHaveBeenCalled()
+    // Cycle 2 — same problem persists → now it fires
+    await generateAlerts('dev-persist', 'plant1', meas, configs, true, { model: null, max_strings: 2 })
+    expect(mockPrisma.alerts.createMany).toHaveBeenCalledTimes(1)
+    const rows = mockPrisma.alerts.createMany.mock.calls[0][0].data
+    expect(rows.map((r: any) => r.string_number)).toContain(8)
+  })
+
+  it('a transient one-cycle dip never alerts (string recovers next cycle)', async () => {
+    await generateAlerts('dev-transient', 'plant1',
+      [mv(7, 600, 10), mv(8, 600, 3.3)], configs, true, { model: null, max_strings: 2 }) // dip
+    await generateAlerts('dev-transient', 'plant1',
+      [mv(7, 600, 10), mv(8, 600, 10)], configs, true, { model: null, max_strings: 2 })  // recovered
+    expect(mockPrisma.alerts.createMany).not.toHaveBeenCalled()
   })
 })
 
@@ -139,7 +169,7 @@ describe('generateAlerts — batched writes', () => {
   it('creates MULTIPLE new alerts with ONE createMany (never per-row create)', async () => {
     // 4 healthy peers at 10A + two dead strings → 2 CRITICAL alerts expected
     await generateAlerts('dev1', 'plant1',
-      [m(1, 10), m(2, 10), m(3, 10), m(4, 10), m(5, 0), m(6, 0)], configs)
+      [m(1, 10), m(2, 10), m(3, 10), m(4, 10), m(5, 0), m(6, 0)], configs, true, undefined, 1)
 
     expect(mockPrisma.alerts.create).not.toHaveBeenCalled()
     expect(mockPrisma.alerts.createMany).toHaveBeenCalledTimes(1)

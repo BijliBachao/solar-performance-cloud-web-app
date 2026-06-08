@@ -157,6 +157,20 @@ export async function sweepAlertsOnDarkDevices(): Promise<number> {
   return res.count
 }
 
+// ── Alert persistence (N-of-M dawn-ramp guard, audit 2026-06-08) ──
+// At dawn, strings on one MPPT wake unevenly; a lagger reads below its peer
+// median for a cycle or two, then catches up. The first armed cycle after the
+// median-anchor alert engine shipped created 43 transient peer alerts (vs 9 the
+// prior day). Standard NOC practice (CUSUM / N-of-M) is to require a deficit to
+// PERSIST before raising a NEW alert. We track, per (device,string), how many
+// consecutive cycles it has been in a problem state; a new alert is only created
+// once that count reaches ALERT_PERSISTENCE_CYCLES. Resolution is NOT gated —
+// recovered strings clear immediately. State is process-local (resets on the
+// PM2 deploy restart, same as the write-gate log state) — a worst case of one
+// extra deploy-time cycle of delay, never a missed sustained fault.
+export const ALERT_PERSISTENCE_CYCLES = 2
+const alertPersistenceState = new Map<string, number>()
+
 // One log line per device per stall (and one on recovery) — same pattern as the
 // CSI/Solis stale-feed logging. Keyed by deviceId (globally unique across providers).
 const writeGateLogState = new Map<string, DeviceWriteAction>()
@@ -349,6 +363,9 @@ export async function generateAlerts(
    *  per-MPPT / per-panel-power / median engine as the donut (scoreLiveSr).
    *  Optional for back-compat; null → device-wide fallback grouping. */
   deviceMeta?: { model: string | null; max_strings: number | null },
+  /** Consecutive problem-cycles required before a NEW alert is created
+   *  (dawn-ramp guard). Pollers use the default; tests pass 1 for immediacy. */
+  minPersistenceCycles: number = ALERT_PERSISTENCE_CYCLES,
 ): Promise<void> {
   if (!armed) return
   if (rawMeasurements.length === 0) return
@@ -517,6 +534,19 @@ export async function generateAlerts(
   }
   const resolvedSet = new Set(toResolve.map((a) => `${a.string_number}:${a.severity}`))
 
+  // Persistence bookkeeping (dawn-ramp guard): for every string the device
+  // reported this cycle, increment its consecutive problem-cycle counter if it
+  // is in a problem state, else reset it. A NEW alert (below) only fires once
+  // the counter reaches minPersistenceCycles — absorbing transient dawn laggers.
+  for (const m of measurements) {
+    const key = `${deviceId}:${m.string_number}`
+    if (currentSeverities.has(m.string_number)) {
+      alertPersistenceState.set(key, (alertPersistenceState.get(key) ?? 0) + 1)
+    } else {
+      alertPersistenceState.delete(key)
+    }
+  }
+
   // Create new alerts — collect rows, then ONE createMany.
   const creates: Array<{
     device_id: string; plant_id: string; string_number: number; severity: string
@@ -530,6 +560,12 @@ export async function generateAlerts(
         !resolvedSet.has(`${a.string_number}:${a.severity}`)
     )
     if (alreadyOpen) continue
+
+    // Dawn-ramp guard: require the problem to persist before raising a NEW
+    // alert. (Already-open alerts skip this — they've persisted; escalations
+    // and resolutions are immediate.)
+    const persistKey = `${deviceId}:${stringNumber}`
+    if ((alertPersistenceState.get(persistKey) ?? 0) < minPersistenceCycles) continue
 
     const measurement = measurements.find((m) => m.string_number === stringNumber)
     if (!measurement) continue
