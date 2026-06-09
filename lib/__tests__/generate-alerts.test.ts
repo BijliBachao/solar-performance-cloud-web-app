@@ -156,8 +156,12 @@ describe('generateAlerts — peer comparison via shared engine (power, not curre
       [mv(1, 800, 8), mv(2, 600, 3.3)], configs, true,
       { model: null, max_strings: 2 }, 1) // minPersistenceCycles=1 → immediate
     expect(mockPrisma.alerts.createMany).toHaveBeenCalledTimes(1)
-    const rows = mockPrisma.alerts.createMany.mock.calls[0][0].data
-    expect(rows.map((r: any) => r.string_number)).toContain(2)
+    const call = mockPrisma.alerts.createMany.mock.calls[0][0]
+    expect(call.data.map((r: any) => r.string_number)).toContain(2)
+    // Inserts must skip duplicates — paired with the partial unique index
+    // alerts_open_unique_idx, this makes a duplicate OPEN alert impossible
+    // without failing the batch on a rare race.
+    expect(call.skipDuplicates).toBe(true)
   })
 })
 

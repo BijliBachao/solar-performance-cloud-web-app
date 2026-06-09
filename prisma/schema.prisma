@@ -185,6 +185,11 @@ model alerts {
   @@index([plant_id, created_at(sort: Desc)])
   @@index([resolved_at])
   @@index([device_id, string_number, severity, resolved_at])
+  // A PARTIAL UNIQUE index `alerts_open_unique_idx` on
+  // (device_id, string_number, severity) WHERE resolved_at IS NULL enforces
+  // "at most one OPEN alert per string+severity". Prisma can't express a partial
+  // index, so it lives in scripts/migrations/2026-06-09-alerts-open-unique-index.sql
+  // (applied after `prisma db push`); generateAlerts inserts with skipDuplicates.
 }
 
 model vendor_alarms {

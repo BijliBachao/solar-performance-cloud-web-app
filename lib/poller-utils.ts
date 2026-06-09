@@ -615,7 +615,13 @@ export async function generateAlerts(
     })
   }
   if (creates.length > 0) {
-    await prisma.alerts.createMany({ data: creates })
+    // skipDuplicates: the partial unique index `alerts_open_unique_idx`
+    // (migration 2026-06-09) forbids two OPEN alerts for the same
+    // (device_id, string_number, severity). We already de-dup against
+    // openAlerts above, so this only matters under a rare race between
+    // overlapping cycles — and there it must be a silent no-op, never a
+    // failed batch that drops the device's other new alerts.
+    await prisma.alerts.createMany({ data: creates, skipDuplicates: true })
   }
 }
 
