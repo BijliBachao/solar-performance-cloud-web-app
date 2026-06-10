@@ -418,6 +418,7 @@ export default function AnalysisPage() {
           dates={stringData?.dates || []}
           rows={stringData?.rows || []}
           loading={loading}
+          cellApiPath="/api/admin/analysis/string-cell"
         />
       ) : (
         <>

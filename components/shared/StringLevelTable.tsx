@@ -1,10 +1,53 @@
 'use client'
 
-import { PerformanceCell } from './PerformanceCell'
+import { useState } from 'react'
+import { StringCellDetail } from './StringCellDetail'
 import { cn } from '@/lib/utils'
 import { STATUS_STYLES } from '@/lib/design-tokens'
 import { providerLabel } from '@/lib/constants'
-import { HEALTH_HEALTHY, HEALTH_CAUTION, HEALTH_WARNING, PANEL_COUNT_DEFAULT } from '@/lib/string-health'
+import { HEALTH_HEALTHY, HEALTH_CAUTION, HEALTH_WARNING, PANEL_COUNT_DEFAULT, HEALTH_SEVERE } from '@/lib/string-health'
+
+// ── Clickable performance cell ─────────────────────────────────────────────
+// Wraps the existing cell-styling logic in a <td><button> so the daily score
+// is both visually correct AND a drill-down trigger. Keyboard-focusable.
+
+function getCellStyle(score: number | null): string {
+  if (score === null || score === undefined) return 'bg-gray-100 text-gray-400'
+  if (score >= HEALTH_HEALTHY) return ''
+  if (score >= HEALTH_CAUTION) return 'bg-yellow-100 text-yellow-800 font-semibold'
+  if (score >= HEALTH_WARNING) return 'bg-orange-200 text-orange-900 font-bold'
+  if (score >= HEALTH_SEVERE) return 'bg-red-200 text-red-900 font-bold'
+  return 'bg-red-400 text-white font-bold'
+}
+
+interface ClickablePerformanceCellProps {
+  score: number | null
+  onClick: () => void
+}
+
+function ClickablePerformanceCell({ score, onClick }: ClickablePerformanceCellProps) {
+  const display = score !== null && score !== undefined ? `${Math.round(score)}%` : '—'
+  return (
+    <td
+      className={cn(
+        'px-0 py-0 text-center text-xs font-mono whitespace-nowrap border-r border-gray-100',
+        getCellStyle(score),
+      )}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        title="Click to see how this score was computed"
+        className={cn(
+          'w-full h-full px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-[2px] focus:ring-inset focus:ring-blue-400',
+          'hover:brightness-95 transition-[filter] cursor-pointer',
+        )}
+      >
+        {display}
+      </button>
+    </td>
+  )
+}
 
 interface StringRow {
   plant_id: string
@@ -37,6 +80,17 @@ interface StringLevelTableProps {
   dates: string[]
   rows: StringRow[]
   loading?: boolean
+  /** API path for the cell drill-down endpoint.
+   *  Dashboard: /api/dashboard/analysis/string-cell (default)
+   *  Admin:     /api/admin/analysis/string-cell
+   */
+  cellApiPath?: string
+}
+
+interface CellSelection {
+  deviceId: string
+  stringNumber: number
+  date: string
 }
 
 function formatDateHeader(dateStr: string): string {
@@ -52,7 +106,14 @@ function metricCell(value: number | null, type: 'perf' | 'avail'): string {
   return 'text-red-600 font-bold'
 }
 
-export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps) {
+export function StringLevelTable({
+  dates,
+  rows,
+  loading,
+  cellApiPath = '/api/dashboard/analysis/string-cell',
+}: StringLevelTableProps) {
+  const [selected, setSelected] = useState<CellSelection | null>(null)
+
   if (loading) {
     return (
       <div className="animate-pulse space-y-2 p-4">
@@ -89,6 +150,18 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
   let prevDeviceId = ''
 
   return (
+    <>
+      {/* Drill-down panel — rendered in a portal above the table */}
+      {selected && (
+        <StringCellDetail
+          apiPath={cellApiPath}
+          deviceId={selected.deviceId}
+          stringNumber={selected.stringNumber}
+          date={selected.date}
+          onClose={() => setSelected(null)}
+        />
+      )}
+
     <div className="overflow-x-auto border border-gray-200 rounded-lg">
       <table className="w-full text-sm">
         <thead>
@@ -197,9 +270,16 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
                   {row.energy_kwh !== null ? row.energy_kwh.toFixed(1) : '—'}
                 </td>
                 {dates.map((date) => (
-                  <PerformanceCell
+                  <ClickablePerformanceCell
                     key={date}
                     score={row.scores[date]}
+                    onClick={() =>
+                      setSelected({
+                        deviceId: row.device_id,
+                        stringNumber: row.string_number,
+                        date,
+                      })
+                    }
                   />
                 ))}
               </tr>
@@ -290,5 +370,6 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
         </tbody>
       </table>
     </div>
+    </>
   )
 }
