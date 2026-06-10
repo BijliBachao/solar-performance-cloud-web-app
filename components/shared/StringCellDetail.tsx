@@ -284,9 +284,12 @@ export function StringCellDetail({
                     (no median to highlight), so suppress it entirely. */}
                 {data.performance !== null && data.peers.length > 0 && (
                   <div>
-                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
                       Peer Strings — same inverter, same day
                     </h3>
+                    <p className="text-[10px] leading-snug text-slate-400 mb-2">
+                      <span className="font-semibold">Repr. Current</span> = the <span className="font-semibold">median</span> of each string&apos;s hourly readings during the day&apos;s sun-up hours (not a single reading). Each string reports every few minutes → averaged per hour → the middle hour is its representative value.
+                    </p>
                     <div className="rounded-md border border-slate-200 overflow-hidden">
                       <table className="w-full text-xs">
                         <thead>
@@ -358,7 +361,7 @@ export function StringCellDetail({
                       )}
                     </div>
                     <p className="text-[9px] text-slate-400 mt-1">
-                      {sparkValues.length} hourly buckets · avg current (A)
+                      {sparkValues.length} sun-up hours · each point = the average of that hour&apos;s readings (A)
                     </p>
                   </div>
                 )}
