@@ -280,6 +280,7 @@ interface PlantLast3hRow {
   panel_count: number | null
   model: string | null
   max_strings: number | null
+  strings_are_mppts: boolean
   latitude: Prisma.Decimal | number | null
   longitude: Prisma.Decimal | number | null
 }
@@ -305,6 +306,7 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
         sc.panel_count,
         d.model,
         d.max_strings,
+        d.strings_are_mppts,
         p.latitude,
         p.longitude
       FROM string_hourly sh
@@ -343,7 +345,7 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
     isUsed: boolean; peerExcluded: boolean; panelCount: number | null
   }
   const byDeviceString = new Map<string, Map<number, StringSamples>>()
-  const deviceTopology = new Map<string, { model: string | null; maxStrings: number | null }>()
+  const deviceTopology = new Map<string, { model: string | null; maxStrings: number | null; stringsAreMppts: boolean }>()
   const allHours = new Set<string>()
   let lastDataAt: Date = new Date(0)
 
@@ -352,7 +354,7 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
     allHours.add(hourKey)
     if (r.hour.getTime() > lastDataAt.getTime()) lastDataAt = r.hour
     if (!deviceTopology.has(r.device_id)) {
-      deviceTopology.set(r.device_id, { model: r.model, maxStrings: r.max_strings })
+      deviceTopology.set(r.device_id, { model: r.model, maxStrings: r.max_strings, stringsAreMppts: r.strings_are_mppts })
     }
 
     let strMap = byDeviceString.get(r.device_id)
@@ -391,7 +393,7 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
   const inputs: DonutInput[] = []
   let lowConfidenceScored = 0
   for (const [deviceId, stringMap] of byDeviceString) {
-    const topo = deviceTopology.get(deviceId) ?? { model: null, maxStrings: null }
+    const topo = deviceTopology.get(deviceId) ?? { model: null, maxStrings: null, stringsAreMppts: false }
     const liveInputs: LiveStringInput[] = []
     for (const [strNum, s] of stringMap) {
       liveInputs.push({
@@ -409,6 +411,7 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
       deviceId,
       inverterModel: topo.model,
       inverterMaxStrings: topo.maxStrings,
+      stringsAreMppts: topo.stringsAreMppts ?? false,
       armed,
     })
     for (const r of results) {

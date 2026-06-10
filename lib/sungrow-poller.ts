@@ -211,8 +211,9 @@ async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
       id: true,       // device_sn
       plant_id: true,
       max_strings: true,
+      strings_are_mppts: true,
       last_reading_sig: true,
-      // Plant coords for the night write-gate (fleet-default fallback applied
+      // Plant coords for the night write-gate (Pakistan-bbox fallback applied
       // at the gate — never trust fail-open-day for write decisions).
       plants: { select: { latitude: true, longitude: true } },
     },
@@ -236,7 +237,8 @@ async function fetchSungrowStringData(client: SungrowClient): Promise<void> {
 async function processSungrowDevice(
   client: SungrowClient,
   device: {
-    id: string; plant_id: string; max_strings: number | null; last_reading_sig: string | null
+    id: string; plant_id: string; max_strings: number | null; strings_are_mppts: boolean
+    last_reading_sig: string | null
     plants: { latitude: unknown; longitude: unknown } | null
   },
 ): Promise<void> {
@@ -267,12 +269,16 @@ async function processSungrowDevice(
   const maxStrings = device.max_strings || detectedStrings
   if (maxStrings === 0) return // No strings detected, skip
 
-  // Update max_strings if discovered
-  if (detectedStrings > 0 && detectedStrings !== device.max_strings) {
-    await prisma.devices.update({
-      where: { id: device.id },
-      data: { max_strings: detectedStrings },
-    })
+  // Persist max_strings (when discovered) and the strings-are-MPPTs flag.
+  // Sungrow reports current per-MPPT on the primary string only (secondary
+  // strings read 0), so each stored string is effectively a whole MPPT — flag
+  // it so the health grouping doesn't pair two trackers (fixes the prior
+  // odd-only collapse to whole-inverter).
+  const sungrowUpdate: { max_strings?: number; strings_are_mppts?: boolean } = {}
+  if (detectedStrings > 0 && detectedStrings !== device.max_strings) sungrowUpdate.max_strings = detectedStrings
+  if (device.strings_are_mppts !== true) sungrowUpdate.strings_are_mppts = true
+  if (Object.keys(sungrowUpdate).length > 0) {
+    await prisma.devices.update({ where: { id: device.id }, data: sungrowUpdate })
   }
 
   const measurements: Array<{
@@ -353,9 +359,9 @@ async function processSungrowDevice(
     await recordDeviceFreshness(device.id, gateStrings, null, device.last_reading_sig)
 
     const stringConfigs = await loadStringConfigs(device.id)
-    await generateAlerts(device.id, device.plant_id, measurements, stringConfigs, alertsArmed(device.plants), { model: null, max_strings: device.max_strings ?? null })
+    await generateAlerts(device.id, device.plant_id, measurements, stringConfigs, alertsArmed(device.plants), { model: null, max_strings: device.max_strings ?? null, strings_are_mppts: true })
     await updateHourlyAggregates(device.id, device.plant_id, maxStrings, stringConfigs)
-    await updateDailyAggregates(device.id, device.plant_id, maxStrings, stringConfigs, { model: null, max_strings: device.max_strings })
+    await updateDailyAggregates(device.id, device.plant_id, maxStrings, stringConfigs, { model: null, max_strings: device.max_strings, strings_are_mppts: true })
   }
 
   // Save hardware daily counter — p1 = Today's Energy (当日发电), per-device, unit = Wh

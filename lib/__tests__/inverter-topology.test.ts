@@ -148,6 +148,22 @@ describe('getMpptGroupKey', () => {
     const k2 = getMpptGroupKey('dev2', 'SUN2000-100KTL-INM0', null, 1)
     expect(k1).not.toBe(k2)
   })
+
+  it('stringsAreMppts: each string is its OWN MPPT group (never paired)', () => {
+    // Growatt vpv-level / Sungrow per-MPPT-current devices: string_number IS the
+    // MPPT, so 1 and 2 must NOT collapse into one group (that would compare two
+    // different trackers). Each is its own key → size-1 group → device-wide fallback.
+    expect(getMpptGroupKey('dev1', null, 8, 1, true)).toBe('dev1:mppt1')
+    expect(getMpptGroupKey('dev1', null, 8, 2, true)).toBe('dev1:mppt2')
+    expect(getMpptGroupKey('dev1', null, 8, 1, true))
+      .not.toBe(getMpptGroupKey('dev1', null, 8, 2, true))
+  })
+
+  it('stringsAreMppts=false (default) preserves the 2-per-MPPT pairing', () => {
+    // Regression guard: real-string providers (CSI/Huawei/Solis) keep ceil(N/2).
+    expect(getMpptGroupKey('dev1', 'SUN2000-100KTL-INM0', null, 1, false)).toBe('dev1:mppt1')
+    expect(getMpptGroupKey('dev1', 'SUN2000-100KTL-INM0', null, 2, false)).toBe('dev1:mppt1')
+  })
 })
 
 describe('isTopologyHighConfidence', () => {

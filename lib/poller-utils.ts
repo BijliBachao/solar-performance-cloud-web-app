@@ -368,7 +368,7 @@ export async function generateAlerts(
   /** Inverter model + max_strings, so Part-1 peer comparison uses the SAME
    *  per-MPPT / per-panel-power / median engine as the donut (scoreLiveSr).
    *  Optional for back-compat; null → device-wide fallback grouping. */
-  deviceMeta?: { model: string | null; max_strings: number | null },
+  deviceMeta?: { model: string | null; max_strings: number | null; strings_are_mppts?: boolean },
   /** Consecutive problem-cycles required before a NEW alert is created
    *  (dawn-ramp guard). Pollers use the default; tests pass 1 for immediacy. */
   minPersistenceCycles: number = ALERT_PERSISTENCE_CYCLES,
@@ -454,6 +454,7 @@ export async function generateAlerts(
     deviceId,
     inverterModel: deviceMeta?.model ?? null,
     inverterMaxStrings: deviceMeta?.max_strings ?? null,
+    stringsAreMppts: deviceMeta?.strings_are_mppts ?? false,
     armed: true, // generateAlerts already returned early when disarmed
   })
   for (const r of srResults) {
@@ -764,7 +765,7 @@ export async function updateDailyAggregates(
   plantId: string,
   _maxStrings: number,
   configs?: StringConfigSets,
-  deviceMeta?: { model: string | null; max_strings: number | null },
+  deviceMeta?: { model: string | null; max_strings: number | null; strings_are_mppts?: boolean },
 ): Promise<void> {
   const dayStart = getPKTDayStart()
   const pktDate = getPKTDateForDB()
@@ -821,7 +822,7 @@ export async function updateDailyAggregates(
   // shared RDS.
   const dev = deviceMeta ?? (await prisma.devices.findUnique({
     where: { id: deviceId },
-    select: { model: true, max_strings: true },
+    select: { model: true, max_strings: true, strings_are_mppts: true },
   }))
   const dailyInputs: DailyStringInput[] = Array.from(byString.entries()).map(([sn, ms]) => {
     const hourBuckets = new Map<number, { sum: number; n: number }>()
@@ -868,6 +869,7 @@ export async function updateDailyAggregates(
           deviceId,
           inverterModel: dev?.model ?? null,
           inverterMaxStrings: dev?.max_strings ?? null,
+          stringsAreMppts: dev?.strings_are_mppts ?? false,
         }).map((r) => [r.string_number, r] as [number, P2PResult])
       : [],
   )

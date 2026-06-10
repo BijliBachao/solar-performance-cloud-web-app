@@ -72,7 +72,7 @@ export async function GET(
 
     const devices = await prisma.devices.findMany({
       where: { plant_id: params.code, device_type_id: { in: INVERTER_DEVICE_TYPE_IDS } },
-      select: { id: true, device_name: true, max_strings: true, model: true },
+      select: { id: true, device_name: true, max_strings: true, model: true, strings_are_mppts: true },
     })
 
     // Sun-elevation arming for the live SR scorer (audit 2026-06-07): below the
@@ -213,6 +213,7 @@ export async function GET(
           deviceId: device.id,
           inverterModel: device.model,
           inverterMaxStrings: device.max_strings,
+          stringsAreMppts: device.strings_are_mppts ?? false,
           armed: liveArmed,
         }).map((r) => [r.string_number, r]),
       )

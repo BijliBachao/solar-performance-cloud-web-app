@@ -156,7 +156,19 @@ export function getMpptGroupKey(
   model: string | null | undefined,
   maxStrings: number | null | undefined,
   stringNumber: number,
+  /**
+   * True when each stored "string" is already a WHOLE MPPT, not a string within
+   * one — e.g. Growatt devices that report only MPPT-level data (`vpv{N}`), or
+   * Sungrow's per-MPPT current on the primary string. In that case the
+   * positional 2-strings-per-MPPT assumption is wrong (it would pair two
+   * different trackers), so every "string" is its own MPPT group. Each group is
+   * then size-1 and falls through to the scorer's device-wide comparison
+   * (MIN_PEERS_FOR_MPPT_GROUP) — i.e. each MPPT is compared to the inverter's
+   * median MPPT, never paired with an unrelated one. (audit 2026-06-09)
+   */
+  stringsAreMppts = false,
 ): string {
+  if (stringsAreMppts) return `${deviceId}:mppt${stringNumber}`
   const mppt = getMpptForString(model, maxStrings, stringNumber)
   return mppt === null ? `${deviceId}:device` : `${deviceId}:mppt${mppt}`
 }

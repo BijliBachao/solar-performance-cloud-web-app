@@ -92,6 +92,9 @@ export interface DailyScoringContext {
   inverterModel: string | null
   /** Inverter max_strings (used for fallback topology when model is null). */
   inverterMaxStrings: number | null
+  /** True when each stored "string" is already a whole MPPT (Growatt vpv-level
+   *  data, Sungrow per-MPPT current) — each is its own group, never paired. */
+  stringsAreMppts?: boolean
 }
 
 /** Median of a non-empty numeric array. Caller guarantees length ≥ 1. */
@@ -149,6 +152,7 @@ export function scoreDailyP2P(
       ctx.inverterModel,
       ctx.inverterMaxStrings,
       s.string_number,
+      ctx.stringsAreMppts ?? false,
     )
 
     let per_panel_W: number | null = null

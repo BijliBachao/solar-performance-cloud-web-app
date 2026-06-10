@@ -268,8 +268,9 @@ async function fetchStringData(client: GrowattClient): Promise<void> {
       plant_id: true,
       device_type_id: true,
       max_strings: true,
+      strings_are_mppts: true,
       last_reading_sig: true,
-      // Plant coords for the night write-gate (fleet-default fallback at the gate).
+      // Plant coords for the night write-gate (Pakistan-bbox fallback at the gate).
       plants: { select: { latitude: true, longitude: true } },
     },
   })
@@ -349,21 +350,26 @@ async function fetchStringData(client: GrowattClient): Promise<void> {
 async function processDeviceData(
   device: {
     id: string; plant_id: string; device_type_id: number; max_strings: number | null
+    strings_are_mppts: boolean
     last_reading_sig: string | null
     plants: { latitude: unknown; longitude: unknown } | null
   },
   deviceData: any,
   deviceType: string
 ): Promise<void> {
-  const strings = extractStrings(deviceData, deviceType)
+  const { strings, granularity } = extractStrings(deviceData, deviceType)
   const maxStrings = device.max_strings || (strings.length > 0 ? Math.max(...strings.map(s => s.string_number)) : 0)
+  // Level-2 (vpv) devices report MPPT-level data → each stored "string" is a
+  // whole MPPT. Flag it so the health grouping doesn't pair two trackers.
+  const stringsAreMppts = granularity === 'mppt'
 
-  // Update max_strings if not yet set or if we found MORE strings (daytime has more data)
-  if (maxStrings > 0 && (!device.max_strings || maxStrings > device.max_strings)) {
-    await prisma.devices.update({
-      where: { id: device.id },
-      data: { max_strings: maxStrings },
-    })
+  // Persist max_strings (when it grows) and the strings-are-MPPTs flag (when it
+  // changes) in one conditional write — avoid a per-cycle update on shared RDS.
+  const deviceUpdate: { max_strings?: number; strings_are_mppts?: boolean } = {}
+  if (maxStrings > 0 && (!device.max_strings || maxStrings > device.max_strings)) deviceUpdate.max_strings = maxStrings
+  if (strings.length > 0 && stringsAreMppts !== device.strings_are_mppts) deviceUpdate.strings_are_mppts = stringsAreMppts
+  if (Object.keys(deviceUpdate).length > 0) {
+    await prisma.devices.update({ where: { id: device.id }, data: deviceUpdate })
   }
 
   const measurements: Array<{
@@ -439,9 +445,9 @@ async function processDeviceData(
   if (measurements.length > 0) {
     const stringConfigs = await loadStringConfigs(device.id)
     const effectiveStrings = maxStrings || strings.length
-    await generateAlerts(device.id, device.plant_id, measurements, stringConfigs, alertsArmed(device.plants), { model: null, max_strings: device.max_strings ?? null })
+    await generateAlerts(device.id, device.plant_id, measurements, stringConfigs, alertsArmed(device.plants), { model: null, max_strings: device.max_strings ?? null, strings_are_mppts: stringsAreMppts })
     await updateHourlyAggregates(device.id, device.plant_id, effectiveStrings, stringConfigs)
-    await updateDailyAggregates(device.id, device.plant_id, effectiveStrings, stringConfigs, { model: null, max_strings: device.max_strings })
+    await updateDailyAggregates(device.id, device.plant_id, effectiveStrings, stringConfigs, { model: null, max_strings: device.max_strings, strings_are_mppts: stringsAreMppts })
   }
 
   // Process fault/warning codes → vendor_alarms
@@ -475,44 +481,40 @@ interface StringReading {
   power: number
 }
 
-function extractStrings(deviceData: any, deviceType: string): StringReading[] {
+function extractStrings(
+  deviceData: any,
+  deviceType: string,
+): { strings: StringReading[]; granularity: 'string' | 'mppt' } {
   const strings: StringReading[] = []
 
-  // Level 1: Try individual string data first (best granularity, some MAX devices have this)
+  // Level 1: individual string data (vString) — only some MAX devices have it.
+  // These are REAL strings (a string within an MPPT), so 2-per-MPPT pairing is OK.
   if (deviceType === 'max') {
     for (let i = 1; i <= 32; i++) {
       const v = safeFloat(deviceData[`vString${i}`])
       const c = safeFloat(deviceData[`currentString${i}`])
       if (v > 0 || c > 0) {
-        strings.push({
-          string_number: i,
-          voltage: v,
-          current: c,
-          power: v * c,
-        })
+        strings.push({ string_number: i, voltage: v, current: c, power: v * c })
       }
     }
   }
+  if (strings.length > 0) return { strings, granularity: 'string' }
 
-  // Level 2: Fall back to MPPT data (all devices have this)
-  if (strings.length === 0) {
-    const maxMppt = deviceType === 'sph-s' ? 3 : 16
-    for (let i = 1; i <= maxMppt; i++) {
-      const v = safeFloat(deviceData[`vpv${i}`])
-      const c = safeFloat(deviceData[`ipv${i}`])
-      const p = safeFloat(deviceData[`ppv${i}`])
-      if (v > 0 || c > 0 || p > 0) {
-        strings.push({
-          string_number: i,
-          voltage: v,
-          current: c,
-          power: p || (v * c),
-        })
-      }
+  // Level 2: MPPT-level data (vpv) — every device has this. Here each
+  // string_number is a whole MPPT TRACKER, not a string within one. Validated
+  // 2026-06-09: pairing these 2-by-2 mis-grouped ~7 Growatt devices (it compared
+  // two different trackers). Caller flags devices.strings_are_mppts so the health
+  // grouping treats each as its own MPPT (→ device-wide comparison) instead.
+  const maxMppt = deviceType === 'sph-s' ? 3 : 16
+  for (let i = 1; i <= maxMppt; i++) {
+    const v = safeFloat(deviceData[`vpv${i}`])
+    const c = safeFloat(deviceData[`ipv${i}`])
+    const p = safeFloat(deviceData[`ppv${i}`])
+    if (v > 0 || c > 0 || p > 0) {
+      strings.push({ string_number: i, voltage: v, current: c, power: p || (v * c) })
     }
   }
-
-  return strings
+  return { strings, granularity: 'mppt' }
 }
 
 // Track active Growatt fault/warning codes per device.

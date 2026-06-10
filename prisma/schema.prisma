@@ -84,6 +84,11 @@ model devices {
   device_type_id      Int
   model               String?               @db.VarChar(100)
   max_strings         Int?
+  /// True when each stored string row is actually a whole MPPT, not a string
+  /// within one (Growatt vpv-only devices; Sungrow per-MPPT current). The
+  /// poller sets this from the data level it captured; the string-health
+  /// grouping then treats each as its own MPPT instead of pairing 2-by-2.
+  strings_are_mppts   Boolean               @default(false)
   provider            String                @default("huawei") @db.VarChar(20)
   last_synced         DateTime?
   vendor_last_data_at DateTime?

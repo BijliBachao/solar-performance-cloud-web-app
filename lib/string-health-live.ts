@@ -78,6 +78,10 @@ export interface LiveScoringContext {
    *  live donut had no sun gate, so CSI standby voltage read as a sea of
    *  "open-circuit critical" at FANZ). */
   armed: boolean
+  /** True when each stored "string" is already a whole MPPT (Growatt vpv-level
+   *  data, Sungrow per-MPPT current). Then each is its own group — never paired
+   *  with a neighbour — and falls through to the device-wide comparison. */
+  stringsAreMppts?: boolean
 }
 
 /**
@@ -121,6 +125,7 @@ export function scoreLiveSr(
       ctx.inverterModel,
       ctx.inverterMaxStrings,
       s.string_number,
+      ctx.stringsAreMppts ?? false,
     )
 
     // Classify status from raw V/I (independent of peer comparison)

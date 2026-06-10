@@ -292,6 +292,28 @@ describe('scoreLiveSr — edge cases', () => {
     expect(result.find((r) => r.string_number === 5)?.bucket).toBe('critical')
   })
 
+  it('stringsAreMppts: a whole bad MPPT-pair is Critical (device-wide), not falsely Healthy by self-pairing', () => {
+    // THE regression guard. With a normal 2-per-MPPT model (maxStrings=8), strings
+    // 3&4 PAIR into one MPPT group. If they are a whole UNDERPERFORMING MPPT-pair
+    // (both at half output), pairing compares them to EACH OTHER → SR=1.0 →
+    // falsely Healthy (the exact bug this fix kills). With stringsAreMppts each is
+    // its own MPPT → all fall to the device-wide pool → the half pair is compared
+    // to the full strings → correctly Critical. This test FAILS if the flag ever
+    // stops threading (3&4 would pair and read Healthy again).
+    const mpptDevice: LiveScoringContext = {
+      deviceId: 'gw1', inverterModel: null, inverterMaxStrings: 8,
+      stringsAreMppts: true, armed: true,
+    }
+    const result = scoreLiveSr(
+      [s(1, 600, 10, 6000), s(2, 600, 10, 6000), s(3, 600, 5, 3000), s(4, 600, 5, 3000)],
+      mpptDevice,
+    )
+    expect(result.find((r) => r.string_number === 1)?.bucket).toBe('healthy')
+    expect(result.find((r) => r.string_number === 3)?.bucket).toBe('critical')
+    expect(result.find((r) => r.string_number === 4)?.bucket).toBe('critical')
+    expect(result.find((r) => r.string_number === 3)?.sr ?? 1).toBeLessThan(0.85)
+  })
+
   it('only one valid string in entire inverter → insufficient_peers', () => {
     // 1 producing + 1 excluded + 1 nighttime = no peer pool can form
     const result = scoreLiveSr(
