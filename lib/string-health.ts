@@ -485,6 +485,24 @@ export const SR_LIVE_MIN_PER_PANEL_W = 150
 export const P2P_CAP = 1.5
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// String Performance (Algorithm v3) — current vs peer-median current.
+// Spec: Working/5_Tuesday_09_June_2026/STRING-PERFORMANCE-METRIC-REDESIGN-SPEC.md
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/** Performance % ≥ this is Healthy. Mirrors SR_HEALTHY (SolarEdge ±6% mismatch). */
+export const PERF_HEALTHY = 94
+/** Performance % ≥ this is Warning; below is Critical. Mirrors SR_ABNORMAL. */
+export const PERF_CRITICAL = 85
+/** Display/clamp cap for Performance %. */
+export const PERF_DISPLAY_CAP = 150
+/** Device-summed hourly avg_current (A) above which an HOUR counts as "sun-up". */
+export const MIN_CURRENT_FOR_COMPARISON = 1.0
+/** Per-string hourly avg_current (A) above which the string counts as "producing". */
+export const MIN_PRODUCING_CURRENT = 0.5
+/** Minimum sun-up HOURS before a PKT day is scoreable. */
+export const MIN_SUNUP_HOURS_FOR_DAILY_SCORE = 2
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Algorithm v2 primitives (pure functions; safe in hot loops)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
