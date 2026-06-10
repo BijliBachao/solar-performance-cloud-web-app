@@ -279,8 +279,10 @@ export function StringCellDetail({
                   )}
                 </div>
 
-                {/* 3. Peer table */}
-                {data.peers.length > 0 && (
+                {/* 3. Peer table — only when the string was actually scored;
+                    on no_data (performance === null) the peer table is misleading
+                    (no median to highlight), so suppress it entirely. */}
+                {data.performance !== null && data.peers.length > 0 && (
                   <div>
                     <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
                       Peer Strings — same inverter, same day
