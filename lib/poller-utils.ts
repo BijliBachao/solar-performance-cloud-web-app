@@ -2,17 +2,15 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import {
   isActive, filterActive, computeGap, classifyAlertSeverity,
-  canCompare, computeAvailability, p2pToHealthScore, readingSignature, VENDOR_TS_MAX_FUTURE_SKEW_MS,
+  readingSignature, VENDOR_TS_MAX_FUTURE_SKEW_MS,
   MIN_PEERS_FOR_COMPARISON, MIN_AVG_FOR_COMPARISON,
-  MAX_STRING_CURRENT_A, MAX_STRING_POWER_W, MS_PER_HOUR,
-  MIN_PRODUCTIVE_HOURS_FOR_DAILY_SCORE, MIN_PRODUCTIVE_POWER_W,
+  MAX_STRING_CURRENT_A, MAX_STRING_POWER_W,
   clampToFleetCoords,
   classifySrAlertSeverityWithHysteresis,
   ALERT_MIN_SUN_ELEVATION_DEG, DEAD_STRING_RECOVERY_A,
   type DeviceWriteAction, type AlertSeverity,
 } from '@/lib/string-health'
 import { isDaylight, solarElevationDeg } from '@/lib/solar-geometry'
-import { scoreDailyP2P, type DailyStringInput } from '@/lib/string-health-daily'
 import { scoreLiveSr, type LiveStringInput } from '@/lib/string-health-live'
 
 /**
@@ -807,73 +805,6 @@ export async function updateDailyAggregates(
     byString.set(m.string_number, group)
   }
 
-  // Max measurements any single string has today = "full day" reference for availability
-  const maxMeasurements = Math.max(...Array.from(byString.values()).map((m) => m.length))
-
-  // ── Daily Performance-to-Peers (Algorithm v2, spec §4d) ──────────────
-  // health_score / performance now come from the MPPT-grouped, panel-normalised,
-  // peak-window, median-anchored P2P — replacing the legacy 24h string/inverter
-  // current ratio that smeared peak deficits into "healthy". scoreDailyP2P is the
-  // single source of truth; we map its P2P ratio onto the 0-100 health_score scale
-  // (p2pToHealthScore) so every existing consumer (Analysis, donut, dashboard)
-  // buckets it unchanged.
-  // Caller passes the device's model/max_strings (it already has them in scope);
-  // fall back to a lookup only if not provided, to avoid a per-cycle query on the
-  // shared RDS.
-  const dev = deviceMeta ?? (await prisma.devices.findUnique({
-    where: { id: deviceId },
-    select: { model: true, max_strings: true, strings_are_mppts: true },
-  }))
-  const dailyInputs: DailyStringInput[] = Array.from(byString.entries()).map(([sn, ms]) => {
-    const hourBuckets = new Map<number, { sum: number; n: number }>()
-    for (const m of ms) {
-      const hourKey = Math.floor(m.timestamp.getTime() / MS_PER_HOUR)
-      const b = hourBuckets.get(hourKey) ?? { sum: 0, n: 0 }
-      b.sum += Number(m.power)
-      b.n += 1
-      hourBuckets.set(hourKey, b)
-    }
-    return {
-      string_number: sn,
-      panel_count: panelCountByString.get(sn) ?? null,
-      is_used: true, // unused strings already filtered out above
-      exclude_from_peer_comparison: peerExcludedSet.has(sn),
-      hourly: Array.from(hourBuckets.entries()).map(([hour, b]) => ({ hour, avg_power_W: b.sum / b.n })),
-    }
-  })
-  // ── Daily scoring gate (DQ v2) ────────────────────────────────────
-  // A day is only scoreable once it has real production breadth: at least
-  // MIN_PRODUCTIVE_HOURS distinct hours where some string averaged above the
-  // power floor. Below that (e.g., the first poll cycles after PKT midnight,
-  // or a day of pure night zeros) health_score stays NULL → the donut shows
-  // honest "no data" instead of criticals computed from scraps.
-  const productiveHours = new Set<number>()
-  for (const di of dailyInputs) {
-    for (const h of di.hourly) {
-      if (h.avg_power_W > MIN_PRODUCTIVE_POWER_W) productiveHours.add(h.hour)
-    }
-  }
-  // SPAN, not bucket COUNT: two writes straddling a clock-hour boundary earn
-  // 2 "buckets" in 13 minutes — caught live at first dawn (2026-06-05 05:03
-  // PKT: 14 CSI strings scored off twilight scraps, 6 falsely critical).
-  // span >= N hour-keys ≈ at least N hours of elapsed production.
-  const hourKeys = [...productiveHours]
-  const productiveSpan = hourKeys.length > 1 ? Math.max(...hourKeys) - Math.min(...hourKeys) : 0
-  const dayIsScoreable =
-    productiveHours.size >= MIN_PRODUCTIVE_HOURS_FOR_DAILY_SCORE &&
-    productiveSpan >= MIN_PRODUCTIVE_HOURS_FOR_DAILY_SCORE
-  type P2PResult = ReturnType<typeof scoreDailyP2P>[number]
-  const p2pByString = new Map<number, P2PResult>(
-    dayIsScoreable
-      ? scoreDailyP2P(dailyInputs, {
-          deviceId,
-          inverterModel: dev?.model ?? null,
-          inverterMaxStrings: dev?.max_strings ?? null,
-          stringsAreMppts: dev?.strings_are_mppts ?? false,
-        }).map((r) => [r.string_number, r] as [number, P2PResult])
-      : [],
-  )
-
   // Batch upserts
   const upserts = []
   for (const [stringNumber, measurements] of byString) {
@@ -896,23 +827,17 @@ export async function updateDailyAggregates(
     }
     const energyKwh = energyWh / 1000
 
-    // Daily P2P (spec §4d) — replaces the legacy current-ratio performance.
-    // performance = P2P × 100; health_score = same ratio mapped onto the 0-100
-    // scale so existing bucketing (90/50) reproduces the P2P bucket exactly.
-    const p2pResult = p2pByString.get(stringNumber)
-    const mappedHealth = p2pToHealthScore(p2pResult?.p2p ?? null)
-    const availScore = computeAvailability(measurements.length, maxMeasurements)
-
     const data = {
       avg_voltage: new Decimal(avg(voltages).toFixed(2)),
       avg_current: new Decimal(avg(currents).toFixed(3)),
       avg_power: new Decimal(avg(powers).toFixed(2)),
       min_current: safeMin(currents) !== null ? new Decimal(safeMin(currents)!.toFixed(3)) : null,
       max_current: safeMax(currents) !== null ? new Decimal(safeMax(currents)!.toFixed(3)) : null,
-      health_score: mappedHealth !== null ? new Decimal(mappedHealth.toFixed(2)) : null,
-      performance: p2pResult?.score_persisted != null ? new Decimal(p2pResult.score_persisted.toFixed(2)) : null,
-      availability: availScore !== null ? new Decimal(availScore.toFixed(2)) : null,
       energy_kwh: energyKwh > 0 ? new Decimal(energyKwh.toFixed(3)) : null,
+      // performance / health_score / availability are OWNED by the settled-day job
+      // (lib/settled-day-performance.ts). The poller no longer scores. On the upsert
+      // CREATE path they default to null → today's row reads "pending" until the
+      // 01:30 PKT job runs. Prisma's partial UPDATE never clobbers them.
     }
 
     upserts.push(

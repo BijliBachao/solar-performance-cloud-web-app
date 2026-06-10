@@ -81,10 +81,12 @@ describe('classifyDeviceWrite', () => {
   })
 })
 
-// ─── updateDailyAggregates scoring gate ──────────────────────────────
-// A brand-new PKT day must not get health scores from its first scraps of
-// data (the "7 critical strings at 00:15 AM" bug) — scores need at least
-// MIN_PRODUCTIVE_HOURS_FOR_DAILY_SCORE distinct productive hours.
+// ─── updateDailyAggregates verdict fields ────────────────────────────
+// As of the settled-day refactor, performance / health_score / availability
+// are NO LONGER written by the poller — they are owned by the once-daily
+// settled-day job (lib/settled-day-performance.ts). The poller only writes
+// avg_* and energy_kwh so the daily row accumulates running measurements
+// without clobbering the settled verdict.
 
 const mockPrisma = {
   string_measurements: { findMany: vi.fn() },
@@ -156,7 +158,12 @@ function measurementsAtHours(hoursUtc: string[], power = 2000) {
   })))
 }
 
-describe('updateDailyAggregates — daily scoring gate (DQ v2)', () => {
+// NOTE: The daily scoring gate (DQ v2 productive-hours logic) has been removed from the
+// poller. performance / health_score / availability are now OWNED by the settled-day job
+// (lib/settled-day-performance.ts). The poller writes only avg_* and energy_kwh; the
+// verdict fields are absent from the upsert data object entirely so Prisma's partial UPDATE
+// never clobbers what the once-daily job wrote. Tests below verify that absence.
+describe('updateDailyAggregates — poller does NOT write verdict fields', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useFakeTimers()
@@ -166,7 +173,7 @@ describe('updateDailyAggregates — daily scoring gate (DQ v2)', () => {
     vi.useRealTimers()
   })
 
-  it('1 productive hour → health_score is NULL (day not scoreable yet)', async () => {
+  it('poller omits health_score and performance from upsert data (1 productive hour)', async () => {
     mockPrisma.string_measurements.findMany.mockResolvedValue(
       measurementsAtHours(['2026-06-05T06:05:00Z']),
     )
@@ -176,14 +183,16 @@ describe('updateDailyAggregates — daily scoring gate (DQ v2)', () => {
     const upserts = mockPrisma.string_daily.upsert.mock.calls
     expect(upserts.length).toBe(2)
     for (const [args] of upserts) {
-      expect(args.update.health_score).toBeNull()
-      expect(args.update.performance).toBeNull()
-      // data columns still written — only the JUDGMENT is withheld
+      // Verdict fields must be absent — settled-day job owns them
+      expect(args.update).not.toHaveProperty('health_score')
+      expect(args.update).not.toHaveProperty('performance')
+      expect(args.update).not.toHaveProperty('availability')
+      // Data columns still written
       expect(Number(args.update.avg_power)).toBeGreaterThan(0)
     }
   })
 
-  it('3 productive hours → health_score IS written', async () => {
+  it('poller omits health_score and performance from upsert data (3 productive hours)', async () => {
     mockPrisma.string_measurements.findMany.mockResolvedValue(
       measurementsAtHours(['2026-06-05T04:05:00Z', '2026-06-05T05:05:00Z', '2026-06-05T06:05:00Z']),
     )
@@ -193,24 +202,28 @@ describe('updateDailyAggregates — daily scoring gate (DQ v2)', () => {
     const upserts = mockPrisma.string_daily.upsert.mock.calls
     expect(upserts.length).toBe(2)
     for (const [args] of upserts) {
-      expect(args.update.health_score).not.toBeNull()
+      // Verdict fields must be absent regardless of how many hours are productive
+      expect(args.update).not.toHaveProperty('health_score')
+      expect(args.update).not.toHaveProperty('performance')
+      expect(args.update).not.toHaveProperty('availability')
+      // avg_* and energy_kwh are still written
+      expect(Number(args.update.avg_power)).toBeGreaterThan(0)
     }
   })
 
-  it('hour-BOUNDARY straddle does not unlock scoring (first-dawn regression 2026-06-05)', async () => {
-    // Two writes 13 minutes apart straddling a clock-hour boundary = 2
-    // "buckets" but ~0 elapsed production — must stay unscored (span < 2h).
+  it('poller omits health_score from upsert data (hour-boundary straddle)', async () => {
+    // Previously tested the span gate; now confirms the field is simply absent.
     mockPrisma.string_measurements.findMany.mockResolvedValue(
       measurementsAtHours(['2026-06-05T03:55:00Z', '2026-06-05T04:08:00Z']),
     )
     const { updateDailyAggregates } = await import('../poller-utils')
     await updateDailyAggregates('dev1', 'plant1', 2, configs, { model: null, max_strings: 2 })
     for (const [args] of mockPrisma.string_daily.upsert.mock.calls) {
-      expect(args.update.health_score).toBeNull()
+      expect(args.update).not.toHaveProperty('health_score')
     }
   })
 
-  it('hours of near-zero power do not count as productive (night zeros stay unscored)', async () => {
+  it('poller omits health_score from upsert data (near-zero / night readings)', async () => {
     mockPrisma.string_measurements.findMany.mockResolvedValue(
       measurementsAtHours(['2026-06-05T03:05:00Z', '2026-06-05T04:05:00Z', '2026-06-05T05:05:00Z'], 5),
     )
@@ -218,7 +231,7 @@ describe('updateDailyAggregates — daily scoring gate (DQ v2)', () => {
     await updateDailyAggregates('dev1', 'plant1', 2, configs, { model: null, max_strings: 2 })
 
     for (const [args] of mockPrisma.string_daily.upsert.mock.calls) {
-      expect(args.update.health_score).toBeNull()
+      expect(args.update).not.toHaveProperty('health_score')
     }
   })
 })
