@@ -16,7 +16,7 @@ interface StringRow {
   /** Inverter model string, if known — shown in the chip tooltip. */
   model?: string | null
   string_number: number
-  mppt: number
+  group: string
   kw_per_string: number | null
   perf_avg: number | null
   avail_avg: number | null
@@ -97,7 +97,7 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
               Inverter
             </th>
             <th className="sticky left-[140px] z-20 bg-gray-50 px-2 py-2 text-left text-xs font-semibold text-gray-600 border-r border-gray-200 min-w-[64px]">
-              MPPT
+              Group
             </th>
             <th className="sticky left-[204px] z-20 bg-gray-50 px-2 py-2 text-left text-xs font-semibold text-gray-600 border-r border-gray-200 min-w-[60px]">
               String
@@ -182,7 +182,7 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
                   )}
                 </td>
                 <td className="sticky left-[140px] z-10 bg-white group-hover:bg-blue-50/50 px-2 py-1.5 text-xs text-gray-600 border-r border-gray-200 transition-colors">
-                  MPPT{row.mppt}
+                  {row.group}
                 </td>
                 <td className="sticky left-[204px] z-10 bg-white group-hover:bg-blue-50/50 px-2 py-1.5 text-xs font-medium text-gray-900 border-r border-gray-200 transition-colors">
                   PV{row.string_number}
@@ -226,7 +226,7 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
                     {row.device_name}
                   </td>
                   <td className="sticky left-[140px] z-10 bg-amber-50/50 px-2 py-1 text-xs text-amber-600 border-r border-gray-200">
-                    MPPT{row.mppt}
+                    {row.group}
                   </td>
                   <td className="sticky left-[204px] z-10 bg-amber-50/50 px-2 py-1 text-xs font-medium text-amber-700 border-r border-gray-200">
                     PV{row.string_number}
@@ -267,7 +267,7 @@ export function StringLevelTable({ dates, rows, loading }: StringLevelTableProps
                     {row.device_name}
                   </td>
                   <td className="sticky left-[140px] z-10 bg-gray-50 px-2 py-1 text-xs text-gray-400 border-r border-gray-200">
-                    MPPT{row.mppt}
+                    {row.group}
                   </td>
                   <td className="sticky left-[204px] z-10 bg-gray-50 px-2 py-1 text-xs text-gray-400 border-r border-gray-200">
                     PV{row.string_number}

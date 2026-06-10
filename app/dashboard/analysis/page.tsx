@@ -176,7 +176,7 @@ export default function DashboardAnalysisPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-slate-900 leading-tight">Performance Analysis</h1>
         <div className="text-[11px] font-semibold text-slate-500">
-          Health Score = Performance × Availability
+          Performance = string current vs the inverter&apos;s median string
         </div>
       </div>
 

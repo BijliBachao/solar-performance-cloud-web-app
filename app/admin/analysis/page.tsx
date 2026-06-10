@@ -199,7 +199,7 @@ export default function AnalysisPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-bold text-gray-900">Performance Analysis</h1>
         <div className="text-[11px] font-semibold text-gray-500">
-          Health Score = Performance × Availability (IEC 61724)
+          Performance = string current vs the inverter&apos;s median string
         </div>
       </div>
 

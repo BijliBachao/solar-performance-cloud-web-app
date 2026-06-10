@@ -236,7 +236,7 @@ export async function GET(request: NextRequest) {
         provider: device.provider,
         model: device.model,
         string_number: Number(strNum),
-        mppt: Math.ceil(Number(strNum) / 2),
+        group: 'Inv-wide', // v3 compares device-wide by current; honest label (no fake MPPT)
         kw_per_string: kwPerString,
         perf_avg: perfCount > 0 ? Math.round(perfSum / perfCount) : null,
         avail_avg: availCount > 0 ? Math.round(availSum / availCount) : null,
