@@ -11,12 +11,16 @@ export async function GET(request: NextRequest) {
 
     const sp = request.nextUrl.searchParams
     const deviceId = sp.get('device_id')
-    const stringNumber = Number(sp.get('string_number'))
+    const snRaw = sp.get('string_number')
+    const stringNumber = Number(snRaw)
     const date = sp.get('date')
     const organizationId = sp.get('organization_id')
 
-    if (!deviceId || !date || !Number.isFinite(stringNumber)) {
+    if (!deviceId || !date || snRaw === null || !Number.isFinite(stringNumber)) {
       return NextResponse.json({ error: 'device_id, string_number, date required' }, { status: 400 })
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
     }
 
     // Optional org scope — if organization_id is given, verify the device belongs

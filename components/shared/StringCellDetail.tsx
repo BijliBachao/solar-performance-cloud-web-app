@@ -62,21 +62,28 @@ const STATUS_DISPLAY: Record<CellStatus, { label: string; fg: string; bg: string
 
 function nullReason(status: CellStatus): string {
   switch (status) {
-    case 'no_data':       return 'Not enough sun-up hours to compare'
+    case 'no_data':       return 'Not enough strong-sun hours to score this string (low light / overcast)'
     case 'unused':        return 'Unused port'
     case 'peer_excluded': return 'Excluded from peer comparison (non-standard)'
     default:              return 'Performance unavailable'
   }
 }
 
-function fmt1(v: number | null): string {
+function fmtA(v: number | null): string {
   return v !== null && v !== undefined ? v.toFixed(2) : '—'
 }
 
-// Find the index of the median value in the peers array
-function medianIndex(peers: PeerEntry[]): number {
-  if (peers.length === 0) return -1
-  return Math.floor((peers.length - 1) / 2)
+// Find the index of the peer entry closest to the scorer's median value.
+// The scorer averages the two middle values for even-N pools, so we match
+// by proximity rather than fixed array index to avoid contradictions.
+function medianIndex(peers: PeerEntry[], medianValue: number | null): number {
+  if (peers.length === 0 || medianValue === null) return -1
+  let best = 0, bestDist = Infinity
+  for (let i = 0; i < peers.length; i++) {
+    const d = Math.abs(peers[i].repr_current - medianValue)
+    if (d < bestDist) { bestDist = d; best = i }
+  }
+  return best
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -152,8 +159,10 @@ export function StringCellDetail({
         {/* Top accent bar — matches dashboard cards */}
         <div className="h-[3px] bg-gradient-to-r from-solar-gold-400 via-solar-gold-500 to-solar-gold-600 rounded-t-lg" />
 
-        {/* Close button */}
+        {/* Close button — autoFocus moves keyboard focus into the dialog on mount */}
         <button
+          // eslint-disable-next-line jsx-a11y/no-autofocus
+          autoFocus
           onClick={onClose}
           className="absolute right-3 top-3 rounded p-1 text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors focus:outline-none focus:ring-[3px] focus:ring-solar-gold/25"
           aria-label="Close detail panel"
@@ -182,7 +191,7 @@ export function StringCellDetail({
           {/* ── Loaded state ──────────────────────────────────────────── */}
           {!loading && data && (() => {
             const st = STATUS_DISPLAY[data.status] ?? STATUS_DISPLAY.no_data
-            const medIdx = medianIndex(data.peers)
+            const medIdx = medianIndex(data.peers, data.peer_median_current)
             // Hourly sparkline data — extract avg_current values in hour order
             const sparkValues = data.hourly.map((h) => h.avg_current)
 
@@ -217,10 +226,10 @@ export function StringCellDetail({
                   {data.performance !== null ? (
                     <p className="text-sm text-slate-700 font-mono">
                       PV{data.string_number} current{' '}
-                      <span className="font-bold text-blue-700">{fmt1(data.repr_current)} A</span>
+                      <span className="font-bold text-blue-700">{fmtA(data.repr_current)} A</span>
                       <span className="text-slate-400 mx-2">÷</span>
                       inverter median{' '}
-                      <span className="font-bold text-violet-700">{fmt1(data.peer_median_current)} A</span>
+                      <span className="font-bold text-violet-700">{fmtA(data.peer_median_current)} A</span>
                       <span className="text-slate-400 mx-2">=</span>
                       <span className="font-bold text-emerald-700">{data.performance}%</span>
                     </p>
@@ -302,8 +311,8 @@ export function StringCellDetail({
                       {/* Hour labels: first + last */}
                       {data.hourly.length >= 2 && (
                         <div className="flex justify-between mt-1 text-[9px] font-mono text-slate-400">
-                          <span>{new Date(data.hourly[0].hour).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
-                          <span>{new Date(data.hourly[data.hourly.length - 1].hour).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span>{new Date(data.hourly[0].hour).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Karachi' })}</span>
+                          <span>{new Date(data.hourly[data.hourly.length - 1].hour).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Karachi' })}</span>
                         </div>
                       )}
                     </div>
@@ -328,7 +337,7 @@ export function StringCellDetail({
                       {data.availability.pct !== null && (
                         <>
                           {' '}={' '}
-                          <span className="font-bold font-mono text-emerald-700">{data.availability.pct}%</span>
+                          <span className="font-bold font-mono text-emerald-700">{Math.round(data.availability.pct)}%</span>
                         </>
                       )}
                     </p>

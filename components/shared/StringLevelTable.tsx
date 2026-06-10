@@ -28,12 +28,7 @@ interface ClickablePerformanceCellProps {
 function ClickablePerformanceCell({ score, onClick }: ClickablePerformanceCellProps) {
   const display = score !== null && score !== undefined ? `${Math.round(score)}%` : '—'
   return (
-    <td
-      className={cn(
-        'px-0 py-0 text-center text-xs font-mono whitespace-nowrap border-r border-gray-100',
-        getCellStyle(score),
-      )}
-    >
+    <td className="px-0 py-0 text-center text-xs font-mono whitespace-nowrap border-r border-gray-100">
       <button
         type="button"
         onClick={onClick}
@@ -41,6 +36,7 @@ function ClickablePerformanceCell({ score, onClick }: ClickablePerformanceCellPr
         className={cn(
           'w-full h-full px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-[2px] focus:ring-inset focus:ring-blue-400',
           'hover:brightness-95 transition-[filter] cursor-pointer',
+          getCellStyle(score),
         )}
       >
         {display}
@@ -151,7 +147,7 @@ export function StringLevelTable({
 
   return (
     <>
-      {/* Drill-down panel — rendered in a portal above the table */}
+      {/* Drill-down panel — rendered as a sibling; fixed positioning keeps it above the table */}
       {selected && (
         <StringCellDetail
           apiPath={cellApiPath}
