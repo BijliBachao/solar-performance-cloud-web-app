@@ -8,6 +8,7 @@ import {
   getEffectivePanelCount,
   perPanelPower,
   bucketSrScore,
+  bucketHealthScore,
 } from '@/lib/string-health'
 
 // Algorithm v2 primitives — pure functions. These tests pin down the
@@ -83,6 +84,27 @@ describe('bucketSrScore', () => {
       const tier = b === null ? -1 : tiers[b]
       expect(tier).toBeGreaterThanOrEqual(prev)
       prev = tier
+    }
+  })
+})
+
+describe('Live Last-3h donut ↔ canonical SR bucketing equivalence', () => {
+  // The live Last-3h donut converts an SR ratio to a health_score with
+  // Math.floor(sr*100), then buckets it via bucketHealthScore at 94/85. That
+  // MUST agree with the canonical ratio bucketing bucketSrScore at 0.94/0.85
+  // for every sr — especially the round-up boundaries [0.935,0.94) and
+  // [0.845,0.85) where Math.round would mis-bucket and contradict the live
+  // chart. bucketHealthScore uses 'warning'; bucketSrScore uses 'abnormal' for
+  // the same middle band, so compare the equivalent buckets.
+  const HEALTH_TO_SR: Record<string, string> = {
+    healthy: 'healthy',
+    warning: 'abnormal',
+    critical: 'critical',
+  }
+  it('bucketHealthScore(floor(sr*100)) === bucketSrScore(sr) for all sr', () => {
+    for (const sr of [0.8, 0.8499, 0.85, 0.939, 0.9399, 0.94, 0.96, 1.0, 1.49]) {
+      const health = bucketHealthScore(Math.floor(sr * 100))
+      expect(HEALTH_TO_SR[health]).toBe(bucketSrScore(sr))
     }
   })
 })

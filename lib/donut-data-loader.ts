@@ -418,7 +418,8 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
     for (const r of results) {
       const s = stringMap.get(r.string_number)!
       inputs.push({
-        healthScore: r.sr != null ? Math.round(r.sr * 100) : null,
+        // floor (not round) so bucketing matches bucketSrScore at the 0.94/0.85 boundaries — round would push [0.935,0.94)→healthy and [0.845,0.85)→abnormal, contradicting the live chart.
+        healthScore: r.sr != null ? Math.floor(r.sr * 100) : null,
         isUsed: s.isUsed,
         peerExcluded: s.peerExcluded,
         openCircuit: r.status === 'OPEN_CIRCUIT',
@@ -772,9 +773,10 @@ export async function loadFleetRows(params: LoadFleetRowsParams = {}): Promise<F
   // worst-first — the triage default per the NOC v3 spec. NULL health_score
   // (no-data) is bucketed ABNORMAL by scoreToBucket/the donut, so it must sort
   // within the abnormal band (after scored abnormals, BEFORE healthy) — never
-  // below healthy. The CASE pins no-data at 89.99: criticals (<50) first,
-  // scored abnormals ascending, then no-data, then healthy (>=90). DISTINCT ON
-  // requires its own ORDER BY to lead with the distinct keys, hence two layers.
+  // below healthy. The CASE pins no-data at 89.99: criticals (<85) first,
+  // scored abnormals [85,94) ascending — no-data pinned at 89.99 sits inside
+  // that abnormal band — then healthy (>=94). DISTINCT ON requires its own
+  // ORDER BY to lead with the distinct keys, hence two layers.
   const items = await prisma.$queryRaw<FleetRowSql[]>`
     SELECT * FROM (
       SELECT DISTINCT ON (sd.device_id, sd.string_number)
