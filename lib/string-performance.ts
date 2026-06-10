@@ -7,7 +7,7 @@
  * Spec: Working/5_Tuesday_09_June_2026/STRING-PERFORMANCE-METRIC-REDESIGN-SPEC.md
  * PURE — no I/O.
  */
-import { PERF_HEALTHY, PERF_CRITICAL, PERF_DISPLAY_CAP, MIN_CURRENT_FOR_COMPARISON } from '@/lib/string-health'
+import { HEALTH_HEALTHY, HEALTH_WARNING, PERF_DISPLAY_CAP, MIN_CURRENT_FOR_COMPARISON } from '@/lib/string-health'
 
 export type PerfStatus = 'healthy' | 'warning' | 'critical' | 'no_data' | 'peer_excluded' | 'unused'
 
@@ -44,7 +44,7 @@ export function scoreStringPerformance(inputs: PerfStringInput[]): PerfStringRes
     if (s.exclude_from_peer_comparison) return { string_number: s.string_number, performance: null, status: 'peer_excluded', peer_median_current: null }
     if (s.repr_current == null || !usable) return { string_number: s.string_number, performance: null, status: 'no_data', peer_median_current: usable ? peerMedian : null }
     const perf = Math.min(Math.round((s.repr_current / (peerMedian as number)) * 100), PERF_DISPLAY_CAP)
-    const status: PerfStatus = perf >= PERF_HEALTHY ? 'healthy' : perf >= PERF_CRITICAL ? 'warning' : 'critical'
+    const status: PerfStatus = perf >= HEALTH_HEALTHY ? 'healthy' : perf >= HEALTH_WARNING ? 'warning' : 'critical'
     return { string_number: s.string_number, performance: perf, status, peer_median_current: peerMedian }
   })
 }

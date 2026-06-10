@@ -22,7 +22,6 @@ import {
 import {
   HEALTH_HEALTHY,
   HEALTH_WARNING,
-  p2pToHealthScore,
 } from '@/lib/string-health'
 import { scoreLiveSr, type LiveStringInput } from '@/lib/string-health-live'
 import { deviceConnectivity } from '@/lib/connectivity'
@@ -336,10 +335,11 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
   // Group rows: device → string → mean V/I/P over the window. We collapse the
   // 3 hourly samples into one mean reading per string and score it with the SAME
   // Self-Referencing Ratio used by the live plant-tab chart (Algorithm v2 §4c):
-  // per-panel power, MPPT-grouped, max-anchored. The SR ratio is then mapped onto
-  // the 0-100 health_score scale via p2pToHealthScore, so the donut's existing
-  // 90/50 bucketing reproduces the SR bucket exactly — keeping Last-3h consistent
-  // with the live chart and (in spirit) the Prev-day / Analysis P2P.
+  // per-panel power, MPPT-grouped, max-anchored. The SR ratio (0–1) is rescaled
+  // to the 0-100 health_score scale by ×100, so the donut's unified 94/85
+  // bucketing reproduces the SR bucket (sr≥0.94→healthy, 0.85≤sr<0.94→abnormal,
+  // sr<0.85→critical) — keeping Last-3h consistent with the live chart and (in
+  // spirit) the Prev-day / Analysis P2P.
   type StringSamples = {
     hours: Set<string>; currents: number[]; voltages: number[]; powers: number[]
     isUsed: boolean; peerExcluded: boolean; panelCount: number | null
@@ -389,7 +389,8 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
   const armed = solarElevationDeg(plantLat, plantLng, new Date()) >= ALERT_MIN_SUN_ELEVATION_DEG
 
   // Per device: collapse to one mean reading per string, score with scoreLiveSr,
-  // map the SR ratio → 0-100 health_score for the donut's bucketing.
+  // rescale the SR ratio (×100) onto the 0-100 health_score scale for the donut's
+  // 94/85 bucketing.
   const inputs: DonutInput[] = []
   let lowConfidenceScored = 0
   for (const [deviceId, stringMap] of byDeviceString) {
@@ -417,7 +418,7 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
     for (const r of results) {
       const s = stringMap.get(r.string_number)!
       inputs.push({
-        healthScore: r.sr != null ? p2pToHealthScore(r.sr) : null,
+        healthScore: r.sr != null ? Math.round(r.sr * 100) : null,
         isUsed: s.isUsed,
         peerExcluded: s.peerExcluded,
         openCircuit: r.status === 'OPEN_CIRCUIT',

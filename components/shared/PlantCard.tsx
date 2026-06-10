@@ -10,7 +10,6 @@ import {
 } from '@/lib/design-tokens'
 import {
   HEALTH_HEALTHY,
-  HEALTH_CAUTION,
   HEALTH_WARNING,
   HEALTH_SEVERE,
 } from '@/lib/string-health'
@@ -52,9 +51,10 @@ const LEFT_ACCENT: Record<string, string> = {
   info: 'bg-blue-500',
 }
 
+// 3 unified bands mirroring the donut: green >=94, amber >=85, red <85.
+// HEALTH_SEVERE only sub-shades the red (darker for <25) — still "critical".
 function healthBarColor(percent: number): string {
   if (percent >= HEALTH_HEALTHY) return 'bg-emerald-500'
-  if (percent >= HEALTH_CAUTION) return 'bg-emerald-400'
   if (percent >= HEALTH_WARNING) return 'bg-amber-500'
   if (percent >= HEALTH_SEVERE) return 'bg-red-500'
   return 'bg-red-600'

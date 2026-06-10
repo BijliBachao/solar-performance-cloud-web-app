@@ -7,7 +7,6 @@ import { useState } from 'react'
 import {
   ACTIVE_CURRENT_THRESHOLD,
   HEALTH_HEALTHY,
-  HEALTH_CAUTION,
   HEALTH_WARNING,
 } from '@/lib/string-health'
 import {
@@ -315,7 +314,7 @@ export function MonthlyHealthReport({ data, inverterAvgCurrent }: MonthlyHealthR
                       'text-xs font-mono font-semibold',
                       row.uptime_percent >= HEALTH_HEALTHY
                         ? STATUS_STYLES.healthy.fg
-                        : row.uptime_percent >= HEALTH_CAUTION
+                        : row.uptime_percent >= HEALTH_WARNING
                           ? STATUS_STYLES.warning.fg
                           : STATUS_STYLES.critical.fg,
                     )}

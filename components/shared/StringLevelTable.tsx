@@ -5,16 +5,17 @@ import { StringCellDetail } from './StringCellDetail'
 import { cn } from '@/lib/utils'
 import { STATUS_STYLES } from '@/lib/design-tokens'
 import { providerLabel } from '@/lib/constants'
-import { HEALTH_HEALTHY, HEALTH_CAUTION, HEALTH_WARNING, PANEL_COUNT_DEFAULT, HEALTH_SEVERE } from '@/lib/string-health'
+import { HEALTH_HEALTHY, HEALTH_WARNING, PANEL_COUNT_DEFAULT, HEALTH_SEVERE } from '@/lib/string-health'
 
 // ── Clickable performance cell ─────────────────────────────────────────────
 // Wraps the existing cell-styling logic in a <td><button> so the daily score
 // is both visually correct AND a drill-down trigger. Keyboard-focusable.
 
+// 3 unified bands mirroring the donut: green >=94, orange >=85, red <85.
+// HEALTH_SEVERE only sub-shades the red (darker for <25) — still "critical".
 function getCellStyle(score: number | null): string {
   if (score === null || score === undefined) return 'bg-gray-100 text-gray-400'
   if (score >= HEALTH_HEALTHY) return ''
-  if (score >= HEALTH_CAUTION) return 'bg-yellow-100 text-yellow-800 font-semibold'
   if (score >= HEALTH_WARNING) return 'bg-orange-200 text-orange-900 font-bold'
   if (score >= HEALTH_SEVERE) return 'bg-red-200 text-red-900 font-bold'
   return 'bg-red-500 text-white font-bold'
@@ -94,10 +95,10 @@ function formatDateHeader(dateStr: string): string {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+// 3 unified bands: green >=94, orange >=85, red <85.
 function metricCell(value: number | null, type: 'perf' | 'avail'): string {
   if (value === null) return 'text-gray-400'
   if (value >= HEALTH_HEALTHY) return 'text-emerald-600 font-medium'
-  if (value >= HEALTH_CAUTION) return 'text-yellow-700 font-medium'
   if (value >= HEALTH_WARNING) return 'text-orange-600 font-semibold'
   return 'text-red-600 font-bold'
 }

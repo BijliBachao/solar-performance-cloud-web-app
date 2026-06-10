@@ -17,7 +17,6 @@ import {
   PLANT_HEALTH_HEALTHY,
   PLANT_HEALTH_FAULTY,
   HEALTH_HEALTHY,
-  HEALTH_CAUTION,
   HEALTH_WARNING,
   HEALTH_SEVERE,
   type StringStatus,
@@ -228,11 +227,14 @@ export function plantHealthLabel(state: number | null): string {
 
 // ━━━ HEALTH GRADE STYLES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // For daily health scores (0–100), heatmaps, monthly reports, performance cells.
-// Buckets: >=90 healthy, 75–89 caution, 50–74 warning, 25–49 severe, 0–24 dead.
+// Unified to the 3 donut bands (2026-06-10): >=94 healthy (green), >=85 warning
+// (orange), <85 critical (red). The critical band carries two darker-red SHADES
+// only — 'severe' (>=25) and 'dead' (<25) — so a 10%-string reads worse than an
+// 80%-string. They are NOT separate classification tiers: everything < 85 is
+// "critical" and mirrors the donut's red slice.
 
 export type HealthGrade =
   | 'healthy'
-  | 'caution'
   | 'warning'
   | 'severe'
   | 'dead'
@@ -246,18 +248,17 @@ export interface HealthGradeStyle {
 
 export const HEALTH_GRADE_STYLES: Record<HealthGrade, HealthGradeStyle> = {
   healthy: { fg: 'text-emerald-700', bg: 'bg-emerald-50', label: 'Healthy' },
-  caution: { fg: 'text-amber-800', bg: 'bg-amber-100', label: 'Caution' },
   warning: { fg: 'text-amber-700', bg: 'bg-amber-50', label: 'Warning' },
-  severe: { fg: 'text-red-700', bg: 'bg-red-50', label: 'Severe' },
-  dead: { fg: 'text-red-900', bg: 'bg-red-100', label: 'Dead' },
+  severe: { fg: 'text-red-700', bg: 'bg-red-50', label: 'Critical' },
+  dead: { fg: 'text-red-900', bg: 'bg-red-100', label: 'Critical' },
   'no-data': { fg: 'text-slate-400', bg: 'bg-slate-50', label: '—' },
 }
 
 export function gradeFromScore(score: number | null): HealthGrade {
   if (score === null || score === undefined) return 'no-data'
   if (score >= HEALTH_HEALTHY) return 'healthy'
-  if (score >= HEALTH_CAUTION) return 'caution'
   if (score >= HEALTH_WARNING) return 'warning'
+  // Below HEALTH_WARNING is all "critical" — split into two red shades only.
   if (score >= HEALTH_SEVERE) return 'severe'
   return 'dead'
 }

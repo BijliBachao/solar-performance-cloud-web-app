@@ -80,15 +80,19 @@ export const GAP_WARNING = 25
 export const GAP_INFO = 10
 
 // ── Health score buckets (daily/monthly historical views) ───────────
+// Unified system-wide on the SolarEdge ±6% mismatch anchor (== SR_HEALTHY/
+// SR_ABNORMAL on the 0–100 scale): Healthy ≥ 94, Warning ≥ 85, Critical < 85.
+// ONE set of thresholds for every health_score / performance-% consumer.
 /** Health score >= this is "Healthy" */
-export const HEALTH_HEALTHY = 90
+export const HEALTH_HEALTHY = 94
 /** Health score >= this (but < HEALTH_HEALTHY) is "Warning". Below = Critical */
-export const HEALTH_WARNING = 50
+export const HEALTH_WARNING = 85
 
-// ── Display gradation stops (cell coloring in tables) ───────────────
-/** Score >= this gets mild yellow (between HEALTHY and WARNING) */
-export const HEALTH_CAUTION = 75
-/** Score >= this gets deep red (below WARNING) */
+// ── Display gradation stop (cell coloring in tables) ────────────────
+/** Score >= this gets a darker-red SHADE *within* the Critical band (< 85).
+ *  Not a separate classification tier — every score < HEALTH_WARNING is
+ *  "critical"; this only sub-shades the red so a 10%-string reads worse than
+ *  an 80%-string. */
 export const HEALTH_SEVERE = 25
 
 // ── Plant health_state database values ──────────────────────────────
@@ -489,10 +493,8 @@ export const P2P_CAP = 1.5
 // Spec: Working/5_Tuesday_09_June_2026/STRING-PERFORMANCE-METRIC-REDESIGN-SPEC.md
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-/** Performance % ≥ this is Healthy. Mirrors SR_HEALTHY (SolarEdge ±6% mismatch). */
-export const PERF_HEALTHY = 94
-/** Performance % ≥ this is Warning; below is Critical. Mirrors SR_ABNORMAL. */
-export const PERF_CRITICAL = 85
+// Performance % classification now shares the unified HEALTH_HEALTHY (94) /
+// HEALTH_WARNING (85) bands — no separate PERF_* thresholds (removed 2026-06-10).
 /** Display/clamp cap for Performance %. */
 export const PERF_DISPLAY_CAP = 150
 /** Device-summed hourly avg_current (A) above which an HOUR counts as "sun-up". */
@@ -543,40 +545,6 @@ export function bucketSrScore(
   if (sr >= SR_HEALTHY) return 'healthy'
   if (sr >= SR_ABNORMAL) return 'abnormal'
   return 'critical'
-}
-
-/**
- * Map an SR/P2P ratio onto the legacy 0–100 health_score scale so that the
- * existing `bucketHealthScore` (HEALTH_HEALTHY=90 / HEALTH_WARNING=50) and the
- * donut SQL (which bucket on the same boundaries) reproduce the P2P buckets
- * EXACTLY — letting the daily algorithm flow through every existing consumer
- * (Analysis tab, Prev-day donut, NOC donut, dashboard) with no read-side change.
- *
- * Breakpoints are anchored so bucketHealthScore(map(p2p)) === bucketSrScore(p2p):
- *   p2p ≥ SR_HEALTHY (0.94)  → [90,100]  → healthy
- *   p2p ≥ SR_ABNORMAL (0.85) → [50,90)   → warning  (== "abnormal")
- *   p2p <  SR_ABNORMAL       → [0,50)    → critical
- *   p2p == null              → null      → no_data
- * Piecewise-linear and monotonic, so averages/sparklines stay meaningful.
- */
-export function p2pToHealthScore(p2p: number | null | undefined): number | null {
-  if (p2p === null || p2p === undefined || !Number.isFinite(p2p)) return null
-  let raw: number
-  if (p2p >= SR_HEALTHY) {
-    const frac = Math.min((p2p - SR_HEALTHY) / (P2P_CAP - SR_HEALTHY), 1)
-    raw = 90 + frac * 10
-  } else if (p2p >= SR_ABNORMAL) {
-    raw = 50 + ((p2p - SR_ABNORMAL) / (SR_HEALTHY - SR_ABNORMAL)) * 40
-  } else {
-    raw = Math.max(0, (p2p / SR_ABNORMAL) * 50)
-  }
-  // FLOOR to 2 decimals (not round). The result is persisted as Decimal(5,2)
-  // and re-bucketed by consumers at the 90/50 boundaries. Since the band
-  // boundaries map EXACTLY to 90 and 50, rounding-half-up could lift a value
-  // just under a threshold (e.g. p2p 0.9399 → 89.9956 → 90.00 → "healthy"),
-  // silently mis-bucketing the borderline strings this feature exists to flag.
-  // Flooring keeps sub-threshold values below the threshold.
-  return Math.floor(raw * 100) / 100
 }
 
 // ── Analysis query constants ────────────────────────────────────────

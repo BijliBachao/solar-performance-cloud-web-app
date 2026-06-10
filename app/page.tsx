@@ -11,7 +11,7 @@ import {
   Factory, Building2, Home, HeartPulse, Network, Gauge,
 } from 'lucide-react'
 import {
-  HEALTH_HEALTHY, HEALTH_CAUTION, HEALTH_WARNING, HEALTH_SEVERE,
+  HEALTH_HEALTHY, HEALTH_WARNING, HEALTH_SEVERE,
 } from '@/lib/string-health'
 
 const WHATSAPP_URL = 'https://wa.me/923234578775'
@@ -1365,12 +1365,13 @@ function MiniHeatmap() {
     { id: 'PV10', vals: [88, 90, 89, 91, 90, 89, 87] },
   ]
 
+  // 3 unified bands mirroring the donut: green >=94, amber >=85, red <85.
+  // HEALTH_SEVERE only sub-shades the red (gold for <25) — still "critical".
   const heatColor = (v: number) => {
     if (v >= HEALTH_HEALTHY) return '#76B900' // bb-green-500 — healthy (NVIDIA green, landing-only signal)
-    if (v >= HEALTH_CAUTION) return '#9BD42E' // bb-green-400 — mostly healthy
     if (v >= HEALTH_WARNING) return '#fbbf24' // amber-400 — warning band
-    if (v >= HEALTH_SEVERE) return '#f59e0b' // solar-gold-500 — severe
-    return '#ef4444' // red-500 — critical
+    if (v >= HEALTH_SEVERE) return '#f59e0b' // solar-gold-500 — critical (lighter shade)
+    return '#ef4444' // red-500 — critical (deep)
   }
 
   return (

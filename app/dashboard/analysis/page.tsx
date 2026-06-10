@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { StringLevelTable } from '@/components/shared/StringLevelTable'
-import { HEALTH_HEALTHY, HEALTH_CAUTION, HEALTH_WARNING, HEALTH_SEVERE, MAX_DATE_RANGE_DAYS } from '@/lib/string-health'
+import { HEALTH_HEALTHY, HEALTH_WARNING, MAX_DATE_RANGE_DAYS } from '@/lib/string-health'
 import { InverterLevelTable } from '@/components/shared/InverterLevelTable'
 import { ExportButton } from '@/components/shared/ExportButton'
 import { cn } from '@/lib/utils'
@@ -429,10 +429,9 @@ export default function DashboardAnalysisPage() {
       <div className="space-y-1">
         <div className="flex items-center gap-4 text-[10px] text-gray-500">
           <span>Color guide:</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-yellow-100 border border-yellow-200" /> {HEALTH_CAUTION}%-{HEALTH_HEALTHY - 1}%</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-200 border border-orange-300" /> {HEALTH_WARNING}%-{HEALTH_CAUTION - 1}%</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-200 border border-red-300" /> {HEALTH_SEVERE}%-{HEALTH_WARNING - 1}%</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500" /> &lt;{HEALTH_SEVERE}%</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-100 border border-emerald-200" /> &ge;{HEALTH_HEALTHY}% healthy</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-200 border border-orange-300" /> {HEALTH_WARNING}%-{HEALTH_HEALTHY - 1}% warning</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500" /> &lt;{HEALTH_WARNING}% critical</span>
           <span className="flex items-center gap-1" title="No score for this day (string did not report or was not scoreable). Gray means 'unscored', NOT 'OK'."><span className="w-3 h-3 rounded bg-gray-100 border border-gray-200" /> No data / unscored</span>
           <span className="flex items-center gap-1" title="Non-standard orientation/shade — excluded from peer comparison, so no comparable score. Counted separately, not in Healthy/Warning/Critical."><span className="w-3 h-3 rounded bg-indigo-50 border border-indigo-200" /> Non-standard (excluded)</span>
         </div>
