@@ -12,6 +12,8 @@ import {
 } from '@/lib/string-health'
 import { isDaylight, solarElevationDeg } from '@/lib/solar-geometry'
 import { scoreLiveSr, type LiveStringInput } from '@/lib/string-health-live'
+import { prepSettledDayInputs, type HourlyCurrentRow } from '@/lib/settled-day-performance'
+import { scoreStringPerformance, computeOperatingAvailability } from '@/lib/string-performance'
 
 /**
  * Persist per-device freshness signals (for connectivity status on the plant
@@ -805,6 +807,29 @@ export async function updateDailyAggregates(
     byString.set(m.string_number, group)
   }
 
+  // Today's LIVE verdict — current-vs-peer-median, computed the SAME way the
+  // settled-day job computes a finished day (so live-today === settled value).
+  // Built from today's raw measurements aggregated to hourly avg_current, mirroring
+  // string_hourly. The 01:30 PKT settled-day job authoritatively re-finalizes once
+  // the day completes. (Fixes the NOC today-donut going dark — final review C-1.)
+  const hourlyRows: HourlyCurrentRow[] = []
+  for (const [sn, ms] of byString) {
+    const hb = new Map<number, { sum: number; n: number }>()
+    for (const m of ms) {
+      const cur = Number(m.current)
+      if (!Number.isFinite(cur) || cur < 0) continue
+      const hk = Math.floor(m.timestamp.getTime() / 3_600_000)
+      const b = hb.get(hk) ?? { sum: 0, n: 0 }
+      b.sum += cur; b.n += 1; hb.set(hk, b)
+    }
+    for (const [hk, b] of hb) hourlyRows.push({ string_number: sn, hour: new Date(hk * 3_600_000), avg_current: b.sum / b.n })
+  }
+  const { perfInputs: todayPerfInputs, availability: todayAvail } =
+    prepSettledDayInputs(hourlyRows, { unused: unusedSet, peerExcluded: peerExcludedSet })
+  const todayPerfByString = new Map(
+    scoreStringPerformance(todayPerfInputs).map(r => [r.string_number, r] as const),
+  )
+
   // Batch upserts
   const upserts = []
   for (const [stringNumber, measurements] of byString) {
@@ -827,6 +852,14 @@ export async function updateDailyAggregates(
     }
     const energyKwh = energyWh / 1000
 
+    // Today's LIVE verdict for this string — same current-vs-peer-median pipeline
+    // the settled-day job uses, so live-today === the value the 01:30 PKT settled
+    // job will write when the day completes (review C-1). Null until the day has
+    // enough comparable sun-up hours to score (prepSettledDayInputs → no_data).
+    const perf = todayPerfByString.get(stringNumber)
+    const av = todayAvail.get(stringNumber)
+    const availPct = av ? computeOperatingAvailability(av.producingHours, av.sunUpHours) : null
+
     const data = {
       avg_voltage: new Decimal(avg(voltages).toFixed(2)),
       avg_current: new Decimal(avg(currents).toFixed(3)),
@@ -834,10 +867,9 @@ export async function updateDailyAggregates(
       min_current: safeMin(currents) !== null ? new Decimal(safeMin(currents)!.toFixed(3)) : null,
       max_current: safeMax(currents) !== null ? new Decimal(safeMax(currents)!.toFixed(3)) : null,
       energy_kwh: energyKwh > 0 ? new Decimal(energyKwh.toFixed(3)) : null,
-      // performance / health_score / availability are OWNED by the settled-day job
-      // (lib/settled-day-performance.ts). The poller no longer scores. On the upsert
-      // CREATE path they default to null → today's row reads "pending" until the
-      // 01:30 PKT job runs. Prisma's partial UPDATE never clobbers them.
+      performance: perf?.performance != null ? new Decimal(perf.performance.toFixed(2)) : null,
+      health_score: perf?.performance != null ? new Decimal(perf.performance.toFixed(2)) : null,
+      availability: availPct != null ? new Decimal(availPct.toFixed(2)) : null,
     }
 
     upserts.push(

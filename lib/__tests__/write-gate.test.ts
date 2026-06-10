@@ -82,11 +82,14 @@ describe('classifyDeviceWrite', () => {
 })
 
 // ─── updateDailyAggregates verdict fields ────────────────────────────
-// As of the settled-day refactor, performance / health_score / availability
-// are NO LONGER written by the poller — they are owned by the once-daily
-// settled-day job (lib/settled-day-performance.ts). The poller only writes
-// avg_* and energy_kwh so the daily row accumulates running measurements
-// without clobbering the settled verdict.
+// C-1: the poller writes TODAY'S LIVE verdict (performance / health_score /
+// availability) again, but via the NEW current-vs-peer-median pipeline (the
+// SAME pure functions the settled-day job uses), so the live "today" value and
+// the overnight settled value are identical by construction. This keeps the
+// NOC "Today" donut alive intraday. The 01:30 PKT settled-day job authoritatively
+// re-finalizes the verdict once the day completes. When the day does NOT yet have
+// ≥ MIN_SUNUP_HOURS_FOR_DAILY_SCORE (2) sun-up hours of comparable current, the
+// verdict is not scoreable → performance / health_score are written as null.
 
 const mockPrisma = {
   string_measurements: { findMany: vi.fn() },
@@ -158,12 +161,18 @@ function measurementsAtHours(hoursUtc: string[], power = 2000) {
   })))
 }
 
-// NOTE: The daily scoring gate (DQ v2 productive-hours logic) has been removed from the
-// poller. performance / health_score / availability are now OWNED by the settled-day job
-// (lib/settled-day-performance.ts). The poller writes only avg_* and energy_kwh; the
-// verdict fields are absent from the upsert data object entirely so Prisma's partial UPDATE
-// never clobbers what the once-daily job wrote. Tests below verify that absence.
-describe('updateDailyAggregates — poller does NOT write verdict fields', () => {
+// C-1: The poller writes today's LIVE verdict again, via the current-vs-peer-median
+// pipeline (the SAME pure functions the settled-day job uses). The verdict fields
+// are present in the upsert data object on EVERY cycle (so Prisma's partial UPDATE
+// refreshes today's live value); they carry a Decimal when the day is scoreable
+// (≥ MIN_SUNUP_HOURS_FOR_DAILY_SCORE = 2 sun-up hours of comparable current) and
+// null when it isn't. The 01:30 PKT settled-day job re-finalizes the finished day.
+//
+// Fixture: two equal strings, each current = power/600. At power=2000 each string
+// is ~3.33A, so the device-summed current per hour is ~6.67A — comfortably above
+// MIN_CURRENT_FOR_COMPARISON (1.0), making every populated hour a "sun-up" hour.
+// Two equal strings → peer median == each string's current → performance == 100.
+describe('updateDailyAggregates — poller writes today\'s live verdict (current-based)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useFakeTimers()
@@ -173,7 +182,7 @@ describe('updateDailyAggregates — poller does NOT write verdict fields', () =>
     vi.useRealTimers()
   })
 
-  it('poller omits health_score and performance from upsert data (1 productive hour)', async () => {
+  it('not scoreable (1 sun-up hour < MIN 2) → performance/health_score null but present', async () => {
     mockPrisma.string_measurements.findMany.mockResolvedValue(
       measurementsAtHours(['2026-06-05T06:05:00Z']),
     )
@@ -183,16 +192,20 @@ describe('updateDailyAggregates — poller does NOT write verdict fields', () =>
     const upserts = mockPrisma.string_daily.upsert.mock.calls
     expect(upserts.length).toBe(2)
     for (const [args] of upserts) {
-      // Verdict fields must be absent — settled-day job owns them
-      expect(args.update).not.toHaveProperty('health_score')
-      expect(args.update).not.toHaveProperty('performance')
-      expect(args.update).not.toHaveProperty('availability')
+      // Fields are present (live verdict is refreshed every cycle) but null —
+      // a single sun-up hour is below MIN_SUNUP_HOURS_FOR_DAILY_SCORE.
+      expect(args.update).toHaveProperty('health_score')
+      expect(args.update).toHaveProperty('performance')
+      expect(args.update.health_score).toBeNull()
+      expect(args.update.performance).toBeNull()
+      // availability is still computed (1 sun-up hour, both producing → 100%)
+      expect(Number(args.update.availability)).toBe(100)
       // Data columns still written
       expect(Number(args.update.avg_power)).toBeGreaterThan(0)
     }
   })
 
-  it('poller omits health_score and performance from upsert data (3 productive hours)', async () => {
+  it('scoreable (3 sun-up hours ≥ MIN 2) → writes the current-based verdict', async () => {
     mockPrisma.string_measurements.findMany.mockResolvedValue(
       measurementsAtHours(['2026-06-05T04:05:00Z', '2026-06-05T05:05:00Z', '2026-06-05T06:05:00Z']),
     )
@@ -202,28 +215,42 @@ describe('updateDailyAggregates — poller does NOT write verdict fields', () =>
     const upserts = mockPrisma.string_daily.upsert.mock.calls
     expect(upserts.length).toBe(2)
     for (const [args] of upserts) {
-      // Verdict fields must be absent regardless of how many hours are productive
-      expect(args.update).not.toHaveProperty('health_score')
-      expect(args.update).not.toHaveProperty('performance')
-      expect(args.update).not.toHaveProperty('availability')
+      // Two equal strings → each at its peer-group median → performance 100.
+      // health_score mirrors performance (current-based metric).
+      expect(Number(args.update.performance)).toBe(100)
+      expect(Number(args.update.health_score)).toBe(100)
+      expect(Number(args.update.availability)).toBe(100)
       // avg_* and energy_kwh are still written
       expect(Number(args.update.avg_power)).toBeGreaterThan(0)
     }
   })
 
-  it('poller omits health_score from upsert data (hour-boundary straddle)', async () => {
-    // Previously tested the span gate; now confirms the field is simply absent.
-    mockPrisma.string_measurements.findMany.mockResolvedValue(
-      measurementsAtHours(['2026-06-05T03:55:00Z', '2026-06-05T04:08:00Z']),
+  it('an underperforming string scores below its healthy peers (current-based banding)', async () => {
+    // Three healthy strings at 4000W (~6.67A) and one weak string at 2000W (~3.33A).
+    // Peer median over 4 strings = 6.67A; weak string = 3.33/6.67 ≈ 50% → critical.
+    const hours = ['2026-06-05T04:05:00Z', '2026-06-05T05:05:00Z', '2026-06-05T06:05:00Z']
+    const rows = hours.flatMap((h) =>
+      [1, 2, 3, 4].map((sn) => {
+        const power = sn === 4 ? 2000 : 4000
+        return { string_number: sn, voltage: 600, current: power / 600, power, timestamp: new Date(h) }
+      }),
     )
+    mockPrisma.string_measurements.findMany.mockResolvedValue(rows)
     const { updateDailyAggregates } = await import('../poller-utils')
-    await updateDailyAggregates('dev1', 'plant1', 2, configs, { model: null, max_strings: 2 })
+    await updateDailyAggregates('dev1', 'plant1', 4, configs, { model: null, max_strings: 4 })
+
+    const byStringNumber = new Map<number, any>()
     for (const [args] of mockPrisma.string_daily.upsert.mock.calls) {
-      expect(args.update).not.toHaveProperty('health_score')
+      byStringNumber.set(args.create.string_number, args.update)
     }
+    // Healthy peers sit at 100; the weak string ~50.
+    expect(Number(byStringNumber.get(1).performance)).toBe(100)
+    expect(Number(byStringNumber.get(4).performance)).toBe(50)
+    expect(Number(byStringNumber.get(4).health_score)).toBe(50)
   })
 
-  it('poller omits health_score from upsert data (near-zero / night readings)', async () => {
+  it('night / near-zero readings (below comparison floor) → not scoreable → null', async () => {
+    // current = 5/600 ≈ 0.0083A per string; device sum ≈ 0.017A << MIN_CURRENT_FOR_COMPARISON.
     mockPrisma.string_measurements.findMany.mockResolvedValue(
       measurementsAtHours(['2026-06-05T03:05:00Z', '2026-06-05T04:05:00Z', '2026-06-05T05:05:00Z'], 5),
     )
@@ -231,7 +258,9 @@ describe('updateDailyAggregates — poller does NOT write verdict fields', () =>
     await updateDailyAggregates('dev1', 'plant1', 2, configs, { model: null, max_strings: 2 })
 
     for (const [args] of mockPrisma.string_daily.upsert.mock.calls) {
-      expect(args.update).not.toHaveProperty('health_score')
+      expect(args.update).toHaveProperty('health_score')
+      expect(args.update.health_score).toBeNull()
+      expect(args.update.performance).toBeNull()
     }
   })
 })
