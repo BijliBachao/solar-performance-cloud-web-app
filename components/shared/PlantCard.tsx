@@ -11,7 +11,6 @@ import {
 import {
   HEALTH_HEALTHY,
   HEALTH_WARNING,
-  HEALTH_SEVERE,
 } from '@/lib/string-health'
 import { Sparkline } from './Sparkline'
 
@@ -51,13 +50,12 @@ const LEFT_ACCENT: Record<string, string> = {
   info: 'bg-blue-500',
 }
 
-// 3 unified bands mirroring the donut: green >=94, amber >=85, red <85.
-// HEALTH_SEVERE only sub-shades the red (darker for <25) — still "critical".
+// 3 unified bands mirroring the donut AND the Color guide: green >=94,
+// amber >=85, single red <85 (one critical shade — no severe/dead split).
 function healthBarColor(percent: number): string {
   if (percent >= HEALTH_HEALTHY) return 'bg-emerald-500'
   if (percent >= HEALTH_WARNING) return 'bg-amber-500'
-  if (percent >= HEALTH_SEVERE) return 'bg-red-500'
-  return 'bg-red-600'
+  return 'bg-red-500'
 }
 
 export function PlantCard({ plant, basePath = '/dashboard/plants' }: PlantCardProps) {

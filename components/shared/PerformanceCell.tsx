@@ -1,18 +1,17 @@
 import { cn } from '@/lib/utils'
-import { HEALTH_HEALTHY, HEALTH_WARNING, HEALTH_SEVERE } from '@/lib/string-health'
+import { HEALTH_HEALTHY, HEALTH_WARNING } from '@/lib/string-health'
 
 interface PerformanceCellProps {
   score: number | null
 }
 
-// 3 unified bands mirroring the donut: green >=94, orange >=85, red <85.
-// HEALTH_SEVERE only sub-shades the red (darker for <25) — still "critical".
+// 3 unified bands mirroring the donut AND the Color guide: green >=94,
+// orange >=85, single red <85 (one critical shade — no severe/dead split).
 function getCellStyle(score: number | null): string {
   if (score === null || score === undefined) return 'bg-gray-100 text-gray-400'
   if (score >= HEALTH_HEALTHY) return ''
   if (score >= HEALTH_WARNING) return 'bg-orange-200 text-orange-900 font-bold'
-  if (score >= HEALTH_SEVERE) return 'bg-red-200 text-red-900 font-bold'
-  return 'bg-red-400 text-white font-bold'
+  return 'bg-red-200 text-red-900 font-bold'
 }
 
 function formatScore(score: number | null): string {

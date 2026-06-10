@@ -88,13 +88,6 @@ export const HEALTH_HEALTHY = 94
 /** Health score >= this (but < HEALTH_HEALTHY) is "Warning". Below = Critical */
 export const HEALTH_WARNING = 85
 
-// ── Display gradation stop (cell coloring in tables) ────────────────
-/** Score >= this gets a darker-red SHADE *within* the Critical band (< 85).
- *  Not a separate classification tier — every score < HEALTH_WARNING is
- *  "critical"; this only sub-shades the red so a 10%-string reads worse than
- *  an 80%-string. */
-export const HEALTH_SEVERE = 25
-
 // ── Plant health_state database values ──────────────────────────────
 export const PLANT_HEALTH_HEALTHY = 3
 export const PLANT_HEALTH_FAULTY = 2

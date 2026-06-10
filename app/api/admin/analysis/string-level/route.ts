@@ -362,6 +362,9 @@ export async function GET(request: NextRequest) {
         warning,
         critical,
         no_data: noData,
+        // The coloured counts are a SNAPSHOT of this date (the most recent scored
+        // day in range), not an average — surfaced as "Status as of …" in the UI.
+        as_of_date: latestDate,
         inactive_strings: rows.filter(r => r.type === 'inactive').length,
         unused_strings: rows.filter(r => r.type === 'unused').length,
         // Peer-excluded strings — NULL/no_data P2P score, kept out of the tally

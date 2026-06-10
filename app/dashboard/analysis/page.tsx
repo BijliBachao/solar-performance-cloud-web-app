@@ -407,13 +407,16 @@ export default function DashboardAnalysisPage() {
           {(summary.inactive_strings > 0 || summary.unused_strings > 0) && (
             <span className="flex items-center gap-4 ml-2 pl-2 border-l border-gray-300">
               {summary.inactive_strings > 0 && (
-                <span className="text-amber-600">{summary.inactive_strings} Stopped</span>
+                <span className="text-amber-600" title="Stopped — no data in the last 14 days (not tied to the selected range).">{summary.inactive_strings} Stopped</span>
               )}
               {summary.unused_strings > 0 && (
                 <span className="text-gray-400">{summary.unused_strings} Unused</span>
               )}
             </span>
           )}
+          <span className="ml-auto text-[10px] text-gray-400" title="The coloured counts are a snapshot of the most-recent scored day in the range — not an average.">
+            Status as of {summary.as_of_date ?? '—'}
+          </span>
         </div>
       )}
 
@@ -431,7 +434,7 @@ export default function DashboardAnalysisPage() {
           <span>Color guide:</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-100 border border-emerald-200" /> &ge;{HEALTH_HEALTHY}% healthy</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-200 border border-orange-300" /> {HEALTH_WARNING}%-{HEALTH_HEALTHY - 1}% warning</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500" /> &lt;{HEALTH_WARNING}% critical</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-200 border border-red-300" /> &lt;{HEALTH_WARNING}% critical</span>
           <span className="flex items-center gap-1" title="No score for this day (string did not report or was not scoreable). Gray means 'unscored', NOT 'OK'."><span className="w-3 h-3 rounded bg-gray-100 border border-gray-200" /> No data / unscored</span>
           <span className="flex items-center gap-1" title="Non-standard orientation/shade — excluded from peer comparison, so no comparable score. Counted separately, not in Healthy/Warning/Critical."><span className="w-3 h-3 rounded bg-indigo-50 border border-indigo-200" /> Non-standard (excluded)</span>
         </div>
