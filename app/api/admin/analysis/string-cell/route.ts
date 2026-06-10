@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     const date = sp.get('date')
     const organizationId = sp.get('organization_id')
 
-    if (!deviceId || !date || snRaw === null || !Number.isFinite(stringNumber)) {
+    if (!deviceId || !date || snRaw === null || !Number.isFinite(stringNumber) || !Number.isInteger(stringNumber) || stringNumber <= 0) {
       return NextResponse.json({ error: 'device_id, string_number, date required' }, { status: 400 })
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -46,6 +46,9 @@ export async function GET(request: NextRequest) {
     if (!device) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const startUtc = new Date(`${date}T00:00:00+05:00`)
+    if (Number.isNaN(startUtc.getTime())) {
+      return NextResponse.json({ error: 'Invalid date' }, { status: 400 })
+    }
     const endUtc = new Date(startUtc.getTime() + 86_400_000)
     const [hourly, cfgRows] = await Promise.all([
       prisma.string_hourly.findMany({

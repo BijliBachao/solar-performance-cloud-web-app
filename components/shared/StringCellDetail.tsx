@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Sparkline } from './Sparkline'
@@ -128,10 +128,37 @@ export function StringCellDetail({
     return () => { cancelled = true }
   }, [apiPath, deviceId, stringNumber, date])
 
-  // Escape key
+  // Return focus to previous element when dialog unmounts (I-b part 1)
+  useEffect(() => {
+    const prevFocus = document.activeElement as HTMLElement | null
+    return () => { prevFocus?.focus?.() }
+  }, [])
+
+  // Ref for Tab-trap (I-b part 2)
+  const dialogRef = useRef<HTMLDivElement>(null)
+
+  // Escape key + Tab trap
   const handleKey = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (e.key === 'Tab' && dialogRef.current) {
+        const focusable = Array.from(
+          dialogRef.current.querySelectorAll<HTMLElement>(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+          ),
+        ).filter((el) => !el.hasAttribute('disabled'))
+        if (focusable.length === 0) return
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        if (e.shiftKey) {
+          if (document.activeElement === first) { e.preventDefault(); last.focus() }
+        } else {
+          if (document.activeElement === last) { e.preventDefault(); first.focus() }
+        }
+      }
     },
     [onClose],
   )
@@ -151,6 +178,7 @@ export function StringCellDetail({
     >
       {/* Modal panel */}
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={`String detail: PV${stringNumber} on ${date}`}
@@ -223,17 +251,28 @@ export function StringCellDetail({
 
                 {/* 2. Arithmetic line or status reason */}
                 <div className="rounded-md border border-slate-100 bg-slate-50 px-4 py-3">
-                  {data.performance !== null ? (
-                    <p className="text-sm text-slate-700 font-mono">
-                      PV{data.string_number} current{' '}
-                      <span className="font-bold text-blue-700">{fmtA(data.repr_current)} A</span>
-                      <span className="text-slate-400 mx-2">÷</span>
-                      inverter median{' '}
-                      <span className="font-bold text-violet-700">{fmtA(data.peer_median_current)} A</span>
-                      <span className="text-slate-400 mx-2">=</span>
-                      <span className="font-bold text-emerald-700">{data.performance}%</span>
-                    </p>
-                  ) : (
+                  {data.performance !== null ? (() => {
+                    const trueRatioPct = data.peer_median_current
+                      ? Math.round((data.repr_current! / data.peer_median_current) * 100)
+                      : null
+                    const isCapped = trueRatioPct !== null && trueRatioPct !== data.performance
+                    return (
+                      <p className="text-sm text-slate-700 font-mono">
+                        PV{data.string_number} current{' '}
+                        <span className="font-bold text-blue-700">{fmtA(data.repr_current)} A</span>
+                        <span className="text-slate-400 mx-2">÷</span>
+                        inverter median{' '}
+                        <span className="font-bold text-violet-700">{fmtA(data.peer_median_current)} A</span>
+                        <span className="text-slate-400 mx-2">=</span>
+                        <span className="font-bold text-emerald-700">{trueRatioPct !== null ? `${trueRatioPct}%` : `${data.performance}%`}</span>
+                        {isCapped && (
+                          <span className="text-slate-500 font-normal ml-2 text-xs">
+                            (Performance capped at {data.performance}% for display)
+                          </span>
+                        )}
+                      </p>
+                    )
+                  })() : (
                     <p className="text-sm text-slate-500 italic">
                       {nullReason(data.status)}
                     </p>

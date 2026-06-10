@@ -17,7 +17,7 @@ function getCellStyle(score: number | null): string {
   if (score >= HEALTH_CAUTION) return 'bg-yellow-100 text-yellow-800 font-semibold'
   if (score >= HEALTH_WARNING) return 'bg-orange-200 text-orange-900 font-bold'
   if (score >= HEALTH_SEVERE) return 'bg-red-200 text-red-900 font-bold'
-  return 'bg-red-400 text-white font-bold'
+  return 'bg-red-500 text-white font-bold'
 }
 
 interface ClickablePerformanceCellProps {
