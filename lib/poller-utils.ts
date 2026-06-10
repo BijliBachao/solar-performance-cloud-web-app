@@ -784,7 +784,7 @@ export async function updateDailyAggregates(
 
   // Skip admin-flagged unused strings — keep string_daily clean of induction
   // noise from empty PV ports.
-  const { unusedSet, peerExcludedSet, panelCountByString } =
+  const { unusedSet, peerExcludedSet } =
     configs ?? (await loadStringConfigs(deviceId))
   const usedRaw = unusedSet.size > 0
     ? rawMeasurements.filter(m => !unusedSet.has(m.string_number))

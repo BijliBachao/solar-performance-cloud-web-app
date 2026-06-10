@@ -5,7 +5,7 @@ import { StringCellDetail } from './StringCellDetail'
 import { cn } from '@/lib/utils'
 import { STATUS_STYLES } from '@/lib/design-tokens'
 import { providerLabel } from '@/lib/constants'
-import { HEALTH_HEALTHY, HEALTH_WARNING, PANEL_COUNT_DEFAULT, HEALTH_SEVERE } from '@/lib/string-health'
+import { HEALTH_HEALTHY, HEALTH_WARNING, HEALTH_SEVERE } from '@/lib/string-health'
 
 // ── Clickable performance cell ─────────────────────────────────────────────
 // Wraps the existing cell-styling logic in a <td><button> so the daily score
@@ -133,17 +133,6 @@ export function StringLevelTable({
   const inactiveRows = rows.filter(r => r.type === 'inactive')
   const unusedRows = rows.filter(r => r.type === 'unused')
 
-  // Per-inverter panel-count completeness. When some strings lack an admin
-  // panel_count, the P2P comparison falls back to the default count, so
-  // borderline flags are approximate — surfaced as a per-inverter badge.
-  const panelByDevice = new Map<string, { missing: number; total: number }>()
-  for (const r of activeRows) {
-    const e = panelByDevice.get(r.device_id) ?? { missing: 0, total: 0 }
-    e.total++
-    if (r.panel_count_set === false) e.missing++
-    panelByDevice.set(r.device_id, e)
-  }
-
   let prevDeviceId = ''
 
   return (
@@ -198,9 +187,6 @@ export function StringLevelTable({
             const isFirstOfDevice = idx === 0 || activeRows[idx - 1].device_id !== row.device_id
             prevDeviceId = row.device_id
 
-            const panelInfo = panelByDevice.get(row.device_id)
-            const showPanelBadge = isFirstOfDevice && !!panelInfo && panelInfo.missing > 0
-
             return (
               <tr
                 key={`${row.device_id}-${row.string_number}`}
@@ -223,16 +209,6 @@ export function StringLevelTable({
                   </div>
                   {row.string_number === 1 && (
                     <div className="text-[10px] text-gray-400">{row.plant_name}</div>
-                  )}
-                  {showPanelBadge && (
-                    <div className="mt-0.5">
-                      <span
-                        title={`${panelInfo!.missing} of ${panelInfo!.total} strings have no panel count set — comparison uses the default ${PANEL_COUNT_DEFAULT} panels, so borderline flags are approximate. Set panel counts in string config for precise scoring.`}
-                        className="inline-flex items-center rounded border border-amber-200 bg-amber-50 px-1 py-0.5 text-[9px] font-medium text-amber-700"
-                      >
-                        panel count {panelInfo!.missing}/{panelInfo!.total}
-                      </span>
-                    </div>
                   )}
                   {row.peer_excluded && (
                     <div className="mt-0.5">

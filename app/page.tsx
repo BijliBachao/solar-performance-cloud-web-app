@@ -458,7 +458,7 @@ export default function LandingPage() {
           {/* 2 hero cards — larger, span 2 cols */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
             {[
-              { icon: Activity, title: 'Per-String Health Scores', desc: 'Performance and Availability scores per string, per day. See exactly which string is underperforming and whether it is a shading issue or a connection fault — with IEC 61724 alignment behind every number.' },
+              { icon: Activity, title: 'Per-String Health Scores', desc: 'Performance and Availability scores per string, per day. Performance compares each string\'s output against the typical string on the same inverter, so you see exactly which one is underperforming — and whether it is a shading issue or a connection fault.' },
               { icon: Eye, title: 'Fault Diagnosis Engine', desc: 'Distinguishes dirty panels, bird droppings, tree shadows, loose cables, broken connections, panel degradation — each with specific action guidance. Not just that it is wrong, but why.' },
             ].map((f) => (
               <div key={f.title} className="bg-warm-cream-lifted border border-warm-divider rounded-2xl p-8 md:p-10 hover:border-bb-green-400 transition-all">
@@ -675,7 +675,7 @@ export default function LandingPage() {
             </h3>
             <div className="text-base md:text-lg text-warm-body leading-relaxed font-medium space-y-4">
               <p>
-                We didn&apos;t invent string monitoring. We made it work for Pakistani conditions, brands, and climate. SPC follows the <strong className="text-warm-text">IEC 61724</strong> standard — each string evaluated on <strong className="text-warm-text">Performance</strong> (current quality) and <strong className="text-warm-text">Availability</strong> (uptime), combined into a single Health Score.
+                We didn&apos;t invent string monitoring. We made it work for Pakistani conditions, brands, and climate. Following the <strong className="text-warm-text">IEC 61724</strong> standard, each string is evaluated on <strong className="text-warm-text">Performance</strong> — its output compared against the typical string on the same inverter — and <strong className="text-warm-text">Availability</strong> (uptime), reported separately.
               </p>
               <p>
                 Fault classifications align to <strong className="text-warm-text">IEC 62446-1</strong>. You instantly know whether a problem is a <strong className="text-warm-text">panel issue</strong> (shading / degradation) or a <strong className="text-warm-text">wiring issue</strong> (loose cable / intermittent).
