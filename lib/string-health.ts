@@ -881,12 +881,6 @@ export function computeAvailability(stringCount: number, maxCount: number): numb
   return Math.min((stringCount / maxCount) * 100, 100)
 }
 
-/** Health Score = Performance × Availability / 100, capped at 100 */
-export function computeHealthScore(perf: number | null, avail: number | null): number | null {
-  if (perf === null || avail === null) return null
-  return Math.min((perf * avail) / 100, 100)
-}
-
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Health Score Bucketing (for historical views)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
