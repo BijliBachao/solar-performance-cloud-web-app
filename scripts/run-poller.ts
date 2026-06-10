@@ -108,7 +108,37 @@ async function main() {
     }
   })
 
-  console.log('[Poller] Scheduled: every 5 minutes + daily cleanup at 2:00 AM')
+  // Settled-day performance: compute the just-finished PKT day(s). 01:30 PKT gives
+  // a 90-min buffer for late vendor data; recompute the last 2 days for self-heal.
+  // Idempotent (UPDATEs only). computeSettledDayPerformance returns rows-updated so
+  // a 0-row day (date-filter mismatch) is logged loudly rather than silently no-op'd.
+  cron.schedule('30 1 * * *', async () => {
+    try {
+      const { PrismaClient } = await import('@prisma/client')
+      const { computeSettledDayPerformance } = await import('../lib/settled-day-performance')
+      const { INVERTER_DEVICE_TYPE_IDS } = await import('../lib/constants')
+      const prisma = new PrismaClient()
+      try {
+        const pktNow = new Date(Date.now() + 5 * 3600_000)
+        const dates = [1, 2].map(d => new Date(pktNow.getTime() - d * 86_400_000).toISOString().slice(0, 10))
+        const devices = await prisma.devices.findMany({
+          where: { device_type_id: { in: INVERTER_DEVICE_TYPE_IDS } }, select: { id: true },
+        })
+        for (const date of dates) {
+          let updated = 0
+          for (const dev of devices) updated += await computeSettledDayPerformance(prisma, dev, date)
+          if (updated === 0) console.warn(`[SettledDay] ${date}: 0 rows updated — date-filter mismatch? (C1)`)
+          else console.log(`[SettledDay] ${date}: ${updated} rows across ${devices.length} inverters`)
+        }
+      } finally {
+        await prisma.$disconnect()
+      }
+    } catch (err) {
+      console.error('[SettledDay] failed:', err)
+    }
+  }, { timezone: 'Asia/Karachi' })
+
+  console.log('[Poller] Scheduled: every 5 minutes + daily cleanup at 2:00 AM + settled-day at 01:30 PKT')
 }
 
 main().catch((err) => {
