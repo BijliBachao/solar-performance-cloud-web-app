@@ -346,11 +346,14 @@ export function StringCellDetail({
                       Hourly Current Curve
                     </h3>
                     <div className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2">
+                      {/* CSS-bars variant — no recharts ResponsiveContainer measure/mount
+                          cycle on every open, so the panel renders instantly. The hourly
+                          curve is only a handful of points; bars read it fine. */}
                       <Sparkline
                         data={sparkValues}
                         color="#2563eb"
                         height={80}
-                        variant="area"
+                        variant="bars"
                       />
                       {/* Hour labels: first + last */}
                       {data.hourly.length >= 2 && (
