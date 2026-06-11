@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { UserButton } from '@clerk/nextjs'
 import { Bell } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { SunElevationChip } from '@/components/shared/SunElevationChip'
 
 interface TopBarProps {
   title?: string
@@ -75,6 +76,10 @@ export function TopBar({ title, userFullName, userRole, orgName, showAlertBell }
             {time}
           </span>
         )}
+
+        {/* Live regional sun elevation — explains why early-morning string
+            data is still blank (it appears once the sun clears the gate). */}
+        <SunElevationChip />
 
         <span className="hidden md:block w-px h-4 bg-slate-200" />
 

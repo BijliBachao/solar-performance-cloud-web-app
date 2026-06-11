@@ -208,14 +208,21 @@ export const FLEET_DEFAULT_LNG = 74.3
 const PK_LAT_MIN = 23, PK_LAT_MAX = 37.5
 const PK_LNG_MIN = 60, PK_LNG_MAX = 78
 
+/** True when the raw (Decimal/string/null) coords are a plausible Pakistani
+ *  location — i.e. real, not missing and not vendor-default garbage (Beijing).
+ *  A `false` here means any sun-gated UI reading is a regional estimate. */
+export function coordsArePlausible(latRaw: unknown, lngRaw: unknown): boolean {
+  const lat = latRaw != null ? Number(latRaw) : NaN
+  const lng = lngRaw != null ? Number(lngRaw) : NaN
+  return lat >= PK_LAT_MIN && lat <= PK_LAT_MAX && lng >= PK_LNG_MIN && lng <= PK_LNG_MAX
+}
+
 /** Plant coords if plausibly Pakistani, else the fleet centroid. Accepts the
  *  raw (possibly Decimal/string/null) DB values. */
 export function clampToFleetCoords(latRaw: unknown, lngRaw: unknown): { lat: number; lng: number } {
   const lat = latRaw != null ? Number(latRaw) : NaN
   const lng = lngRaw != null ? Number(lngRaw) : NaN
-  const plausible =
-    lat >= PK_LAT_MIN && lat <= PK_LAT_MAX && lng >= PK_LNG_MIN && lng <= PK_LNG_MAX
-  return plausible ? { lat, lng } : { lat: FLEET_DEFAULT_LAT, lng: FLEET_DEFAULT_LNG }
+  return coordsArePlausible(latRaw, lngRaw) ? { lat, lng } : { lat: FLEET_DEFAULT_LAT, lng: FLEET_DEFAULT_LNG }
 }
 
 /**

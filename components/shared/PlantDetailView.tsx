@@ -19,6 +19,7 @@ import { PlantHeader } from '@/components/shared/PlantHeader'
 import { InverterDetailSection } from '@/components/shared/InverterDetailSection'
 import { AlertHistoryLog } from '@/components/shared/AlertHistoryLog'
 import { StringHealthDonut } from '@/components/shared/StringHealthDonut'
+import { SunGateBanner } from '@/components/shared/SunGateBanner'
 import {
   AlertTriangle, RefreshCw, ArrowLeft, Activity, ClipboardList,
 } from 'lucide-react'
@@ -65,6 +66,10 @@ interface PlantData {
   op_status?: PlantOpStatus
   /** Sun above the daylight gate at the plant (coord-clamped, server-side). */
   sun_up?: boolean
+  /** Raw plant coordinates (Decimal-serialized as string) — drives the
+   *  client-side sun-gate banner. Missing/garbage → regional estimate. */
+  latitude?: string | number | null
+  longitude?: string | number | null
   devices: Array<{
     id: string
     device_name: string | null
@@ -414,6 +419,11 @@ export function PlantDetailView({
           </div>
         )
       })()}
+
+      {/* Sun-gate banner — early morning the sun sits below the live-data
+          elevation floor, so live string readings/performance are withheld
+          (dawn output is too faint to score fairly). Auto-hides once it arms. */}
+      <SunGateBanner latRaw={plant.latitude} lngRaw={plant.longitude} />
 
       <div className="px-4 sm:px-6 py-5 max-w-[1440px] mx-auto">
         <Tabs defaultValue="overview" className="w-full">
