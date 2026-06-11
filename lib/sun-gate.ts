@@ -37,9 +37,9 @@ export interface SunGateState {
    *  evening" at dusk, instead of always implying a sunrise wait. */
   rising: boolean
   /** True when the plant's own coords were missing or garbage (e.g. vendor-
-   *  default Beijing) and the regional centroid was substituted. The whole
-   *  fleet is in the Lahore area and the centroid IS Lahore, so this estimate
-   *  is accurate to a fraction of a degree — informational, not a data gap. */
+   *  default Beijing) and the regional centroid was substituted. All plants are
+   *  in the Lahore area and the centroid IS Lahore, so this estimate is accurate
+   *  to a fraction of a degree — informational, not a data gap. */
   approximate: boolean
 }
 
@@ -70,9 +70,9 @@ export function minutesUntilElevation(
 
 /**
  * Resolve the full sun-gate state for a plant (or the region, when coords are
- * absent) at a given instant. Coords are clamped with the same
- * `clampToFleetCoords` the live donut uses, so this verdict can never contradict
- * the donut's `armed` decision.
+ * absent) at a given instant. Coords are clamped with the same coordinate clamp
+ * the live donut uses, so this verdict can never contradict the donut's `armed`
+ * decision.
  */
 export function computeSunGate(
   latRaw: unknown,

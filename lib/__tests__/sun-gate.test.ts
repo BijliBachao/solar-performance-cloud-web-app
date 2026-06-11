@@ -6,7 +6,7 @@ import {
   ALERT_MIN_SUN_ELEVATION_DEG,
 } from '@/lib/string-health'
 
-// Fleet centroid (central Punjab). Mid-June so the sun is high at local noon.
+// Regional centroid (central Punjab / Lahore). Mid-June: sun high at local noon.
 const LAT = FLEET_DEFAULT_LAT
 const LNG = FLEET_DEFAULT_LNG
 const GATE = ALERT_MIN_SUN_ELEVATION_DEG
