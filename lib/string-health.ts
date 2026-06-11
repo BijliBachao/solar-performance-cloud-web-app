@@ -504,6 +504,65 @@ export const MIN_PRODUCING_CURRENT = 0.5
 /** Minimum sun-up HOURS before a PKT day is scoreable. */
 export const MIN_SUNUP_HOURS_FOR_DAILY_SCORE = 2
 
+// ─── V1 String-Performance (intra-inverter, current-only) — LOCKED 2026-06-11 ──
+// Reyyan V1 spec: median-of-medians, fixed 8AM–4PM PKT window, 60% completeness
+// gate, display cap 100 (raw kept), bands 95/85/60/Dead. classifyStringPerformance
+// is THE single source of truth — the /analysis cell, drill-down, per-plant donut,
+// and NOC counts/rows ALL derive from it (via perfBandToDonutBucket). Nothing else
+// may compare a performance % to a band threshold.
+/** Fixed daily window (PKT, local Pakistan time). In UTC this is 03:00–11:00. */
+export const PERF_WINDOW_START_HOUR_PKT = 8
+export const PERF_WINDOW_END_HOUR_PKT = 16
+/** 5-min readings expected across the 8h window: 8 × 12. */
+export const PERF_EXPECTED_READINGS = 96
+/** Day scored only when received/expected ≥ this; else "insufficient data". */
+export const PERF_COMPLETENESS_GATE = 0.60
+/** Customer-facing display cap. The raw (uncapped) value is stored separately. */
+export const PERF_DISPLAY_MAX = 100
+/** Status band lower bounds (the upper band owns each edge). Dead = below PERF_DEAD. */
+export const PERF_NORMAL = 95
+export const PERF_WATCH = 85
+export const PERF_UNDERPERFORMING = 60
+export const PERF_DEAD = 10
+
+export type PerfBand =
+  | 'normal' | 'watch' | 'underperforming' | 'serious_fault' | 'dead'
+  | 'insufficient_data' | 'unused' | 'peer_excluded'
+
+export interface PerfFlags { isUsed: boolean; peerExcluded: boolean; insufficientData: boolean }
+
+/**
+ * THE single source of truth for a string's V1 status. Every surface
+ * (cell colour, drill-down, donut, NOC counts, tallies) MUST derive from this.
+ * `displayPct` is the capped (≤100) performance; null = no score.
+ */
+export function classifyStringPerformance(displayPct: number | null, flags: PerfFlags): PerfBand {
+  if (!flags.isUsed) return 'unused'
+  if (flags.peerExcluded) return 'peer_excluded'
+  if (flags.insufficientData || displayPct == null) return 'insufficient_data'
+  if (displayPct < PERF_DEAD) return 'dead'
+  if (displayPct < PERF_UNDERPERFORMING) return 'serious_fault'
+  if (displayPct < PERF_WATCH) return 'underperforming'
+  if (displayPct < PERF_NORMAL) return 'watch'
+  return 'normal'
+}
+
+/** Rolls the 5 performance bands into the 3-bucket donut (+ no_data / excluded=null). */
+export function perfBandToDonutBucket(
+  band: PerfBand,
+): 'healthy' | 'abnormal' | 'critical' | 'no_data' | null {
+  switch (band) {
+    case 'normal': return 'healthy'
+    case 'watch':
+    case 'underperforming': return 'abnormal'
+    case 'serious_fault':
+    case 'dead': return 'critical'
+    case 'insufficient_data': return 'no_data'
+    case 'unused':
+    case 'peer_excluded': return null
+  }
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Algorithm v2 primitives (pure functions; safe in hot loops)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

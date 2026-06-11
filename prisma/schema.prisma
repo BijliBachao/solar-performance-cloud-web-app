@@ -53,6 +53,7 @@ model plants {
   longitude         Decimal?            @db.Decimal(10, 6)
   health_state      Int?
   provider          String              @default("huawei") @db.VarChar(20)
+  plant_type        String              @default("single_location") @db.VarChar(20)
   last_synced       DateTime?
   created_at        DateTime            @default(now())
   updated_at        DateTime            @updatedAt
@@ -134,6 +135,8 @@ model string_hourly {
   avg_power     Decimal? @db.Decimal(10, 2)
   min_current   Decimal? @db.Decimal(10, 3)
   max_current   Decimal? @db.Decimal(10, 3)
+  median_current Decimal? @db.Decimal(10, 3)
+  reading_count  Int?
 
   @@unique([device_id, string_number, hour])
   @@index([plant_id, hour(sort: Desc)])
@@ -153,6 +156,8 @@ model string_daily {
   health_score  Decimal? @db.Decimal(5, 2)
   performance   Decimal? @db.Decimal(5, 2)
   availability  Decimal? @db.Decimal(5, 2)
+  raw_performance   Decimal? @db.Decimal(6, 2)
+  data_completeness Decimal? @db.Decimal(5, 2)
   energy_kwh    Decimal? @db.Decimal(10, 3)
 
   @@unique([device_id, string_number, date])
@@ -231,6 +236,8 @@ model string_configs {
   notes                        String?  @db.Text
   is_used                      Boolean  @default(true)
   exclude_from_peer_comparison Boolean  @default(false)
+  condition_tag                String?  @db.VarChar(30)
+  manual_baseline_current      Decimal? @db.Decimal(10, 3)
   created_at                   DateTime @default(now())
   updated_at                   DateTime @updatedAt
   updated_by                   String?  @db.VarChar(50)
