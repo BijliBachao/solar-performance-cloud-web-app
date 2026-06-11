@@ -81,15 +81,18 @@ describe('classifyDeviceWrite', () => {
   })
 })
 
-// ─── updateDailyAggregates verdict fields ────────────────────────────
+// ─── updateDailyAggregates verdict fields (V1) ───────────────────────
 // C-1: the poller writes TODAY'S LIVE verdict (performance / health_score /
-// availability) again, but via the NEW current-vs-peer-median pipeline (the
-// SAME pure functions the settled-day job uses), so the live "today" value and
-// the overnight settled value are identical by construction. This keeps the
-// NOC "Today" donut alive intraday. The 01:30 PKT settled-day job authoritatively
-// re-finalizes the verdict once the day completes. When the day does NOT yet have
-// ≥ MIN_SUNUP_HOURS_FOR_DAILY_SCORE (2) sun-up hours of comparable current, the
-// verdict is not scoreable → performance / health_score are written as null.
+// raw_performance / data_completeness / availability) again, but via the V1
+// current-vs-peer-median pipeline (the SAME shared window/median/completeness
+// helper the settled-day job uses), so the live "today" value === the overnight
+// settled value by construction. This keeps the NOC "Today" donut alive intraday.
+// The 01:30 PKT settled-day job re-finalizes once the day completes.
+//
+// V1 (2026-06-11): scoring is gated to the fixed 8AM–4PM PKT window + a data-
+// completeness gate (60%), not the old sun-up-hours count. The live path gates
+// against expected-SO-FAR (12 readings × elapsed window-hours). A thin partial
+// day (logger gap) → insufficient_data → performance/health_score null.
 
 const mockPrisma = {
   string_measurements: { findMany: vi.fn() },
@@ -150,29 +153,33 @@ const configs = {
   panelCountByString: new Map<number, number>(),
 }
 
-function measurementsAtHours(hoursUtc: string[], power = 2000) {
-  // Two equal strings per hour → P2P should score both healthy when scoreable.
-  return hoursUtc.flatMap((h) => [1, 2].map((sn) => ({
-    string_number: sn,
-    voltage: 600,
-    current: power / 600,
-    power,
-    timestamp: new Date(h),
-  })))
+// Build a FULL hour of readings (12 × 5-min) for the given PKT hours, two equal
+// strings each. PKT hour h is at UTC (h-5); minutes 00..55 step 5. A full hour
+// contributes 12 to reading_count so the V1 completeness gate is satisfied.
+function fullHours(pktHours: number[], power = 2000, strings = [1, 2]) {
+  const rows: any[] = []
+  for (const ph of pktHours) {
+    for (let min = 0; min < 60; min += 5) {
+      for (const sn of strings) {
+        rows.push({
+          string_number: sn,
+          voltage: 600,
+          current: power / 600,
+          power,
+          timestamp: new Date(Date.UTC(2026, 5, 5, ph - 5, min, 0)),
+        })
+      }
+    }
+  }
+  return rows
 }
 
-// C-1: The poller writes today's LIVE verdict again, via the current-vs-peer-median
-// pipeline (the SAME pure functions the settled-day job uses). The verdict fields
-// are present in the upsert data object on EVERY cycle (so Prisma's partial UPDATE
-// refreshes today's live value); they carry a Decimal when the day is scoreable
-// (≥ MIN_SUNUP_HOURS_FOR_DAILY_SCORE = 2 sun-up hours of comparable current) and
-// null when it isn't. The 01:30 PKT settled-day job re-finalizes the finished day.
-//
-// Fixture: two equal strings, each current = power/600. At power=2000 each string
-// is ~3.33A, so the device-summed current per hour is ~6.67A — comfortably above
-// MIN_CURRENT_FOR_COMPARISON (1.0), making every populated hour a "sun-up" hour.
+// Fixture: at NOON_PKT (12:00 PKT), elapsed window-hours = 12-8 = 4, so expected-so-far
+// = 4 × 12 = 48 readings. A FULL window-hour contributes 12 readings per string.
+//  - 4 full hours = 48/48 = 100% complete → scoreable.
+//  - 2 full hours = 24/48 = 50% < 60% gate → insufficient_data → null.
 // Two equal strings → peer median == each string's current → performance == 100.
-describe('updateDailyAggregates — poller writes today\'s live verdict (current-based)', () => {
+describe('updateDailyAggregates — poller writes today\'s live verdict (V1 window/median/completeness)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useFakeTimers()
@@ -182,33 +189,32 @@ describe('updateDailyAggregates — poller writes today\'s live verdict (current
     vi.useRealTimers()
   })
 
-  it('not scoreable (1 sun-up hour < MIN 2) → performance/health_score null but present', async () => {
-    mockPrisma.string_measurements.findMany.mockResolvedValue(
-      measurementsAtHours(['2026-06-05T06:05:00Z']),
-    )
+  it('thin partial day (<60% of expected-so-far) → performance/health_score null but present', async () => {
+    // 2 full window-hours = 24 readings vs 48 expected-so-far = 50% < 60% gate.
+    mockPrisma.string_measurements.findMany.mockResolvedValue(fullHours([8, 9]))
     const { updateDailyAggregates } = await import('../poller-utils')
     await updateDailyAggregates('dev1', 'plant1', 2, configs, { model: null, max_strings: 2 })
 
     const upserts = mockPrisma.string_daily.upsert.mock.calls
     expect(upserts.length).toBe(2)
     for (const [args] of upserts) {
-      // Fields are present (live verdict is refreshed every cycle) but null —
-      // a single sun-up hour is below MIN_SUNUP_HOURS_FOR_DAILY_SCORE.
+      // Fields present (refreshed every cycle) but null — below the completeness gate.
       expect(args.update).toHaveProperty('health_score')
       expect(args.update).toHaveProperty('performance')
       expect(args.update.health_score).toBeNull()
       expect(args.update.performance).toBeNull()
-      // availability is still computed (1 sun-up hour, both producing → 100%)
+      expect(args.update.raw_performance).toBeNull()
+      // completeness still reported (50%) so the UI can show "Insufficient Data"
+      expect(Number(args.update.data_completeness)).toBe(50)
+      // availability still computed (2 window-hours, both producing → 100%)
       expect(Number(args.update.availability)).toBe(100)
-      // Data columns still written
       expect(Number(args.update.avg_power)).toBeGreaterThan(0)
     }
   })
 
-  it('scoreable (3 sun-up hours ≥ MIN 2) → writes the current-based verdict', async () => {
-    mockPrisma.string_measurements.findMany.mockResolvedValue(
-      measurementsAtHours(['2026-06-05T04:05:00Z', '2026-06-05T05:05:00Z', '2026-06-05T06:05:00Z']),
-    )
+  it('complete day (≥60% of expected-so-far) → writes the V1 current-based verdict', async () => {
+    // 4 full window-hours = 48 readings = 100% of expected-so-far.
+    mockPrisma.string_measurements.findMany.mockResolvedValue(fullHours([8, 9, 10, 11]))
     const { updateDailyAggregates } = await import('../poller-utils')
     await updateDailyAggregates('dev1', 'plant1', 2, configs, { model: null, max_strings: 2 })
 
@@ -216,26 +222,37 @@ describe('updateDailyAggregates — poller writes today\'s live verdict (current
     expect(upserts.length).toBe(2)
     for (const [args] of upserts) {
       // Two equal strings → each at its peer-group median → performance 100.
-      // health_score mirrors performance (current-based metric).
       expect(Number(args.update.performance)).toBe(100)
       expect(Number(args.update.health_score)).toBe(100)
+      expect(Number(args.update.raw_performance)).toBe(100)
+      expect(Number(args.update.data_completeness)).toBe(100)
       expect(Number(args.update.availability)).toBe(100)
-      // avg_* and energy_kwh are still written
       expect(Number(args.update.avg_power)).toBeGreaterThan(0)
     }
   })
 
-  it('an underperforming string scores below its healthy peers (current-based banding)', async () => {
+  it('readings OUTSIDE the 8AM–4PM PKT window are dropped from the verdict', async () => {
+    // 4 in-window full hours (scoreable) + a pre-window 7AM full hour at a wild
+    // current. If 7AM leaked in, the median-of-medians would shift; it must not.
+    const inWindow = fullHours([8, 9, 10, 11], 2000)
+    const preWindow = fullHours([7], 60000) // 7AM PKT, 100A/string — must be ignored
+    mockPrisma.string_measurements.findMany.mockResolvedValue([...preWindow, ...inWindow])
+    const { updateDailyAggregates } = await import('../poller-utils')
+    await updateDailyAggregates('dev1', 'plant1', 2, configs, { model: null, max_strings: 2 })
+
+    for (const [args] of mockPrisma.string_daily.upsert.mock.calls) {
+      // Still 100% (only the 4 in-window hours counted; both strings equal).
+      expect(Number(args.update.performance)).toBe(100)
+      expect(Number(args.update.data_completeness)).toBe(100)
+    }
+  })
+
+  it('an underperforming string scores below its healthy peers (V1 banding)', async () => {
     // Three healthy strings at 4000W (~6.67A) and one weak string at 2000W (~3.33A).
-    // Peer median over 4 strings = 6.67A; weak string = 3.33/6.67 ≈ 50% → critical.
-    const hours = ['2026-06-05T04:05:00Z', '2026-06-05T05:05:00Z', '2026-06-05T06:05:00Z']
-    const rows = hours.flatMap((h) =>
-      [1, 2, 3, 4].map((sn) => {
-        const power = sn === 4 ? 2000 : 4000
-        return { string_number: sn, voltage: 600, current: power / 600, power, timestamp: new Date(h) }
-      }),
-    )
-    mockPrisma.string_measurements.findMany.mockResolvedValue(rows)
+    // Peer median over 4 strings = 6.67A; weak string = 3.33/6.67 ≈ 50% → serious_fault.
+    const healthy = fullHours([8, 9, 10, 11], 4000, [1, 2, 3])
+    const weak = fullHours([8, 9, 10, 11], 2000, [4])
+    mockPrisma.string_measurements.findMany.mockResolvedValue([...healthy, ...weak])
     const { updateDailyAggregates } = await import('../poller-utils')
     await updateDailyAggregates('dev1', 'plant1', 4, configs, { model: null, max_strings: 4 })
 
@@ -243,24 +260,8 @@ describe('updateDailyAggregates — poller writes today\'s live verdict (current
     for (const [args] of mockPrisma.string_daily.upsert.mock.calls) {
       byStringNumber.set(args.create.string_number, args.update)
     }
-    // Healthy peers sit at 100; the weak string ~50.
     expect(Number(byStringNumber.get(1).performance)).toBe(100)
     expect(Number(byStringNumber.get(4).performance)).toBe(50)
     expect(Number(byStringNumber.get(4).health_score)).toBe(50)
-  })
-
-  it('night / near-zero readings (below comparison floor) → not scoreable → null', async () => {
-    // current = 5/600 ≈ 0.0083A per string; device sum ≈ 0.017A << MIN_CURRENT_FOR_COMPARISON.
-    mockPrisma.string_measurements.findMany.mockResolvedValue(
-      measurementsAtHours(['2026-06-05T03:05:00Z', '2026-06-05T04:05:00Z', '2026-06-05T05:05:00Z'], 5),
-    )
-    const { updateDailyAggregates } = await import('../poller-utils')
-    await updateDailyAggregates('dev1', 'plant1', 2, configs, { model: null, max_strings: 2 })
-
-    for (const [args] of mockPrisma.string_daily.upsert.mock.calls) {
-      expect(args.update).toHaveProperty('health_score')
-      expect(args.update.health_score).toBeNull()
-      expect(args.update.performance).toBeNull()
-    }
   })
 })

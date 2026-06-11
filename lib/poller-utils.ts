@@ -12,8 +12,11 @@ import {
 } from '@/lib/string-health'
 import { isDaylight, solarElevationDeg } from '@/lib/solar-geometry'
 import { scoreLiveSr, type LiveStringInput } from '@/lib/string-health-live'
-import { prepSettledDayInputs, type HourlyCurrentRow } from '@/lib/settled-day-performance'
-import { scoreStringPerformance, computeOperatingAvailability } from '@/lib/string-performance'
+import { buildPerfInputsFromHourly, type HourlyMedianRow } from '@/lib/settled-day-performance'
+import { scoreStringPerformance, computeOperatingAvailability, median } from '@/lib/string-performance'
+import {
+  PERF_WINDOW_START_HOUR_PKT, PERF_WINDOW_END_HOUR_PKT, PERF_EXPECTED_READINGS,
+} from '@/lib/string-health'
 
 /**
  * Persist per-device freshness signals (for connectivity status on the plant
@@ -728,12 +731,19 @@ export async function updateHourlyAggregates(
     const currents = filterActive(measurements.map((m) => Number(m.current)))
     const powers = measurements.map((m) => Number(m.power)).filter((p) => p > 0)
 
+    // V1: median-within-hour current + how many active readings landed in the hour.
+    // The settled/live daily metric is median-of-medians over these (8AM–4PM PKT),
+    // and completeness = Σ reading_count / 96. Median is over active readings (filterActive),
+    // matching avg_current's basis; reading_count counts ALL 5-min samples received so a
+    // dead string reporting ~0A is still 100% complete (and correctly flagged Dead).
     const data = {
       avg_voltage: new Decimal(avg(voltages).toFixed(2)),
       avg_current: new Decimal(avg(currents).toFixed(3)),
       avg_power: new Decimal(avg(powers).toFixed(2)),
       min_current: safeMin(currents) !== null ? new Decimal(safeMin(currents)!.toFixed(3)) : null,
       max_current: safeMax(currents) !== null ? new Decimal(safeMax(currents)!.toFixed(3)) : null,
+      median_current: currents.length > 0 ? new Decimal(median(currents).toFixed(3)) : null,
+      reading_count: measurements.length,
     }
 
     upserts.push(
@@ -807,25 +817,53 @@ export async function updateDailyAggregates(
     byString.set(m.string_number, group)
   }
 
-  // Today's LIVE verdict — current-vs-peer-median, computed the SAME way the
-  // settled-day job computes a finished day (so live-today === settled value).
-  // Built from today's raw measurements aggregated to hourly avg_current, mirroring
-  // string_hourly. The 01:30 PKT settled-day job authoritatively re-finalizes once
-  // the day completes. (Fixes the NOC today-donut going dark — final review C-1.)
-  const hourlyRows: HourlyCurrentRow[] = []
+  // Today's LIVE verdict — V1 current-vs-peer-median, computed via the SAME shared
+  // window/median/completeness helper the settled-day job uses (buildPerfInputsFromHourly),
+  // so live-today === the settled value once the day completes. Built from today's raw
+  // 5-min readings: per-hour MEDIAN current (not mean) + reading_count, restricted to the
+  // 8AM–4PM PKT window. Completeness is gated against expected-SO-FAR (12 readings ×
+  // elapsed window-hours, min 1 hour's worth) — early in the window a thin partial day
+  // is not punished as "insufficient". The 01:30 PKT settled-day job re-finalizes with the
+  // full-day denominator. (Keeps the NOC today-donut alive intraday — review C-1.)
+  const READINGS_PER_HOUR = PERF_EXPECTED_READINGS / (PERF_WINDOW_END_HOUR_PKT - PERF_WINDOW_START_HOUR_PKT)
+  const hourlyRows: HourlyMedianRow[] = []
   for (const [sn, ms] of byString) {
-    const hb = new Map<number, { sum: number; n: number }>()
+    // Per hour: median over ACTIVE readings (matches updateHourlyAggregates'
+    // filterActive basis) + reading_count of ALL received samples (spec §9:
+    // completeness counts readings received regardless of value). This makes the
+    // live-today median_current/reading_count identical to what the hourly
+    // aggregator persists, so live === settled once the day completes (review C-1).
+    const hb = new Map<number, { active: number[]; received: number }>()
     for (const m of ms) {
       const cur = Number(m.current)
-      if (!Number.isFinite(cur) || cur < 0) continue
+      if (!Number.isFinite(cur)) continue
       const hk = Math.floor(m.timestamp.getTime() / 3_600_000)
-      const b = hb.get(hk) ?? { sum: 0, n: 0 }
-      b.sum += cur; b.n += 1; hb.set(hk, b)
+      const e = hb.get(hk) ?? { active: [], received: 0 }
+      e.received += 1
+      if (isActive(cur)) e.active.push(cur)
+      hb.set(hk, e)
     }
-    for (const [hk, b] of hb) hourlyRows.push({ string_number: sn, hour: new Date(hk * 3_600_000), avg_current: b.sum / b.n })
+    for (const [hk, e] of hb) {
+      hourlyRows.push({
+        string_number: sn,
+        hour: new Date(hk * 3_600_000),
+        // no active readings → 0, matching the aggregator's NULL→0 that the
+        // settled path applies before buildPerfInputsFromHourly.
+        median_current: e.active.length > 0 ? median(e.active) : 0,
+        reading_count: e.received,
+      })
+    }
   }
-  const { perfInputs: todayPerfInputs, availability: todayAvail } =
-    prepSettledDayInputs(hourlyRows, { unused: unusedSet, peerExcluded: peerExcludedSet })
+  // Elapsed window-hours so far today (PKT). At/after 4PM the full 8h are elapsed;
+  // before 8AM none are (clamped to ≥1 hour so the denominator is never zero).
+  const nowPktHour = new Date(Date.now() + PKT_OFFSET_MS).getUTCHours()
+  const elapsedWindowHours = Math.min(
+    Math.max(nowPktHour - PERF_WINDOW_START_HOUR_PKT, 0),
+    PERF_WINDOW_END_HOUR_PKT - PERF_WINDOW_START_HOUR_PKT,
+  )
+  const expectedSoFar = Math.max(elapsedWindowHours, 1) * READINGS_PER_HOUR
+  const { perfInputs: todayPerfInputs, availability: todayAvail, completeness: todayCompleteness } =
+    buildPerfInputsFromHourly(hourlyRows, { unused: unusedSet, peerExcluded: peerExcludedSet }, expectedSoFar)
   const todayPerfByString = new Map(
     scoreStringPerformance(todayPerfInputs).map(r => [r.string_number, r] as const),
   )
@@ -859,6 +897,7 @@ export async function updateDailyAggregates(
     const perf = todayPerfByString.get(stringNumber)
     const av = todayAvail.get(stringNumber)
     const availPct = av ? computeOperatingAvailability(av.producingHours, av.sunUpHours) : null
+    const comp = todayCompleteness.get(stringNumber) ?? null
 
     const data = {
       avg_voltage: new Decimal(avg(voltages).toFixed(2)),
@@ -867,8 +906,10 @@ export async function updateDailyAggregates(
       min_current: safeMin(currents) !== null ? new Decimal(safeMin(currents)!.toFixed(3)) : null,
       max_current: safeMax(currents) !== null ? new Decimal(safeMax(currents)!.toFixed(3)) : null,
       energy_kwh: energyKwh > 0 ? new Decimal(energyKwh.toFixed(3)) : null,
-      performance: perf?.performance != null ? new Decimal(perf.performance.toFixed(2)) : null,
+      performance: perf?.performance != null ? new Decimal(perf.performance.toFixed(2)) : null, // DISPLAY ≤100
       health_score: perf?.performance != null ? new Decimal(perf.performance.toFixed(2)) : null,
+      raw_performance: perf?.raw_performance != null ? new Decimal(perf.raw_performance.toFixed(2)) : null,
+      data_completeness: comp != null ? new Decimal(comp.toFixed(2)) : null,
       availability: availPct != null ? new Decimal(availPct.toFixed(2)) : null,
     }
 

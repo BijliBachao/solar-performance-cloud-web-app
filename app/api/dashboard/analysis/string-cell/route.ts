@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest, requireOrganization, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
-import { prepSettledDayInputs, type HourlyCurrentRow } from '@/lib/settled-day-performance'
+import { prepSettledDayInputs, type HourlyMedianRow } from '@/lib/settled-day-performance'
 import { scoreStringPerformance, computeOperatingAvailability } from '@/lib/string-performance'
+import { perfBandToBackCompatStatus } from '@/lib/string-health'
 
 export async function GET(request: NextRequest) {
   try {
@@ -36,32 +37,44 @@ export async function GET(request: NextRequest) {
     const [hourly, cfgRows] = await Promise.all([
       prisma.string_hourly.findMany({
         where: { device_id: deviceId, hour: { gte: startUtc, lt: endUtc } },
-        select: { string_number: true, hour: true, avg_current: true }, orderBy: { hour: 'asc' },
+        select: { string_number: true, hour: true, avg_current: true, median_current: true, reading_count: true }, orderBy: { hour: 'asc' },
       }),
       prisma.string_configs.findMany({
-        where: { device_id: deviceId }, select: { string_number: true, is_used: true, exclude_from_peer_comparison: true },
+        where: { device_id: deviceId }, select: { string_number: true, is_used: true, exclude_from_peer_comparison: true, condition_tag: true },
       }),
     ])
-    const rows: HourlyCurrentRow[] = hourly.map(r => ({ string_number: r.string_number, hour: r.hour, avg_current: r.avg_current ? Number(r.avg_current) : 0 }))
+    // V1: score from median_current via the SAME shared helper as settled/live; keep
+    // avg_current only for the hourly sparkline display (back-compat).
+    const rows: HourlyMedianRow[] = hourly.map(r => ({
+      string_number: r.string_number,
+      hour: r.hour,
+      median_current: r.median_current != null ? Number(r.median_current) : (r.avg_current != null ? Number(r.avg_current) : 0),
+      reading_count: r.reading_count ?? null,
+    }))
     const unused = new Set(cfgRows.filter(c => c.is_used === false).map(c => c.string_number))
     const peerExcluded = new Set(cfgRows.filter(c => c.exclude_from_peer_comparison).map(c => c.string_number))
 
-    const { perfInputs, availability } = prepSettledDayInputs(rows, { unused, peerExcluded })
+    const { perfInputs, availability, completeness } = prepSettledDayInputs(rows, { unused, peerExcluded })
     const scored = scoreStringPerformance(perfInputs)
     const me = scored.find(s => s.string_number === stringNumber)
     const av = availability.get(stringNumber)
+    const myCfg = cfgRows.find(c => c.string_number === stringNumber)
 
     return NextResponse.json({
       device_id: deviceId, device_name: device.device_name, string_number: stringNumber, date,
-      status: me?.status ?? 'no_data',
+      status: me ? perfBandToBackCompatStatus(me.band) : 'no_data', // back-compat for StringCellDetail
+      band: me?.band ?? 'insufficient_data',
       performance: me?.performance ?? null,
+      raw_performance: me?.raw_performance ?? null,
       repr_current: perfInputs.find(p => p.string_number === stringNumber)?.repr_current ?? null,
       peer_median_current: me?.peer_median_current ?? null,
+      data_completeness: completeness.get(stringNumber) ?? null,
+      condition_tag: myCfg?.condition_tag ?? null,
       peers: perfInputs
-        .filter(p => p.is_used && !p.exclude_from_peer_comparison && p.repr_current != null)
+        .filter(p => p.is_used && !p.exclude_from_peer_comparison && !p.insufficient_data && p.repr_current != null)
         .map(p => ({ string_number: p.string_number, repr_current: p.repr_current }))
         .sort((a, b) => (a.repr_current as number) - (b.repr_current as number)),
-      hourly: rows.filter(r => r.string_number === stringNumber).map(r => ({ hour: r.hour, avg_current: r.avg_current })),
+      hourly: hourly.filter(r => r.string_number === stringNumber).map(r => ({ hour: r.hour, avg_current: r.avg_current != null ? Number(r.avg_current) : 0 })),
       availability: av ? { ...av, pct: computeOperatingAvailability(av.producingHours, av.sunUpHours) } : null,
     })
   } catch (error) {

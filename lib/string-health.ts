@@ -563,6 +563,26 @@ export function perfBandToDonutBucket(
   }
 }
 
+/**
+ * Back-compat: map a V1 PerfBand to the legacy CellStatus the string-cell drill-down
+ * (StringCellDetail.tsx) reads (healthy|warning|critical|no_data|peer_excluded|unused).
+ * Centralized here so the drill-down routes never re-derive band→status from numbers.
+ */
+export function perfBandToBackCompatStatus(
+  band: PerfBand,
+): 'healthy' | 'warning' | 'critical' | 'no_data' | 'peer_excluded' | 'unused' {
+  switch (band) {
+    case 'normal': return 'healthy'
+    case 'watch':
+    case 'underperforming': return 'warning'
+    case 'serious_fault':
+    case 'dead': return 'critical'
+    case 'insufficient_data': return 'no_data'
+    case 'unused': return 'unused'
+    case 'peer_excluded': return 'peer_excluded'
+  }
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Algorithm v2 primitives (pure functions; safe in hot loops)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
