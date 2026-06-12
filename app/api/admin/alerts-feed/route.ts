@@ -8,6 +8,7 @@ import {
 import { prisma } from '@/lib/prisma'
 import { serverError } from '@/lib/api-errors'
 import { VALID_SEVERITIES } from '@/lib/api-validation'
+import { PROVIDERS } from '@/lib/constants'
 
 /**
  * GET /api/admin/alerts-feed
@@ -49,6 +50,9 @@ export interface AlertsFeedResponse {
   total: number
   page: number
   pageSize: number
+  /** True when either source hit SOURCE_CAP — `total` then undercounts and
+   *  the oldest rows are unreachable by paging. UI should surface this. */
+  capped: boolean
 }
 
 export async function GET(request: NextRequest) {
@@ -78,6 +82,16 @@ export async function GET(request: NextRequest) {
     if (severity && !(VALID_SEVERITIES as readonly string[]).includes(severity)) {
       return NextResponse.json(
         { error: `severity must be one of: ${VALID_SEVERITIES.join(', ')}` },
+        { status: 400 },
+      )
+    }
+
+    // Same for provider — a typo used to silently return 0 rows + 200 OK.
+    // Use the canonical PROVIDERS set (csi is valid but absent from VALID_PROVIDERS).
+    const allowedProviders = Object.values(PROVIDERS) as string[]
+    if (provider && !allowedProviders.includes(provider)) {
+      return NextResponse.json(
+        { error: `provider must be one of: ${allowedProviders.join(', ')}` },
         { status: 400 },
       )
     }
@@ -214,7 +228,11 @@ export async function GET(request: NextRequest) {
     const start = (page - 1) * pageSize
     const items = merged.slice(start, start + pageSize)
 
-    const body: AlertsFeedResponse = { items, total, page, pageSize }
+    // Either source hitting the per-source cap means `total` undercounts and
+    // the oldest rows are unreachable by paging — flag it so the UI can say so.
+    const capped = systemRows.length >= SOURCE_CAP || vendorRows.length >= SOURCE_CAP
+
+    const body: AlertsFeedResponse = { items, total, page, pageSize, capped }
     return NextResponse.json(body)
   } catch (error) {
     if (error instanceof ApiAuthError) return createErrorResponse(error)

@@ -24,6 +24,7 @@ interface AlertsFeedResponse {
   total: number
   page: number
   pageSize: number
+  capped?: boolean
 }
 
 type Kind = 'all' | 'system' | 'vendor'
@@ -240,6 +241,13 @@ export default function AdminAlertsPage() {
             <button onClick={() => load(apiUrl, false)} className="text-xs font-semibold underline">
               Retry
             </button>
+          </div>
+        )}
+
+        {/* Capped notice — a source exceeded the 500-row pull; older rows hidden */}
+        {data?.capped && (
+          <div className="rounded-sm border border-amber-200 border-l-[3px] border-l-amber-500 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-800">
+            Showing the most recent matches — narrow the filters (provider, severity, search) to see older alerts.
           </div>
         )}
 

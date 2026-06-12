@@ -430,6 +430,11 @@ async function fetchSolisAlarms(client: SolisClient): Promise<void> {
         await prisma.vendor_alarms.upsert({
           where: { provider_vendor_alarm_id: { provider: PROVIDERS.SOLIS, vendor_alarm_id: vendorAlarmId } },
           update: {
+            // Refresh fields in case Solis later enriched a previously-blank
+            // message/advice or changed severity for the same alarm event.
+            severity,
+            message,
+            advice: alarm.advice?.trim() || null,
             ...(resolvedAt ? { resolved_at: resolvedAt } : {}),
           },
           create: {
@@ -456,25 +461,38 @@ async function fetchSolisAlarms(client: SolisClient): Promise<void> {
     // but no longer present-and-open in Solis's list has cleared (Solis
     // sometimes drops resolved alarms instead of flipping their state). The
     // windowStart guard prevents false-resolving alarms that aged out.
-    const openSolisAlarms = await prisma.vendor_alarms.findMany({
-      where: { provider: PROVIDERS.SOLIS, resolved_at: null, started_at: { gte: windowStart } },
-      select: { id: true, vendor_alarm_id: true },
-    })
-    const toResolve = openSolisAlarms.filter(a => !activeOpenIds.has(a.vendor_alarm_id))
-    if (toResolve.length > 0) {
-      await prisma.vendor_alarms.updateMany({
-        where: { id: { in: toResolve.map(a => a.id) } },
-        data: { resolved_at: new Date() },
+    //
+    // CRITICAL SAFETY GATE: only sweep when the fetch is trustworthy. An empty
+    // fetch (transient vendor glitch returning HTTP 200 + 0 rows) or one
+    // truncated at the pagination ceiling would mass-false-resolve real open
+    // alarms — and there is no re-open path, so a false resolve is permanent.
+    let resolvedCount = 0
+    const PAGINATION_CEILING = 2000
+    const fetchIsComplete = alarms.length > 0 && alarms.length < PAGINATION_CEILING
+    if (fetchIsComplete) {
+      const openSolisAlarms = await prisma.vendor_alarms.findMany({
+        where: { provider: PROVIDERS.SOLIS, resolved_at: null, started_at: { gte: windowStart } },
+        select: { id: true, vendor_alarm_id: true },
       })
+      const toResolve = openSolisAlarms.filter(a => !activeOpenIds.has(a.vendor_alarm_id))
+      if (toResolve.length > 0) {
+        await prisma.vendor_alarms.updateMany({
+          where: { id: { in: toResolve.map(a => a.id) } },
+          data: { resolved_at: new Date() },
+        })
+        resolvedCount = toResolve.length
+      }
+    } else if (alarms.length === 0) {
+      console.warn('[Solis] Empty alarm fetch — skipping diff-resolve to avoid mass false-resolves')
     }
 
     if (droppedUnknown > 0) {
       console.warn(`[Solis] ${droppedUnknown} alarm(s) skipped — device SN not in our DB`)
     }
-    if (alarms.length >= 2000) {
-      console.warn(`[Solis] alarm list hit the ${alarms.length}-row pagination ceiling — some alarms may be truncated`)
+    if (alarms.length >= PAGINATION_CEILING) {
+      console.warn(`[Solis] alarm list hit the ${alarms.length}-row pagination ceiling — diff-resolve skipped, some alarms may be truncated`)
     }
-    console.log(`[Solis] ${stored} alarms stored/updated, ${activeOpenIds.size} active, resolved ${toResolve.length}`)
+    console.log(`[Solis] ${stored} alarms stored/updated, ${activeOpenIds.size} active, resolved ${resolvedCount}`)
   } catch (error) {
     console.error('[Solis] Failed to fetch vendor alarms:', error)
   }

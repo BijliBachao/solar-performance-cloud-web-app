@@ -197,6 +197,19 @@ describe('GET /api/admin/alerts-feed', () => {
     expect(body.error).toMatch(/severity/i)
   })
 
+  it('rejects an invalid provider with 400', async () => {
+    const { res, body } = await invoke('?provider=soliss')
+    expect(res.status).toBe(400)
+    expect(body.error).toMatch(/provider/i)
+  })
+
+  it('accepts csi as a valid provider', async () => {
+    mockPrisma.vendor_alarms.findMany.mockResolvedValue([])
+    mockPrisma.alerts.findMany.mockResolvedValue([])
+    const { res } = await invoke('?provider=csi')
+    expect(res.status).toBe(200)
+  })
+
   it('resolved defaults to open-only (resolved_at: null on both queries)', async () => {
     await invoke()
     expect(mockPrisma.alerts.findMany.mock.calls[0][0].where.resolved_at).toBeNull()
@@ -247,5 +260,20 @@ describe('GET /api/admin/alerts-feed', () => {
     expect(res.status).toBe(200)
     expect(body.items).toEqual([])
     expect(body.total).toBe(0)
+  })
+
+  it('capped=false when neither source hits the per-source cap', async () => {
+    const { body } = await invoke()
+    expect(body.capped).toBe(false)
+  })
+
+  it('capped=true when a source hits SOURCE_CAP (500 rows)', async () => {
+    const big = Array.from({ length: 500 }, (_, i) => ({
+      id: i + 1, device_id: 'd1', plant_id: 'p1', string_number: 1, severity: 'INFO',
+      message: 'x', gap_percent: 0, created_at: minsAgo(i + 1), resolved_at: null,
+    }))
+    mockPrisma.alerts.findMany.mockResolvedValue(big)
+    const { body } = await invoke()
+    expect(body.capped).toBe(true)
   })
 })
