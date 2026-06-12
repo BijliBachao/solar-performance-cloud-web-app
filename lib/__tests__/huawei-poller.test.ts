@@ -68,7 +68,7 @@ describe('pollHuawei — degraded-path resilience', () => {
     huaweiClientMock.getDeviceList.mockResolvedValue([])
     huaweiClientMock.getPlantRealKpi.mockResolvedValue([])
     huaweiClientMock.getDeviceRealtimeData.mockResolvedValue([])
-    huaweiClientMock.getActiveAlarms.mockResolvedValue([])
+    huaweiClientMock.getActiveAlarms.mockResolvedValue({ alarms: [], complete: true })
 
     const { pollHuawei } = await import('@/lib/huawei-poller')
     await expect(pollHuawei()).resolves.toBeUndefined()
@@ -97,7 +97,7 @@ describe('pollHuawei — degraded-path resilience', () => {
         dataItemMap: { pv1_u: 650.5, pv1_i: 6.7, pv2_u: 648.2, pv2_i: 6.65, day_cap: 52.35 },
       },
     ])
-    huaweiClientMock.getActiveAlarms.mockResolvedValue([])
+    huaweiClientMock.getActiveAlarms.mockResolvedValue({ alarms: [], complete: true })
 
     mockPrisma.plants.findMany.mockResolvedValue([{ id: 'NE=1' }])
     mockPrisma.devices.findMany.mockResolvedValue([
@@ -114,7 +114,7 @@ describe('pollHuawei — degraded-path resilience', () => {
     huaweiClientMock.getPlantList.mockResolvedValue([])
     huaweiClientMock.getDeviceList.mockResolvedValue([])
     huaweiClientMock.getPlantRealKpi.mockResolvedValue([])
-    huaweiClientMock.getActiveAlarms.mockResolvedValue([])
+    huaweiClientMock.getActiveAlarms.mockResolvedValue({ alarms: [], complete: true })
     huaweiClientMock.getDeviceRealtimeData.mockResolvedValue([null])
 
     mockPrisma.devices.findMany.mockResolvedValue([
@@ -133,7 +133,7 @@ describe('pollHuawei — degraded-path resilience', () => {
     huaweiClientMock.getPlantList.mockResolvedValue([])
     huaweiClientMock.getDeviceList.mockResolvedValue([])
     huaweiClientMock.getPlantRealKpi.mockResolvedValue([])
-    huaweiClientMock.getActiveAlarms.mockResolvedValue([])
+    huaweiClientMock.getActiveAlarms.mockResolvedValue({ alarms: [], complete: true })
     huaweiClientMock.getDeviceRealtimeData.mockResolvedValue([
       { devId: '100', dataItemMap: { pv1_u: 600, pv1_i: 5, day_cap: 50 } },
     ])
@@ -168,7 +168,7 @@ describe('pollHuawei — degraded-path resilience', () => {
     huaweiClientMock.getPlantList.mockResolvedValue([])
     huaweiClientMock.getDeviceList.mockResolvedValue([])
     huaweiClientMock.getPlantRealKpi.mockResolvedValue([])
-    huaweiClientMock.getActiveAlarms.mockResolvedValue([])
+    huaweiClientMock.getActiveAlarms.mockResolvedValue({ alarms: [], complete: true })
     huaweiClientMock.getDeviceRealtimeData.mockResolvedValue([
       { devId: '100', dataItemMap: { pv1_u: 600, pv1_i: 5, pv2_u: 600, pv2_i: 5, day_cap: 50 } },
     ])

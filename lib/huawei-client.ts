@@ -70,10 +70,28 @@ export interface Alarm {
   alarmId: number
   alarmName: string
   devName: string
+  /** Stable device serial (esnCode). Not yet used for matching — devices.esnCode
+   *  isn't persisted — but carried through for diagnostics + future use. */
+  esnCode?: string
   stationCode: string
+  /** Normalized from the response field `lev` (1=critical…4=warning). */
   severity: number
   causeId: number
+  /** Human-readable cause + repair guidance shipped inline by FusionSolar. */
+  alarmCause?: string
+  repairSuggestion?: string
+  /** Huawei alarm status (1 = active/not-processed). */
+  status?: number
   raiseTime: number
+}
+
+/** Result of an alarm fetch. `complete` is false when any station batch
+ *  returned a malformed (non-array) list or hit the pagination ceiling — the
+ *  caller MUST NOT run its diff-resolve sweep on an incomplete fetch, or it
+ *  will mass-false-resolve every open alarm (there is no re-open path). */
+export interface AlarmFetchResult {
+  alarms: Alarm[]
+  complete: boolean
 }
 
 class HuaweiClient {
@@ -361,22 +379,65 @@ class HuaweiClient {
     }))
   }
 
-  async getActiveAlarms(stationCodes: string[]): Promise<Alarm[]> {
-    const data = await this.request('/thirdData/getAlarmList', {
-      stationCodes: stationCodes.join(','),
-      pageNo: 1,
-      pageSize: 100,
-      language: 'en_US',
-    })
-    return (data?.list || []).map((a: any) => ({
-      alarmId: a.alarmId,
-      alarmName: a.alarmName,
-      devName: a.devName,
-      stationCode: a.stationCode,
-      severity: a.severity,
-      causeId: a.causeId,
-      raiseTime: a.raiseTime,
-    }))
+  async getActiveAlarms(stationCodes: string[]): Promise<AlarmFetchResult> {
+    const BATCH = 100 // FusionSolar caps stationCodes at 100 plants per call
+    const PAGE_SIZE = 100
+    const MAX_PAGES = 50
+    // /thirdData/getAlarmList requires beginTime/endTime (ms epoch). It returns
+    // only ACTIVE alarms (FAQ 8.6), so the window only needs to bracket
+    // raiseTime — keep it very wide (3y back) so a long-standing active alarm
+    // is never hidden by the window.
+    const now = Date.now()
+    const beginTime = now - 1095 * 24 * 60 * 60 * 1000
+    const endTime = now + 24 * 60 * 60 * 1000
+
+    const alarms: Alarm[] = []
+    let complete = true
+
+    for (let i = 0; i < stationCodes.length; i += BATCH) {
+      const batch = stationCodes.slice(i, i + BATCH)
+      let pageNo = 1
+      while (pageNo <= MAX_PAGES) {
+        const data = await this.request('/thirdData/getAlarmList', {
+          stationCodes: batch.join(','),
+          beginTime,
+          endTime,
+          language: 'en_US',
+          pageNo,
+          pageSize: PAGE_SIZE,
+        })
+        const list = data?.list
+        if (!Array.isArray(list)) {
+          // Malformed/degenerate response — can't trust this batch for the
+          // resolve sweep. Flag incomplete and stop paging this batch.
+          complete = false
+          break
+        }
+        for (const a of list) {
+          if (!a) continue
+          alarms.push({
+            alarmId: a.alarmId,
+            alarmName: a.alarmName,
+            devName: a.devName,
+            esnCode: a.esnCode,
+            stationCode: a.stationCode,
+            // Response field is `lev` (1=critical…4=warning); older shapes
+            // used `severity`. Prefer lev, fall back to severity.
+            severity: a.lev ?? a.severity,
+            causeId: a.causeId,
+            alarmCause: a.alarmCause,
+            repairSuggestion: a.repairSuggestion,
+            status: a.status,
+            raiseTime: a.raiseTime,
+          })
+        }
+        if (list.length < PAGE_SIZE) break
+        pageNo++
+      }
+      if (pageNo > MAX_PAGES) complete = false // hit page ceiling → truncated
+    }
+
+    return { alarms, complete }
   }
 
   clearCache(): void {

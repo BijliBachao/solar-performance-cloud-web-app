@@ -163,3 +163,94 @@ describe('HuaweiClient.getPlantList — defensive parsing per Developer Guide §
     })
   })
 })
+
+describe('HuaweiClient.getActiveAlarms — active-snapshot fetch + completeness flag', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    process.env.HUAWEI_USERNAME = 'u'
+    process.env.HUAWEI_PASSWORD = 'p'
+  })
+  afterEach(() => vi.restoreAllMocks())
+
+  it('parses an alarm: severity from `lev`, cause/repair carried through, complete:true', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async () => loginResponse())
+      .mockImplementationOnce(async () =>
+        jsonResponse({
+          success: true,
+          failCode: 0,
+          data: {
+            list: [
+              {
+                alarmId: 2064, alarmName: 'String reverse connection', devName: 'INV-1',
+                esnCode: 'ESN123', stationCode: 'NE=1', lev: 1, causeId: 61,
+                alarmCause: 'A PV string is reversed', repairSuggestion: 'Check polarity',
+                status: 1, raiseTime: 1717500000000,
+              },
+            ],
+          },
+        })
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const HuaweiClient = (await import('@/lib/huawei-client')).default
+    const client = new HuaweiClient('https://example', 'u', 'p')
+    const { alarms, complete } = await client.getActiveAlarms(['NE=1'])
+
+    expect(complete).toBe(true)
+    expect(alarms).toHaveLength(1)
+    expect(alarms[0]).toMatchObject({
+      alarmId: 2064, severity: 1, causeId: 61, esnCode: 'ESN123',
+      alarmCause: 'A PV string is reversed', repairSuggestion: 'Check polarity', status: 1,
+    })
+  })
+
+  it('valid EMPTY list → complete:true (active-snapshot "all clear", so the caller resolves)', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async () => loginResponse())
+      .mockImplementationOnce(async () => jsonResponse({ success: true, failCode: 0, data: { list: [] } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const HuaweiClient = (await import('@/lib/huawei-client')).default
+    const client = new HuaweiClient('https://example', 'u', 'p')
+    const { alarms, complete } = await client.getActiveAlarms(['NE=1'])
+
+    expect(alarms).toEqual([])
+    expect(complete).toBe(true)
+  })
+
+  it('malformed list (data.list null) → complete:false (caller must NOT mass-resolve)', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async () => loginResponse())
+      .mockImplementationOnce(async () => jsonResponse({ success: true, failCode: 0, data: { list: null } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const HuaweiClient = (await import('@/lib/huawei-client')).default
+    const client = new HuaweiClient('https://example', 'u', 'p')
+    const { alarms, complete } = await client.getActiveAlarms(['NE=1'])
+
+    expect(alarms).toEqual([])
+    expect(complete).toBe(false)
+  })
+
+  it('sends the mandatory beginTime/endTime window in the request', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async () => loginResponse())
+      .mockImplementationOnce(async () => jsonResponse({ success: true, failCode: 0, data: { list: [] } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const HuaweiClient = (await import('@/lib/huawei-client')).default
+    const client = new HuaweiClient('https://example', 'u', 'p')
+    await client.getActiveAlarms(['NE=1'])
+
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body)
+    expect(typeof body.beginTime).toBe('number')
+    expect(typeof body.endTime).toBe('number')
+    expect(body.endTime).toBeGreaterThan(body.beginTime)
+    expect(body.stationCodes).toBe('NE=1')
+  })
+})

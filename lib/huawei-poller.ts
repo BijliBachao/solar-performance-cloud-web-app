@@ -428,9 +428,9 @@ async function fetchHuaweiAlarms(): Promise<void> {
     const deviceByName = new Map(huaweiDevices.map(d => [d.device_name, d]))
 
     const plantCodes = plants.map(p => p.id)
-    const activeAlarms = await huaweiClient.getActiveAlarms(plantCodes)
+    const { alarms: activeAlarms, complete } = await huaweiClient.getActiveAlarms(plantCodes)
 
-    // Huawei severity: 1=Critical, 2=Major, 3=Minor, 4=Warning
+    // Huawei severity (`lev`): 1=Critical, 2=Major, 3=Minor, 4=Warning.
     const mapSeverity = (sev: number): string => {
       if (sev <= 2) return 'CRITICAL'
       if (sev === 3) return 'WARNING'
@@ -438,26 +438,41 @@ async function fetchHuaweiAlarms(): Promise<void> {
     }
 
     const activeIds = new Set<string>()
+    let droppedUnknown = 0
 
     for (const alarm of activeAlarms) {
       const device = deviceByName.get(alarm.devName)
-      if (!device) continue
+      if (!device) { droppedUnknown++; continue } // device name not in our DB
 
       const vid = String(alarm.alarmId)
       activeIds.add(vid)
 
+      const severity = mapSeverity(alarm.severity)
+      const message = alarm.alarmName?.trim()
+        || (alarm.causeId ? `Huawei alarm ${alarm.causeId}` : 'Huawei device alarm')
+      // FusionSolar ships cause + repair guidance inline — surface as advice.
+      const adviceParts = [alarm.alarmCause?.trim(), alarm.repairSuggestion?.trim()].filter(Boolean)
+      const advice = adviceParts.length > 0 ? adviceParts.join(' — ') : null
+
       try {
         await prisma.vendor_alarms.upsert({
           where: { provider_vendor_alarm_id: { provider: PROVIDERS.HUAWEI, vendor_alarm_id: vid } },
-          update: {},
+          update: {
+            // Refresh in case Huawei enriched severity/name/advice for the same
+            // alarm — also self-heals rows previously mis-severitied as INFO.
+            severity,
+            message,
+            advice,
+          },
           create: {
             device_id: device.id,
             plant_id: device.plant_id,
             provider: PROVIDERS.HUAWEI,
             vendor_alarm_id: vid,
             alarm_code: alarm.causeId ? String(alarm.causeId) : null,
-            severity: mapSeverity(alarm.severity),
-            message: alarm.alarmName || 'Unknown alarm',
+            severity,
+            message,
+            advice,
             started_at: new Date(Number(alarm.raiseTime)),
             raw_data: alarm as any,
           },
@@ -467,20 +482,33 @@ async function fetchHuaweiAlarms(): Promise<void> {
       }
     }
 
-    // Resolve any open Huawei alarms no longer in the active list
-    const openHuaweiAlarms = await prisma.vendor_alarms.findMany({
-      where: { provider: PROVIDERS.HUAWEI, resolved_at: null },
-      select: { id: true, vendor_alarm_id: true },
-    })
-    const toResolve = openHuaweiAlarms.filter(a => !activeIds.has(a.vendor_alarm_id))
-    if (toResolve.length > 0) {
-      await prisma.vendor_alarms.updateMany({
-        where: { id: { in: toResolve.map(a => a.id) } },
-        data: { resolved_at: new Date() },
+    // Diff-resolve: Huawei's endpoint is an active-only snapshot (FAQ 8.6), so a
+    // VALID empty list legitimately means "all clear" and we SHOULD resolve.
+    // But only when the fetch was structurally COMPLETE — a malformed/truncated
+    // fetch must NOT drive resolution, or it mass-false-resolves every open
+    // alarm (there is no re-open path, so it would be permanent).
+    let resolvedCount = 0
+    if (complete) {
+      const openHuaweiAlarms = await prisma.vendor_alarms.findMany({
+        where: { provider: PROVIDERS.HUAWEI, resolved_at: null },
+        select: { id: true, vendor_alarm_id: true },
       })
+      const toResolve = openHuaweiAlarms.filter(a => !activeIds.has(a.vendor_alarm_id))
+      if (toResolve.length > 0) {
+        await prisma.vendor_alarms.updateMany({
+          where: { id: { in: toResolve.map(a => a.id) } },
+          data: { resolved_at: new Date() },
+        })
+        resolvedCount = toResolve.length
+      }
+    } else {
+      console.warn('[Huawei] Incomplete alarm fetch — skipping diff-resolve to avoid mass false-resolves')
     }
 
-    console.log(`[Huawei] ${activeAlarms.length} active alarms, resolved ${toResolve.length}`)
+    if (droppedUnknown > 0) {
+      console.warn(`[Huawei] ${droppedUnknown} alarm(s) skipped — device name not in our DB`)
+    }
+    console.log(`[Huawei] ${activeAlarms.length} active alarms, resolved ${resolvedCount}`)
   } catch (error) {
     console.error('[Huawei] Failed to fetch vendor alarms:', error)
   }
