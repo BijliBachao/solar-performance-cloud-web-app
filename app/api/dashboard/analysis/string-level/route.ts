@@ -153,7 +153,7 @@ export async function GET(request: NextRequest) {
     // ── Query string_daily ──────────────────────────────────────────
     const dailyData = await prisma.string_daily.findMany({
       where: { device_id: { in: deviceIds }, date: { gte: fromDate, lte: toDate } },
-      select: { device_id: true, plant_id: true, string_number: true, date: true, health_score: true, performance: true, availability: true, data_completeness: true, energy_kwh: true },
+      select: { device_id: true, plant_id: true, string_number: true, date: true, health_score: true, performance: true, data_completeness: true, energy_kwh: true },
       orderBy: [{ device_id: 'asc' }, { string_number: 'asc' }, { date: 'asc' }],
     })
 
@@ -168,7 +168,6 @@ export async function GET(request: NextRequest) {
 
     const scoreMap = new Map<string, number | null>()
     const perfMap = new Map<string, number | null>()
-    const availMap = new Map<string, number | null>()
     const complMap = new Map<string, number | null>()
     const energyMap = new Map<string, number>()
     for (const row of dailyData) {
@@ -181,7 +180,6 @@ export async function GET(request: NextRequest) {
       // worst string would vanish into 'no_data' instead of 'critical'.
       scoreMap.set(key, row.health_score == null ? null : Number(row.health_score))
       perfMap.set(key, row.performance == null ? null : Number(row.performance))
-      availMap.set(key, row.availability == null ? null : Number(row.availability))
       if (row.energy_kwh != null) energyMap.set(key, Number(row.energy_kwh))
     }
 

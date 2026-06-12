@@ -277,6 +277,19 @@ export function StringCellDetail({
                       ? Math.round((data.repr_current! / data.peer_median_current) * 100)
                       : null
                     const isCapped = trueRatioPct !== null && trueRatioPct !== data.performance
+                    // §6.6: the customer sees MIN(%,100) — never the uncapped >100 ratio
+                    // (that's admin/DB-side). When capped, a customer gets a clean
+                    // "at/above peers" line; admins see the full division incl. the raw %.
+                    if (isCapped && !isAdmin) {
+                      return (
+                        <p className="text-sm text-slate-700">
+                          PV{data.string_number} is producing{' '}
+                          <span className="font-bold text-emerald-700">at or above</span>{' '}
+                          its inverter peers — shown as{' '}
+                          <span className="font-bold font-mono text-emerald-700">{data.performance}%</span>.
+                        </p>
+                      )
+                    }
                     return (
                       <p className="text-sm text-slate-700 font-mono">
                         PV{data.string_number} current{' '}
@@ -288,7 +301,7 @@ export function StringCellDetail({
                         <span className="font-bold text-emerald-700">{trueRatioPct !== null ? `${trueRatioPct}%` : `${data.performance}%`}</span>
                         {isCapped && (
                           <span className="text-slate-500 font-normal ml-2 text-xs">
-                            (Performance capped at {data.performance}% for display)
+                            (capped at {data.performance}% for display)
                           </span>
                         )}
                       </p>

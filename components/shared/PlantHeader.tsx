@@ -335,13 +335,14 @@ export function PlantHeader({
               )}
             </div>
 
-            {/* Availability (IEC 61724-1) — strings online vs total */}
+            {/* Healthy strings — reporting + producing normally vs total. (Renamed
+                from "Availability": that metric isn't in the V1 contract — §12.) */}
             <div
               className="bg-white px-3 py-2.5"
-              title="Availability (IEC 61724-1): strings reporting and producing vs total expected"
+              title="Healthy strings: reporting and producing normally vs total expected"
             >
               <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">
-                Availability
+                Healthy Strings
               </div>
               {healthPct !== null && healthPct !== undefined ? (
                 <div className="flex items-baseline gap-1">

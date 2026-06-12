@@ -410,7 +410,7 @@ export default function AnalysisPage() {
         <div className="flex items-center gap-4 text-[10px] text-gray-500">
           <span>Column guide:</span>
           <span><strong className="text-blue-700">Perf</strong> — Performance: how well the string produces when working (low = shading / dirty panels)</span>
-          <span><strong className="text-violet-700">Avail</strong> — Availability: % of daylight hours the string was active (low = loose cable / connection fault)</span>
+          <span><strong className="text-sky-700">Data&nbsp;%</strong> — Data Completeness: how much of the 8 AM–4 PM window had data (low = logger gaps / comms; a data-quality measure, separate from performance)</span>
           <span><strong className="text-emerald-700">kWh</strong> — Total energy produced in the selected date range (trapezoidal integration, ±1.3% accuracy)</span>
           <span><strong className="text-gray-600">Daily cells</strong> — Performance: this string&apos;s current ÷ the inverter&apos;s median string current.</span>
         </div>

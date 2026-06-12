@@ -187,7 +187,6 @@ export async function GET(request: NextRequest) {
         date: true,
         health_score: true,
         performance: true,
-        availability: true,
         data_completeness: true,
         energy_kwh: true,
       },
@@ -210,7 +209,6 @@ export async function GET(request: NextRequest) {
     // Index daily data
     const scoreMap = new Map<string, number | null>()
     const perfMap = new Map<string, number | null>()
-    const availMap = new Map<string, number | null>()
     const complMap = new Map<string, number | null>()
     const energyMap = new Map<string, number>()
     for (const row of dailyData) {
@@ -223,7 +221,6 @@ export async function GET(request: NextRequest) {
       // worst string would vanish into 'no_data' instead of 'critical'.
       scoreMap.set(key, row.health_score == null ? null : Number(row.health_score))
       perfMap.set(key, row.performance == null ? null : Number(row.performance))
-      availMap.set(key, row.availability == null ? null : Number(row.availability))
       const eKey = `${row.device_id}:${row.string_number}:${dateStr}`
       if (row.energy_kwh != null) energyMap.set(eKey, Number(row.energy_kwh))
     }
