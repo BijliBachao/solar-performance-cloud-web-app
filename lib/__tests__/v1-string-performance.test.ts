@@ -136,13 +136,16 @@ describe('prepSettledDayInputs (V1 window + median + completeness)', () => {
     expect(out.perfInputs.find(p => p.string_number === 1)!.insufficient_data).toBe(false)
   })
 
-  it('LEGACY EXEMPTION: a day whose hours all have NULL reading_count is scored (historical rows)', () => {
-    const rows: HourlyMedianRow[] = [8, 9, 10].map(h => ({
+  it('hours-based gate ignores reading_count: a FULL-window day with NULL counts is scored', () => {
+    // The gate is hours-of-coverage now, so legacy rows with no reading_count score fine:
+    // 8 of 8 window hours present → scored regardless of counts. (A SHORT NULL-count day
+    // would gate on hours, exactly like a short real-count day — counts are irrelevant.)
+    const rows: HourlyMedianRow[] = [8, 9, 10, 11, 12, 13, 14, 15].map(h => ({
       string_number: 1, hour: hr(h), median_current: 5, reading_count: null as unknown as number,
     }))
     const out = prepSettledDayInputs(rows, { peerExcluded: new Set(), unused: new Set() })
     const s1 = out.perfInputs.find(p => p.string_number === 1)!
-    expect(s1.insufficient_data).toBe(false) // not gated — legacy
+    expect(s1.insufficient_data).toBe(false) // 8 of 8 hours → scored
     expect(s1.repr_current).toBe(5)
   })
 
@@ -192,23 +195,23 @@ describe('prepSettledDayInputs (V1 window + median + completeness)', () => {
   })
 })
 
-// ─── Task 8 helper: buildPerfInputsFromHourly with custom expected-readings (live-today pro-rata) ──
-describe('buildPerfInputsFromHourly (shared helper — live pro-rated completeness)', () => {
-  it('uses an expected-readings override (expected-so-far) for the completeness gate', () => {
-    // Only 2 window-hours elapsed so far → expectedReadings = 24; 24/24 = 100% complete.
+// ─── live-today pro-rata: buildPerfInputsFromHourly with custom expected-window-hours ──
+describe('buildPerfInputsFromHourly (shared helper — live pro-rated, hours-of-coverage)', () => {
+  it('uses an expected-window-hours override (live pro-rata) for the completeness gate', () => {
+    // Only 2 window-hours elapsed so far → expectedWindowHours = 2; 2 of 2 hours = 100% complete.
     const rows: HourlyMedianRow[] = [8, 9].map(h => ({
       string_number: 1, hour: hr(h), median_current: 5, reading_count: 12,
     }))
-    const out = buildPerfInputsFromHourly(rows, { unused: new Set(), peerExcluded: new Set() }, 24)
+    const out = buildPerfInputsFromHourly(rows, { unused: new Set(), peerExcluded: new Set() }, 2)
     expect(out.perfInputs.find(p => p.string_number === 1)!.insufficient_data).toBe(false)
     expect(out.completeness.get(1)).toBe(100)
   })
 
-  it('default expected = PERF_EXPECTED_READINGS (96) when no override given', () => {
+  it('default expected = the full 8-hour window when no override given', () => {
     const rows: HourlyMedianRow[] = [8, 9].map(h => ({
       string_number: 1, hour: hr(h), median_current: 5, reading_count: 12,
     }))
     const out = buildPerfInputsFromHourly(rows, { unused: new Set(), peerExcluded: new Set() })
-    expect(out.perfInputs.find(p => p.string_number === 1)!.insufficient_data).toBe(true) // 24/96 = 25%
+    expect(out.perfInputs.find(p => p.string_number === 1)!.insufficient_data).toBe(true) // 2 of 8 hours = 25%
   })
 })

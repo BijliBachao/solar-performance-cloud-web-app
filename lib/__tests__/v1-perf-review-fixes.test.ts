@@ -42,6 +42,17 @@ describe('I-1 completeness gate — legacy/transition exemption', () => {
     // 5 hours × 12 = 60 readings = 62.5% ≥ 60% → scored
     expect(insuf([8, 9, 10, 11, 12].map(h => hr(h, 5, 12)))).toBe(false)
   })
+
+  // The gate is now HOURS-OF-COVERAGE based (≥5 of 8 window hours), not raw readings/96,
+  // so it is cadence-proof — Reyyan §9's "roughly 5 of the 8 hours" intent.
+  it('CADENCE-PROOF: 8 window hours at ~10-min spacing (Huawei, ~6/hr = 48/day) is NOT gated', () => {
+    // The OLD 58-of-96-readings gate wrongly killed EVERY Huawei string (48 < 58).
+    // Hours-based: 8 of 8 hours covered → scored.
+    expect(insuf([8, 9, 10, 11, 12, 13, 14, 15].map(h => hr(h, 5, 6)))).toBe(false)
+  })
+  it('fewer than 5 of 8 window hours IS gated (a real data gap, any cadence)', () => {
+    expect(insuf([8, 9, 10, 11].map(h => hr(h, 5, 12)))).toBe(true) // 4 of 8 hours = 50% < 60%
+  })
 })
 
 describe('C-1 dead-hour handling — median_current 0 is included consistently', () => {

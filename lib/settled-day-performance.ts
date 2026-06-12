@@ -56,7 +56,7 @@ function pktHourOf(d: Date): number {
 export function buildPerfInputsFromHourly(
   rows: HourlyMedianRow[],
   cfg: { unused: Set<number>; peerExcluded: Set<number> },
-  expectedReadings: number = PERF_EXPECTED_READINGS,
+  expectedWindowHours: number = PERF_WINDOW_END_HOUR_PKT - PERF_WINDOW_START_HOUR_PKT,
 ): PreppedDay {
   const byString = new Map<
     number,
@@ -84,16 +84,23 @@ export function buildPerfInputsFromHourly(
 
   const availability = new Map<number, { producingHours: number; sunUpHours: number }>()
   const completeness = new Map<number, number>()
-  const denom = expectedReadings > 0 ? expectedReadings : PERF_EXPECTED_READINGS
+  // Reyyan §9's gate intent is "roughly 5 of the 8 hours". His literal "58 of 96
+  // readings" assumed 5-minute polling, which WRONGLY gated slower-cadence providers
+  // (measured on prod: Huawei polls ~10-min → ~48 readings/day but covers all 8 window
+  // hours → every Huawei string failed 58/96). So completeness + the gate are HOURS-OF-
+  // COVERAGE based: how many of the 8 window hours carry data. Cadence-proof, and it
+  // matches his stated "5 of 8 hours". Settled day = the full 8h (default); live-today =
+  // the hours elapsed so far (passed by the poller) so a mid-day string isn't gated for
+  // hours that haven't happened yet. reading_count stays stored as a finer signal but no
+  // longer drives the gate.
+  const denomHours = Math.max(expectedWindowHours, 1)
 
   const perfInputs: PerfStringInput[] = [...byString.keys()].map(sn => {
     const e = byString.get(sn)!
-    const ratio = e.reads / denom
-    // Gate ONLY when every window-hour carried a real reading_count. If any hour
-    // is legacy (NULL count), the ratio is untrustworthy → exempt (score it).
-    const insufficient = e.allReal ? ratio < PERF_COMPLETENESS_GATE : false
+    const coverage = Math.min(e.meds.length / denomHours, 1) // fraction of expected window hours with data
+    const insufficient = coverage < PERF_COMPLETENESS_GATE // < 0.60 ⇒ < 60% of the (expected) window hours
     availability.set(sn, { producingHours: e.producing, sunUpHours: e.meds.length })
-    completeness.set(sn, e.allReal ? Math.round(ratio * 100) : 100)
+    completeness.set(sn, Math.round(coverage * 100))
     return {
       string_number: sn,
       is_used: true,
@@ -111,7 +118,7 @@ export function prepSettledDayInputs(
   rows: HourlyMedianRow[],
   cfg: { unused: Set<number>; peerExcluded: Set<number> },
 ): PreppedDay {
-  return buildPerfInputsFromHourly(rows, cfg, PERF_EXPECTED_READINGS)
+  return buildPerfInputsFromHourly(rows, cfg) // settled = full window (default 8h)
 }
 
 /** I/O. Load string_hourly for (device, PKT date), compute, UPDATE string_daily.

@@ -864,9 +864,10 @@ export async function updateDailyAggregates(
     Math.max(nowPktHour - PERF_WINDOW_START_HOUR_PKT, 0),
     PERF_WINDOW_END_HOUR_PKT - PERF_WINDOW_START_HOUR_PKT,
   )
-  const expectedSoFar = Math.max(elapsedWindowHours, 1) * READINGS_PER_HOUR
+  // Hours-of-coverage gate (cadence-proof): pass the window hours ELAPSED so far today
+  // so a mid-day string is judged on hours that have actually happened, not the full 8.
   const { perfInputs: todayPerfInputs, availability: todayAvail, completeness: todayCompleteness } =
-    buildPerfInputsFromHourly(hourlyRows, { unused: unusedSet, peerExcluded: peerExcludedSet }, expectedSoFar)
+    buildPerfInputsFromHourly(hourlyRows, { unused: unusedSet, peerExcluded: peerExcludedSet }, Math.max(elapsedWindowHours, 1))
   const todayPerfByString = new Map(
     scoreStringPerformance(todayPerfInputs).map(r => [r.string_number, r] as const),
   )
