@@ -11,25 +11,31 @@ import {
 // These tests pin down every override interaction so the donut's 3-bucket
 // taxonomy stays honest under boundary inputs.
 
-describe('bucketDonutStatus — score-only path', () => {
-  // Unified bands (2026-06-10): Healthy >= 94, Abnormal [85, 94), Critical < 85.
-  it('score at or above the Healthy threshold (94) buckets Healthy', () => {
-    expect(bucketDonutStatus({ healthScore: 94, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('healthy')
+describe('bucketDonutStatus — score-only path (V1 bands)', () => {
+  // V1 band cutover (2026-06-11): the score path delegates to the central
+  // classifier (classifyStringPerformance → perfBandToDonutBucket). 3-arc
+  // rollup: Healthy = Normal (>=95); Abnormal = Watch + Underperforming
+  // [60, 95); Critical = Serious Fault + Dead (<60).
+  it('score at or above the Normal threshold (95) buckets Healthy', () => {
     expect(bucketDonutStatus({ healthScore: 95, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('healthy')
     expect(bucketDonutStatus({ healthScore: 100, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('healthy')
   })
 
-  it('score in [85, 94) buckets Abnormal — incl. 92 (was Healthy under 90/50)', () => {
-    expect(bucketDonutStatus({ healthScore: 85, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('abnormal')
-    expect(bucketDonutStatus({ healthScore: 92, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('abnormal')
-    expect(bucketDonutStatus({ healthScore: 93.99, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('abnormal')
+  it('score in [60, 95) buckets Abnormal — incl. 94 (Watch) and 70 (Underperforming)', () => {
+    expect(bucketDonutStatus({ healthScore: 94, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('abnormal') // Watch — was Healthy under 94/85
+    expect(bucketDonutStatus({ healthScore: 92, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('abnormal') // Watch
+    expect(bucketDonutStatus({ healthScore: 85, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('abnormal') // Watch edge
+    expect(bucketDonutStatus({ healthScore: 84.99, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('abnormal') // Underperforming — was Critical under 94/85
+    expect(bucketDonutStatus({ healthScore: 70, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('abnormal') // Underperforming — was Critical
+    expect(bucketDonutStatus({ healthScore: 60, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('abnormal') // Underperforming edge
   })
 
-  it('score below the Warning threshold (85) buckets Critical — incl. 70 (was Abnormal)', () => {
-    expect(bucketDonutStatus({ healthScore: 84.99, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('critical')
-    expect(bucketDonutStatus({ healthScore: 70, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('critical')
-    expect(bucketDonutStatus({ healthScore: 25, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('critical')
-    expect(bucketDonutStatus({ healthScore: 0, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('critical')
+  it('score below the Underperforming floor (60) buckets Critical — Serious Fault + Dead', () => {
+    expect(bucketDonutStatus({ healthScore: 59.99, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('critical')
+    expect(bucketDonutStatus({ healthScore: 40, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('critical') // Serious Fault
+    expect(bucketDonutStatus({ healthScore: 25, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('critical') // Serious Fault
+    expect(bucketDonutStatus({ healthScore: 9.99, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('critical') // Dead
+    expect(bucketDonutStatus({ healthScore: 0, isUsed: true, peerExcluded: false, openCircuit: false })).toBe('critical') // Dead
   })
 })
 
@@ -79,16 +85,16 @@ describe('aggregateForDonut — counts the right things', () => {
     expect(out.excluded).toEqual({ unused: 0, nonStandard: 0 })
   })
 
-  it('sums Healthy / Abnormal / Critical across mixed inputs (94/85 bands)', () => {
+  it('sums Healthy / Abnormal / Critical across mixed inputs (V1 bands)', () => {
     const strings: DonutInput[] = [
-      { healthScore: 95, isUsed: true, peerExcluded: false, openCircuit: false }, // healthy (>=94)
-      { healthScore: 92, isUsed: true, peerExcluded: false, openCircuit: false }, // abnormal [85,94)
-      { healthScore: 70, isUsed: true, peerExcluded: false, openCircuit: false }, // critical (<85)
-      { healthScore: 40, isUsed: true, peerExcluded: false, openCircuit: false }, // critical
+      { healthScore: 95, isUsed: true, peerExcluded: false, openCircuit: false }, // healthy (Normal >=95)
+      { healthScore: 92, isUsed: true, peerExcluded: false, openCircuit: false }, // abnormal (Watch [85,95))
+      { healthScore: 70, isUsed: true, peerExcluded: false, openCircuit: false }, // abnormal (Underperforming [60,85))
+      { healthScore: 40, isUsed: true, peerExcluded: false, openCircuit: false }, // critical (Serious Fault <60)
     ]
     const out = aggregateForDonut(strings)
     expect(out.totalStrings).toBe(4)
-    expect(out.counts).toEqual({ healthy: 1, abnormal: 1, critical: 2, noData: 0 })
+    expect(out.counts).toEqual({ healthy: 1, abnormal: 2, critical: 1, noData: 0 })
   })
 
   it('excludes is_used=false from totals and surfaces them under excluded.unused', () => {
@@ -118,7 +124,7 @@ describe('aggregateForDonut — counts the right things', () => {
   it('applies OPEN_CIRCUIT override and tracks it under breakdown.critical.openCircuit', () => {
     const strings: DonutInput[] = [
       { healthScore: 95, isUsed: true, peerExcluded: false, openCircuit: true }, // overridden to critical
-      { healthScore: 40, isUsed: true, peerExcluded: false, openCircuit: false }, // critical by score
+      { healthScore: 40, isUsed: true, peerExcluded: false, openCircuit: false }, // critical by score (Serious Fault <60)
     ]
     const out = aggregateForDonut(strings)
     expect(out.counts.critical).toBe(2)
@@ -131,7 +137,7 @@ describe('aggregateForDonut — counts the right things', () => {
       { healthScore: 95, isUsed: true, peerExcluded: false, openCircuit: false },
       { healthScore: null, isUsed: true, peerExcluded: false, openCircuit: false },
       { healthScore: null, isUsed: true, peerExcluded: false, openCircuit: false },
-      { healthScore: 90, isUsed: true, peerExcluded: false, openCircuit: false }, // abnormal by score [85,94)
+      { healthScore: 90, isUsed: true, peerExcluded: false, openCircuit: false }, // abnormal by score (Watch [85,95))
     ]
     const out = aggregateForDonut(strings)
     expect(out.counts.abnormal).toBe(3)

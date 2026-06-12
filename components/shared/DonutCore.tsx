@@ -85,6 +85,16 @@ const BUCKET_LABEL: Record<DonutBucket, string> = {
   critical: 'Critical',
 }
 
+// V1 band cutover: the 3 summary arcs roll up the 5 per-string cell bands.
+// Surfaced in the tooltip so the donut and the /analysis cells stay reconciled:
+// Healthy = Normal; Abnormal = Watch + Underperforming (+ no-data); Critical =
+// Serious Fault + Dead. The cells show all 5 as 5 colours; the donut summarises.
+const BUCKET_ROLLUP: Record<DonutBucket, string> = {
+  healthy: 'Normal (≥95%)',
+  abnormal: 'Watch + Underperforming (60–94%) + no-data',
+  critical: 'Serious Fault + Dead (<60%)',
+}
+
 // ─── Tooltip ─────────────────────────────────────────────────────────
 
 interface SegmentPayload {
@@ -122,6 +132,10 @@ function DonutTooltip({ active, payload }: { active?: boolean; payload?: Array<{
     return null
   })()
 
+  // V1 rollup explainer: the 3 arcs summarise the 5 cell bands. This keeps the
+  // donut (summary) and the /analysis cells (5 colours) reconciled in the UI.
+  const rollup = BUCKET_ROLLUP[p.key]
+
   return (
     <div
       className="rounded-md border border-slate-200 px-3 py-2 text-xs pointer-events-none"
@@ -143,6 +157,9 @@ function DonutTooltip({ active, payload }: { active?: boolean; payload?: Array<{
       </div>
       {detail && (
         <div className="text-[10px] text-slate-500 mt-0.5 font-mono">{detail}</div>
+      )}
+      {rollup && (
+        <div className="text-[10px] text-slate-400 mt-1 border-t border-slate-100 pt-1">{rollup}</div>
       )}
     </div>
   )

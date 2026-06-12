@@ -95,19 +95,19 @@ describe('loadPlantDonutPrevDay', () => {
     expect(interpolated.some((v: any) => v instanceof Date && v.toISOString() === '2026-05-23T00:00:00.000Z')).toBe(true)
   })
 
-  it('returns counts derived from rows (typical happy path, 94/85 bands)', async () => {
+  it('returns counts derived from rows (typical happy path, V1 bands)', async () => {
     mockPrevDay([
-      { device_id: 'd1', string_number: 1, health_score: new Decimal('95'),   is_used: true,  exclude_from_peer_comparison: false }, // healthy (>=94)
-      { device_id: 'd1', string_number: 2, health_score: new Decimal('92'),   is_used: true,  exclude_from_peer_comparison: false }, // abnormal [85,94)
-      { device_id: 'd1', string_number: 3, health_score: new Decimal('70'),   is_used: true,  exclude_from_peer_comparison: false }, // critical (<85)
-      { device_id: 'd1', string_number: 4, health_score: new Decimal('40'),   is_used: true,  exclude_from_peer_comparison: false }, // critical
+      { device_id: 'd1', string_number: 1, health_score: new Decimal('95'),   is_used: true,  exclude_from_peer_comparison: false }, // healthy (Normal >=95)
+      { device_id: 'd1', string_number: 2, health_score: new Decimal('92'),   is_used: true,  exclude_from_peer_comparison: false }, // abnormal (Watch [85,95))
+      { device_id: 'd1', string_number: 3, health_score: new Decimal('70'),   is_used: true,  exclude_from_peer_comparison: false }, // abnormal (Underperforming [60,85))
+      { device_id: 'd1', string_number: 4, health_score: new Decimal('40'),   is_used: true,  exclude_from_peer_comparison: false }, // critical (Serious Fault <60)
     ])
     const { loadPlantDonutPrevDay } = await import('@/lib/donut-data-loader')
 
     const result = await loadPlantDonutPrevDay('plantX')
 
     expect(result.totalStrings).toBe(4)
-    expect(result.counts).toEqual({ healthy: 1, abnormal: 1, critical: 2, noData: 0 })
+    expect(result.counts).toEqual({ healthy: 1, abnormal: 2, critical: 1, noData: 0 })
   })
 
   it('treats NULL health_score as no-data → Abnormal (override rule #4)', async () => {
@@ -182,7 +182,7 @@ describe('loadPlantDonutPrevDay', () => {
 
     const result = await loadPlantDonutPrevDay('plantX')
 
-    // 89.999 is in [85, 94) so should bucket Abnormal (boundary test)
+    // 89.999 is in [85, 95) (Watch) so should bucket Abnormal (boundary test)
     expect(result.counts.abnormal).toBe(1)
   })
 })

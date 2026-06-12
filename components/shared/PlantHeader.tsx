@@ -11,9 +11,9 @@ import {
   statusKeyFromPlantOp,
   plantHealthLabel,
   providerBadge,
+  gradeFromScore,
 } from '@/lib/design-tokens'
 import {
-  HEALTH_HEALTHY, HEALTH_WARNING,
   PLANT_OP_LABEL, type PlantOpStatus,
 } from '@/lib/string-health'
 import { Sparkline } from './Sparkline'
@@ -61,11 +61,16 @@ function formatAgo(d: string | null) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+// Plant-level health % via the central V1 grade (gradeFromScore) so the header
+// colour matches the per-string cells, the donut, and the NOC cutpoints.
 function healthColor(pct: number | null | undefined): string {
   if (pct === null || pct === undefined) return 'text-slate-400'
-  if (pct >= HEALTH_HEALTHY) return 'text-emerald-700'
-  if (pct >= HEALTH_WARNING) return 'text-amber-700'
-  return 'text-red-700'
+  switch (gradeFromScore(pct)) {
+    case 'healthy': return 'text-emerald-700'
+    case 'warning': return 'text-amber-700'
+    case 'critical': return 'text-red-700'
+    default: return 'text-slate-400'
+  }
 }
 
 function formatEnergy(kwh: number): string {

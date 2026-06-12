@@ -16,8 +16,9 @@
 import {
   PLANT_HEALTH_HEALTHY,
   PLANT_HEALTH_FAULTY,
-  HEALTH_HEALTHY,
-  HEALTH_WARNING,
+  classifyStringPerformance,
+  perfBandToDonutBucket,
+  type PerfBand,
   type StringStatus,
   type AlertSeverity,
   type ConnectivityStatus,
@@ -224,11 +225,111 @@ export function plantHealthLabel(state: number | null): string {
   return 'Disconnected'
 }
 
-// ━━━ HEALTH GRADE STYLES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// For daily health scores (0–100), heatmaps, monthly reports, performance cells.
-// Unified to the 3 donut bands (2026-06-10): >=94 healthy (green), >=85 warning
-// (orange), <85 critical (single red). The critical band is ONE red — matching
-// the /analysis Color guide's 3-band legend exactly (no severe/dead sub-shades).
+// ━━━ V1 PERFORMANCE-BAND CELL STYLES (5 colours) ━━━━━━━━━━━━━━━━
+// THE central 5-band → Tailwind map for per-string DAILY-score cells
+// (/analysis daily cells, perf/avail columns, PerformanceCell, monthly report).
+// Cells show all 5 V1 bands as 5 distinct colours; the donut + NOC roll these
+// up to 3 arcs via perfBandToDonutBucket — but BOTH derive from the ONE
+// classifier (classifyStringPerformance), so a cell colour and its donut arc
+// can never disagree. Band cutpoints live in string-health.ts (95/85/60/10).
+//
+//   normal           → green   (emerald)
+//   watch            → amber/yellow
+//   underperforming  → orange
+//   serious_fault    → red
+//   dead             → dark/grey (slate-800)
+//   insufficient_data→ muted grey (no score)
+//   unused/peer_excluded → handled by callers (rendered blank / chip), no cell wash
+
+export interface PerfBandStyle {
+  /** text colour for the value (used by perf/avail metric cells + status text) */
+  fg: string
+  /** background wash for a coloured table cell */
+  bg: string
+  /** combined cell className (bg + text + weight) for the daily-score cells.
+   *  Empty string for 'normal' so a green cell reads as the plain/clean default. */
+  cell: string
+  /** dot indicator (segmented bars, legends) */
+  dot: string
+  label: string
+}
+
+export const PERF_BAND_STYLES: Record<PerfBand, PerfBandStyle> = {
+  normal: {
+    fg: 'text-emerald-600 font-medium',
+    bg: 'bg-emerald-50',
+    cell: '', // clean default — a healthy string needs no wash
+    dot: 'bg-emerald-500',
+    label: 'Normal',
+  },
+  watch: {
+    fg: 'text-yellow-700 font-semibold',
+    bg: 'bg-yellow-100',
+    cell: 'bg-yellow-100 text-yellow-900 font-bold',
+    dot: 'bg-yellow-400',
+    label: 'Watch',
+  },
+  underperforming: {
+    fg: 'text-orange-700 font-semibold',
+    bg: 'bg-orange-100',
+    cell: 'bg-orange-200 text-orange-900 font-bold',
+    dot: 'bg-orange-500',
+    label: 'Underperforming',
+  },
+  serious_fault: {
+    fg: 'text-red-700 font-bold',
+    bg: 'bg-red-50',
+    cell: 'bg-red-200 text-red-900 font-bold',
+    dot: 'bg-red-500',
+    label: 'Serious Fault',
+  },
+  dead: {
+    fg: 'text-slate-100 font-bold',
+    bg: 'bg-slate-800',
+    cell: 'bg-slate-800 text-slate-100 font-bold',
+    dot: 'bg-slate-800',
+    label: 'Dead',
+  },
+  insufficient_data: {
+    fg: 'text-gray-400',
+    bg: 'bg-gray-100',
+    cell: 'bg-gray-100 text-gray-400',
+    dot: 'bg-gray-300',
+    label: 'No data',
+  },
+  unused: {
+    fg: 'text-gray-300',
+    bg: 'bg-gray-50',
+    cell: 'bg-gray-50 text-gray-300',
+    dot: 'bg-gray-200',
+    label: 'Unused',
+  },
+  peer_excluded: {
+    fg: 'text-indigo-700',
+    bg: 'bg-indigo-50',
+    cell: 'bg-indigo-50 text-indigo-700',
+    dot: 'bg-indigo-500',
+    label: 'Non-standard',
+  },
+}
+
+/** Convenience: a daily score (capped %) → its V1 band style. Wraps the central
+ *  classifier so callers never re-derive band→colour from raw numbers. A null
+ *  score (or null overall) lands on insufficient_data → muted grey. */
+export function perfBandStyleFromScore(score: number | null | undefined): PerfBandStyle {
+  const band = classifyStringPerformance(score ?? null, {
+    isUsed: true,
+    peerExcluded: false,
+    insufficientData: false,
+  })
+  return PERF_BAND_STYLES[band]
+}
+
+// ━━━ HEALTH GRADE STYLES (3-band rollup) ━━━━━━━━━━━━━━━━━━━━━━━━
+// For PLANT-LEVEL aggregate health % and 3-band rollup surfaces (heatmaps,
+// monthly summary headers). Derived from the SAME classifier as the cells via
+// the donut rollup, so the cutpoints move in lockstep with the 5-band cells:
+//   normal→healthy, watch+underperforming→warning, serious+dead→critical.
 
 export type HealthGrade =
   | 'healthy'
@@ -250,12 +351,19 @@ export const HEALTH_GRADE_STYLES: Record<HealthGrade, HealthGradeStyle> = {
 }
 
 export function gradeFromScore(score: number | null): HealthGrade {
-  if (score === null || score === undefined) return 'no-data'
-  if (score >= HEALTH_HEALTHY) return 'healthy'
-  if (score >= HEALTH_WARNING) return 'warning'
-  // Everything below HEALTH_WARNING is a single "critical" — one red, mirroring
-  // the donut's red slice and the 3-band Color guide.
-  return 'critical'
+  const donut = perfBandToDonutBucket(
+    classifyStringPerformance(score ?? null, {
+      isUsed: true,
+      peerExcluded: false,
+      insufficientData: false,
+    }),
+  )
+  switch (donut) {
+    case 'healthy': return 'healthy'
+    case 'abnormal': return 'warning'
+    case 'critical': return 'critical'
+    default: return 'no-data'
+  }
 }
 
 // ━━━ PROVIDER BADGE STYLES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

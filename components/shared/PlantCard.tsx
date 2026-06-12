@@ -7,11 +7,8 @@ import {
   statusKeyFromPlantHealth,
   plantHealthLabel,
   providerBadge,
+  gradeFromScore,
 } from '@/lib/design-tokens'
-import {
-  HEALTH_HEALTHY,
-  HEALTH_WARNING,
-} from '@/lib/string-health'
 import { Sparkline } from './Sparkline'
 
 /**
@@ -50,12 +47,17 @@ const LEFT_ACCENT: Record<string, string> = {
   info: 'bg-blue-500',
 }
 
-// 3 unified bands mirroring the donut AND the Color guide: green >=94,
-// amber >=85, single red <85 (one critical shade — no severe/dead split).
+// Plant-level health % rolls up to the 3-band grade via the central V1
+// classifier (gradeFromScore) so the bar's cutpoints move in lockstep with the
+// per-string cells, the donut, and the NOC. healthy=green / warning=amber /
+// critical=red (no-data → muted slate).
 function healthBarColor(percent: number): string {
-  if (percent >= HEALTH_HEALTHY) return 'bg-emerald-500'
-  if (percent >= HEALTH_WARNING) return 'bg-amber-500'
-  return 'bg-red-500'
+  switch (gradeFromScore(percent)) {
+    case 'healthy': return 'bg-emerald-500'
+    case 'warning': return 'bg-amber-500'
+    case 'critical': return 'bg-red-500'
+    default: return 'bg-slate-300'
+  }
 }
 
 export function PlantCard({ plant, basePath = '/dashboard/plants' }: PlantCardProps) {

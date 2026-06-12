@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
 import { requirePlantAccess } from '@/lib/api-access'
 import { prisma } from '@/lib/prisma'
-import { isActive, ACTIVE_CURRENT_THRESHOLD, HEALTH_HEALTHY, HEALTH_WARNING } from '@/lib/string-health'
+import { isActive, ACTIVE_CURRENT_THRESHOLD, bucketHealthScore } from '@/lib/string-health'
 
 interface Diagnosis {
   issue: string
@@ -133,8 +133,13 @@ function diagnoseString(
     return null
   }
 
-  // Critical - below 50% health
-  if (avgHealthScore < HEALTH_WARNING) {
+  // V1 band cutover: critical/warning derive from the central classifier (via
+  // bucketHealthScore) so the diagnosis severity matches the /analysis cells,
+  // the donut, and the NOC. critical = serious_fault + dead (score < 60).
+  const band = bucketHealthScore(avgHealthScore)
+
+  // Critical - serious_fault/dead band
+  if (band === 'critical') {
     return {
       issue: 'Severe underperformance',
       likely_cause: 'Faulty panel or major shading',
@@ -143,8 +148,8 @@ function diagnoseString(
     }
   }
 
-  // Warning - below 75% health
-  if (avgHealthScore < HEALTH_HEALTHY) {
+  // Warning - watch/underperforming band
+  if (band === 'warning') {
     if (trend === 'declining') {
       return {
         issue: 'Gradual decline',
@@ -169,17 +174,10 @@ function diagnoseString(
     }
   }
 
-  // Info - below 90% health (slight underperformance)
-  if (avgHealthScore < 90) {
-    return {
-      issue: 'Slight underperformance',
-      likely_cause: 'Minor dust or normal variance',
-      action: 'Monitor trend',
-      severity: 'info'
-    }
-  }
-
-  return null // Healthy (>= HEALTH_HEALTHY)
+  // band === 'healthy' here (score ≥ PERF_NORMAL): the V1 'normal' band. Any
+  // score below it is already 'warning'/'critical' above, so there is no
+  // separate slight-underperformance tier — a healthy string needs no diagnosis.
+  return null // Healthy (V1 'normal' band)
 }
 
 function calculateTrend(
@@ -420,11 +418,12 @@ export async function GET(
       ? activeStrings.reduce((sum, s) => sum + s.avg_current, 0) / activeStrings.length
       : 0
 
-    // Calculate summary
+    // Calculate summary — V1 bands via the central classifier (bucketHealthScore)
+    // so these tallies match the /analysis summary, the donut, and the NOC.
     const summary = {
-      healthy_strings: stringHealthData.filter(s => s.avg_health_score >= HEALTH_HEALTHY && s.trend !== 'offline').length,
-      warning_strings: stringHealthData.filter(s => s.avg_health_score >= HEALTH_WARNING && s.avg_health_score < HEALTH_HEALTHY).length,
-      critical_strings: stringHealthData.filter(s => s.avg_health_score > 0 && s.avg_health_score < HEALTH_WARNING).length,
+      healthy_strings: stringHealthData.filter(s => bucketHealthScore(s.avg_health_score) === 'healthy' && s.trend !== 'offline').length,
+      warning_strings: stringHealthData.filter(s => bucketHealthScore(s.avg_health_score) === 'warning').length,
+      critical_strings: stringHealthData.filter(s => s.avg_health_score > 0 && bucketHealthScore(s.avg_health_score) === 'critical').length,
       offline_strings: stringHealthData.filter(s => s.trend === 'offline' || s.avg_current < ACTIVE_CURRENT_THRESHOLD).length
     }
 

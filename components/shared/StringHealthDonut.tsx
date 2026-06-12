@@ -227,6 +227,11 @@ export function StringHealthDonut({ plantCode, initialMode }: StringHealthDonutP
 
       {/* Footnotes — informational only */}
       <div className="mt-4 pt-3 border-t border-slate-100 space-y-1">
+        {/* V1 rollup legend: the 3 arcs summarise the 5 per-string cell bands
+            shown on /analysis, so the donut and the cells always reconcile. */}
+        <p className="text-[10px] text-slate-400">
+          Healthy = Normal · Abnormal = Watch + Underperforming (+ no-data) · Critical = Serious Fault + Dead
+        </p>
         {(data.excluded.unused + data.excluded.nonStandard) > 0 && (
           <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
             <Info className="w-3 h-3 text-slate-400" strokeWidth={2} />

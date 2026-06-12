@@ -1,17 +1,16 @@
 import { cn } from '@/lib/utils'
-import { HEALTH_HEALTHY, HEALTH_WARNING } from '@/lib/string-health'
+import { perfBandStyleFromScore } from '@/lib/design-tokens'
 
 interface PerformanceCellProps {
   score: number | null
 }
 
-// 3 unified bands mirroring the donut AND the Color guide: green >=94,
-// orange >=85, single red <85 (one critical shade — no severe/dead split).
+// 5 V1 bands as 5 colours, via the central design-tokens map keyed off
+// classifyStringPerformance: Normal=green (clean), Watch=yellow,
+// Underperforming=orange, Serious Fault=red, Dead=dark/grey, no-data=muted.
+// The donut/NOC roll the same classifier up to 3 arcs — ONE source of truth.
 function getCellStyle(score: number | null): string {
-  if (score === null || score === undefined) return 'bg-gray-100 text-gray-400'
-  if (score >= HEALTH_HEALTHY) return ''
-  if (score >= HEALTH_WARNING) return 'bg-orange-200 text-orange-900 font-bold'
-  return 'bg-red-200 text-red-900 font-bold'
+  return perfBandStyleFromScore(score).cell
 }
 
 function formatScore(score: number | null): string {

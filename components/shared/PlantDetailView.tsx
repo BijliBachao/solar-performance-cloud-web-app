@@ -9,8 +9,6 @@ import {
   type PlantOpStatus,
   STANDBY_POWER_FLOOR_KW,
   classifyPlantLive,
-  HEALTH_HEALTHY,
-  HEALTH_WARNING,
   MAX_STRING_CURRENT_A,
   MAX_STRING_POWER_W,
 } from '@/lib/string-health'

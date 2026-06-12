@@ -88,24 +88,29 @@ describe('bucketSrScore', () => {
   })
 })
 
-describe('Live Last-3h donut ↔ canonical SR bucketing equivalence', () => {
-  // The live Last-3h donut converts an SR ratio to a health_score with
-  // Math.floor(sr*100), then buckets it via bucketHealthScore at 94/85. That
-  // MUST agree with the canonical ratio bucketing bucketSrScore at 0.94/0.85
-  // for every sr — especially the round-up boundaries [0.935,0.94) and
-  // [0.845,0.85) where Math.round would mis-bucket and contradict the live
-  // chart. bucketHealthScore uses 'warning'; bucketSrScore uses 'abnormal' for
-  // the same middle band, so compare the equivalent buckets.
-  const HEALTH_TO_SR: Record<string, string> = {
-    healthy: 'healthy',
-    warning: 'abnormal',
-    critical: 'critical',
-  }
-  it('bucketHealthScore(floor(sr*100)) === bucketSrScore(sr) for all sr', () => {
-    for (const sr of [0.8, 0.8499, 0.85, 0.939, 0.9399, 0.94, 0.96, 1.0, 1.49]) {
-      const health = bucketHealthScore(Math.floor(sr * 100))
-      expect(HEALTH_TO_SR[health]).toBe(bucketSrScore(sr))
-    }
+describe('bucketHealthScore (V1 daily bands) is independent of bucketSrScore (SR alert path)', () => {
+  // V1 band cutover (2026-06-11): bucketHealthScore now delegates to the V1
+  // classifier (95/85/60/10) for the DAILY metric — /analysis cells, donut,
+  // NOC. bucketSrScore stays on the SolarEdge ±6% anchor (0.94/0.85) for the
+  // LIVE-SR / alert path (untouched). They DELIBERATELY diverge now: e.g. a
+  // score of 94 is 'warning' (Watch) under V1 but sr=0.94 is 'healthy' on the
+  // SR anchor. This test pins the divergence so a future "re-align" of the two
+  // is a conscious choice, not an accident.
+  it('bucketHealthScore uses V1 cutpoints (95/85/60), not the SR 0.94/0.85 anchor', () => {
+    expect(bucketHealthScore(95)).toBe('healthy')  // Normal
+    expect(bucketHealthScore(94)).toBe('warning')  // Watch — would be 'healthy' on the 94 anchor
+    expect(bucketHealthScore(85)).toBe('warning')  // Watch edge
+    expect(bucketHealthScore(84)).toBe('warning')  // Underperforming — would be 'critical' on the 85 anchor
+    expect(bucketHealthScore(60)).toBe('warning')  // Underperforming edge
+    expect(bucketHealthScore(59)).toBe('critical') // Serious Fault
+    expect(bucketHealthScore(null)).toBe('no_data')
+  })
+
+  it('bucketSrScore (SR alert path) is unchanged on the 0.94/0.85 anchor', () => {
+    expect(bucketSrScore(0.94)).toBe('healthy')
+    expect(bucketSrScore(0.939)).toBe('abnormal')
+    expect(bucketSrScore(0.85)).toBe('abnormal')
+    expect(bucketSrScore(0.849)).toBe('critical')
   })
 })
 

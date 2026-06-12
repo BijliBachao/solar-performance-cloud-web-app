@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { HEALTH_HEALTHY, HEALTH_WARNING } from '@/lib/string-health'
+import { gradeFromScore } from '@/lib/design-tokens'
 import { PageWrapper } from '@/components/layout/PageWrapper'
 import { KpiCard } from '@/components/shared/KpiCard'
 import { PlantCard } from '@/components/shared/PlantCard'
@@ -144,7 +144,10 @@ export default function DashboardOverviewPage() {
               accent={(() => {
                 const p = data.kpis?.fleetHealth?.percent
                 if (p === null || p === undefined) return 'gray'
-                return p >= HEALTH_HEALTHY ? 'green' : p >= HEALTH_WARNING ? 'amber' : 'red'
+                // Fleet-health % via the central V1 grade so the KPI accent
+                // matches the per-string cells, the donut, and the NOC cutpoints.
+                const g = gradeFromScore(p)
+                return g === 'healthy' ? 'green' : g === 'warning' ? 'amber' : g === 'critical' ? 'red' : 'gray'
               })()}
               subtitle={
                 data.kpis?.fleetHealth?.coverageNote

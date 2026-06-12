@@ -3,21 +3,19 @@
 import { useState } from 'react'
 import { StringCellDetail } from './StringCellDetail'
 import { cn } from '@/lib/utils'
-import { STATUS_STYLES } from '@/lib/design-tokens'
+import { STATUS_STYLES, perfBandStyleFromScore } from '@/lib/design-tokens'
 import { providerLabel } from '@/lib/constants'
-import { HEALTH_HEALTHY, HEALTH_WARNING } from '@/lib/string-health'
 
 // ── Clickable performance cell ─────────────────────────────────────────────
 // Wraps the existing cell-styling logic in a <td><button> so the daily score
 // is both visually correct AND a drill-down trigger. Keyboard-focusable.
 
-// 3 unified bands mirroring the donut AND the Color guide: green >=94,
-// orange >=85, single red <85 (one critical shade — no severe/dead split).
+// 5 V1 bands as 5 colours, via the central design-tokens map keyed off
+// classifyStringPerformance: Normal=green (clean), Watch=yellow,
+// Underperforming=orange, Serious Fault=red, Dead=dark/grey, no-data=muted.
+// The donut/NOC roll the same classifier up to 3 arcs — ONE source of truth.
 function getCellStyle(score: number | null): string {
-  if (score === null || score === undefined) return 'bg-gray-100 text-gray-400'
-  if (score >= HEALTH_HEALTHY) return ''
-  if (score >= HEALTH_WARNING) return 'bg-orange-200 text-orange-900 font-bold'
-  return 'bg-red-200 text-red-900 font-bold'
+  return perfBandStyleFromScore(score).cell
 }
 
 interface ClickablePerformanceCellProps {
@@ -94,12 +92,12 @@ function formatDateHeader(dateStr: string): string {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-// 3 unified bands: green >=94, orange >=85, red <85.
-function metricCell(value: number | null, type: 'perf' | 'avail'): string {
+// 5 V1 bands as 5 text colours via the central map (same classifier as the
+// daily cells): Normal=green, Watch=yellow, Underperforming=orange,
+// Serious Fault=red, Dead=dark/grey, no-data=muted.
+function metricCell(value: number | null, _type: 'perf' | 'avail'): string {
   if (value === null) return 'text-gray-400'
-  if (value >= HEALTH_HEALTHY) return 'text-emerald-600 font-medium'
-  if (value >= HEALTH_WARNING) return 'text-orange-600 font-semibold'
-  return 'text-red-600 font-bold'
+  return perfBandStyleFromScore(value).fg
 }
 
 export function StringLevelTable({

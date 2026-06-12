@@ -932,10 +932,30 @@ export function computeAvailability(stringCount: number, maxCount: number): numb
 // Health Score Bucketing (for historical views)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-/** Classify a health score into a display bucket */
+/**
+ * Classify a daily health/performance score into the /analysis display bucket.
+ *
+ * V1 band cutover (2026-06-11): derived from the central V1 classifier so the
+ * /analysis tally, the per-plant donut, the NOC console, and the per-string
+ * cells can NEVER disagree. The 5 V1 bands fold into the 4 analysis buckets:
+ *   normal               → healthy
+ *   watch+underperforming→ warning  (the donut's 'abnormal')
+ *   serious_fault+dead   → critical
+ *   insufficient_data    → no_data
+ * This is the DAILY-metric consumer — NOT the live-SR/alert path (which keeps
+ * bucketSrScore / SR_HEALTHY / SR_ABNORMAL on the 0.94/0.85 anchor).
+ */
 export function bucketHealthScore(score: number | null | undefined): HealthBucket {
-  if (score === null || score === undefined) return 'no_data'
-  if (score >= HEALTH_HEALTHY) return 'healthy'
-  if (score >= HEALTH_WARNING) return 'warning'
-  return 'critical'
+  const band = classifyStringPerformance(score ?? null, {
+    isUsed: true,
+    peerExcluded: false,
+    insufficientData: false,
+  })
+  const donut = perfBandToDonutBucket(band)
+  switch (donut) {
+    case 'healthy': return 'healthy'
+    case 'abnormal': return 'warning'
+    case 'critical': return 'critical'
+    default: return 'no_data' // no_data (and null, unreachable here) → no_data
+  }
 }

@@ -20,8 +20,10 @@ import {
   type DonutBucket,
 } from '@/lib/string-health-donut'
 import {
-  HEALTH_HEALTHY,
-  HEALTH_WARNING,
+  PERF_NORMAL,
+  PERF_UNDERPERFORMING,
+  classifyStringPerformance,
+  perfBandToDonutBucket,
 } from '@/lib/string-health'
 import { scoreLiveSr, type LiveStringInput } from '@/lib/string-health-live'
 import { deviceConnectivity } from '@/lib/connectivity'
@@ -29,6 +31,7 @@ import { isDaylight, solarElevationDeg } from '@/lib/solar-geometry'
 import {
   clampToFleetCoords,
   rollupPlantStatus,
+  bucketSrScore,
   ALERT_MIN_SUN_ELEVATION_DEG,
   type ConnectivityStatus,
   type PlantOpStatus,
@@ -177,11 +180,16 @@ function bigintToNumber(v: unknown): number {
   return Number(v)
 }
 
+// V1 band cutover: a row's bucket comes from the central classifier (the SAME
+// source the /analysis cells use), then the donut rollup. null score (no-data)
+// folds into Abnormal — the donut's deliberate taxonomy (rule #4) — never its
+// own arc. normal→healthy, watch+underperforming→abnormal, serious+dead→critical.
 function scoreToBucket(score: number | null): DonutBucket {
   if (score === null) return 'abnormal'
-  if (score >= HEALTH_HEALTHY) return 'healthy'
-  if (score >= HEALTH_WARNING) return 'abnormal'
-  return 'critical'
+  const bucket = perfBandToDonutBucket(
+    classifyStringPerformance(score, { isUsed: true, peerExcluded: false, insufficientData: false }),
+  )
+  return (bucket === 'no_data' || bucket == null ? 'abnormal' : bucket) as DonutBucket
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -388,9 +396,11 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
   const { lat: plantLat, lng: plantLng } = clampToFleetCoords(rows[0]?.latitude, rows[0]?.longitude)
   const armed = solarElevationDeg(plantLat, plantLng, new Date()) >= ALERT_MIN_SUN_ELEVATION_DEG
 
-  // Per device: collapse to one mean reading per string, score with scoreLiveSr,
-  // rescale the SR ratio (×100) onto the 0-100 health_score scale for the donut's
-  // 94/85 bucketing.
+  // Per device: collapse to one mean reading per string, score with scoreLiveSr.
+  // The live donut buckets on the SR 0.94/0.85 anchor (bucketSrScore) — supplied
+  // as a pre-computed `bucket` on each DonutInput — so it stays in lockstep with
+  // the live plant chart + SR alert severities and is NOT moved onto the V1 daily
+  // 95/85/60 bands (which drive the settled donut / NOC / analysis cells).
   const inputs: DonutInput[] = []
   let lowConfidenceScored = 0
   for (const [deviceId, stringMap] of byDeviceString) {
@@ -418,11 +428,16 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
     for (const r of results) {
       const s = stringMap.get(r.string_number)!
       inputs.push({
-        // floor (not round) so bucketing matches bucketSrScore at the 0.94/0.85 boundaries — round would push [0.935,0.94)→healthy and [0.845,0.85)→abnormal, contradicting the live chart.
+        // healthScore retained ONLY for the no-data check + breakdown; the actual
+        // bucket comes from bucketSrScore(r.sr) below (SR 0.94/0.85 anchor), kept
+        // decoupled from the V1 daily bands.
         healthScore: r.sr != null ? Math.floor(r.sr * 100) : null,
         isUsed: s.isUsed,
         peerExcluded: s.peerExcluded,
         openCircuit: r.status === 'OPEN_CIRCUIT',
+        // SR-anchored bucket (undefined when sr is null/non-finite → falls to the
+        // no-data → abnormal rule, exactly as before the V1 cutover).
+        bucket: r.sr != null ? (bucketSrScore(r.sr) ?? undefined) : undefined,
       })
       // Confidence tracking: count scored strings resting on guessed config.
       if (r.bucket != null && (r.panel_count_is_default || r.topology_is_fallback)) {
@@ -576,25 +591,30 @@ export async function loadFleetCounts(orgId?: string, facets: FleetCountsFacets 
       LEFT JOIN plant_assignments pa ON pa.plant_id = d.plant_id
       WHERE (${orgFilter}::text IS NULL OR pa.organization_id = ${orgFilter}::text)
     )
+    -- V1 band cutover: cutpoints interpolated from the central PERF_* constants
+    -- so the NOC counts match the /analysis cells (classifier) bucket-for-bucket.
+    -- healthy ≥ PERF_NORMAL (95); abnormal [PERF_UNDERPERFORMING, PERF_NORMAL)
+    -- = [60, 95) (watch+underperforming); critical < PERF_UNDERPERFORMING (60)
+    -- (serious_fault+dead); no-data = NULL health_score.
     SELECT
       COUNT(*) FILTER (
         WHERE is_used = true
           AND exclude_from_peer_comparison = false
           AND health_score IS NOT NULL
-          AND health_score >= ${HEALTH_HEALTHY}
+          AND health_score >= ${PERF_NORMAL}
       )::bigint AS healthy,
       COUNT(*) FILTER (
         WHERE is_used = true
           AND exclude_from_peer_comparison = false
           AND health_score IS NOT NULL
-          AND health_score >= ${HEALTH_WARNING}
-          AND health_score < ${HEALTH_HEALTHY}
+          AND health_score >= ${PERF_UNDERPERFORMING}
+          AND health_score < ${PERF_NORMAL}
       )::bigint AS abnormal_by_score,
       COUNT(*) FILTER (
         WHERE is_used = true
           AND exclude_from_peer_comparison = false
           AND health_score IS NOT NULL
-          AND health_score < ${HEALTH_WARNING}
+          AND health_score < ${PERF_UNDERPERFORMING}
       )::bigint AS critical_by_score,
       COUNT(*) FILTER (
         WHERE is_used = true
@@ -707,17 +727,20 @@ export interface LoadFleetRowsParams {
   date?: Date
 }
 
-/** One health bucket → its score predicate (shared by rows + facet helpers). */
+/** One health bucket → its score predicate (shared by rows + facet helpers).
+ *  V1 band cutover: cutpoints from PERF_NORMAL/PERF_UNDERPERFORMING — the same
+ *  source as the /analysis classifier, so the NOC facet filter and the cells
+ *  agree. healthy ≥95; critical <60; abnormal [60,95) OR NULL (no-data). */
 function bucketCondition(bucket: DonutBucket): Prisma.Sql {
   switch (bucket) {
     case 'healthy':
-      return Prisma.sql`(sd.health_score IS NOT NULL AND sd.health_score >= ${HEALTH_HEALTHY})`
+      return Prisma.sql`(sd.health_score IS NOT NULL AND sd.health_score >= ${PERF_NORMAL})`
     case 'critical':
-      return Prisma.sql`(sd.health_score IS NOT NULL AND sd.health_score < ${HEALTH_WARNING})`
+      return Prisma.sql`(sd.health_score IS NOT NULL AND sd.health_score < ${PERF_UNDERPERFORMING})`
     case 'abnormal':
-      // Abnormal = [HEALTH_WARNING, HEALTH_HEALTHY) OR NULL health_score (no-data).
+      // Abnormal = [PERF_UNDERPERFORMING, PERF_NORMAL) OR NULL health_score (no-data).
       return Prisma.sql`(
-        (sd.health_score IS NOT NULL AND sd.health_score >= ${HEALTH_WARNING} AND sd.health_score < ${HEALTH_HEALTHY})
+        (sd.health_score IS NOT NULL AND sd.health_score >= ${PERF_UNDERPERFORMING} AND sd.health_score < ${PERF_NORMAL})
         OR sd.health_score IS NULL
       )`
   }
@@ -773,9 +796,9 @@ export async function loadFleetRows(params: LoadFleetRowsParams = {}): Promise<F
   // worst-first — the triage default per the NOC v3 spec. NULL health_score
   // (no-data) is bucketed ABNORMAL by scoreToBucket/the donut, so it must sort
   // within the abnormal band (after scored abnormals, BEFORE healthy) — never
-  // below healthy. The CASE pins no-data at 89.99: criticals (<85) first,
-  // scored abnormals [85,94) ascending — no-data pinned at 89.99 sits inside
-  // that abnormal band — then healthy (>=94). DISTINCT ON requires its own
+  // below healthy. V1 cutpoints: criticals (<60) first, scored abnormals
+  // [60,95) ascending — no-data pinned at 89.99 sits inside that abnormal band
+  // (between 60 and 95) — then healthy (>=95). DISTINCT ON requires its own
   // ORDER BY to lead with the distinct keys, hence two layers.
   const items = await prisma.$queryRaw<FleetRowSql[]>`
     SELECT * FROM (
@@ -1025,7 +1048,8 @@ export async function loadCritStringsPerPlant(orgId?: string, date?: Date): Prom
     WHERE sd.date = ${scoreDate}
       AND COALESCE(sc.is_used, true) = true
       AND COALESCE(sc.exclude_from_peer_comparison, false) = false
-      AND sd.health_score IS NOT NULL AND sd.health_score < ${HEALTH_WARNING}
+      -- V1 critical = health_score < PERF_UNDERPERFORMING (60): serious_fault + dead.
+      AND sd.health_score IS NOT NULL AND sd.health_score < ${PERF_UNDERPERFORMING}
       AND (${orgFilter}::text IS NULL OR pa.organization_id = ${orgFilter}::text)
     GROUP BY p.id, p.plant_name
   `

@@ -15,10 +15,12 @@
  *   2. peer_excluded: true      → excluded entirely
  *   3. open_circuit (in window) → Critical
  *   4. no data (in window)      → Abnormal (must be is_used: true)
- *   5. score                    → bucket by HEALTH_HEALTHY / HEALTH_WARNING
+ *   5. score                    → V1 classifier (classifyStringPerformance →
+ *                                 perfBandToDonutBucket), so the cell colour and
+ *                                 the donut arc derive from ONE source.
  */
 
-import { HEALTH_HEALTHY, HEALTH_WARNING } from '@/lib/string-health'
+import { classifyStringPerformance, perfBandToDonutBucket } from '@/lib/string-health'
 
 /** Fraction of window samples that must show V>0 + I<0.1 for OPEN_CIRCUIT override. */
 export const DONUT_OPEN_CIRCUIT_THRESHOLD = 0.5
@@ -41,6 +43,15 @@ export interface DonutInput {
    * samples in an open-circuit state (V > 0 with I < ACTIVE_CURRENT_THRESHOLD)?
    */
   openCircuit: boolean
+  /**
+   * Optional pre-computed bucket — used ONLY by the live "Last-3h" donut, which
+   * buckets on the SR 0.94/0.85 anchor (bucketSrScore), NOT the V1 daily 95/85/60
+   * bands. When set, it overrides the V1 score path below (after the exclusion /
+   * open-circuit / no-data overrides) so the live-SR donut stays in lockstep with
+   * the live plant chart + SR alert severities, decoupled from the daily metric.
+   * Daily (settled / NOC) inputs leave this undefined → V1 score path.
+   */
+  bucket?: DonutBucket
 }
 
 export interface DonutCounts {
@@ -80,13 +91,32 @@ export function bucketDonutStatus(input: DonutInput): DonutBucket | null {
   // Rule #3 — open-circuit override (real wiring fault, may not reflect in score)
   if (input.openCircuit) return 'critical'
 
-  // Rule #4 — no data in window, but string is supposed to be reporting
+  // Rule #4 — no data in window, but string is supposed to be reporting.
+  // The donut folds no-data into Abnormal (not its own slice) — kept here, not
+  // delegated, so we preserve this taxonomy choice. (insufficient_data would
+  // map to 'no_data', which the donut surfaces as the noData subset of abnormal
+  // via aggregateForDonut; this guard ensures the bucket itself is 'abnormal'.)
   if (input.healthScore === null) return 'abnormal'
 
-  // Rule #5 — score-based bucketing (same thresholds as the rest of the app)
-  if (input.healthScore >= HEALTH_HEALTHY) return 'healthy'
-  if (input.healthScore >= HEALTH_WARNING) return 'abnormal'
-  return 'critical'
+  // Live-SR override — the live "Last-3h" donut supplies an SR-anchored bucket
+  // (bucketSrScore at 0.94/0.85); use it directly so the live donut is NOT moved
+  // onto the V1 daily bands (which would contradict the live chart + SR alerts).
+  if (input.bucket) return input.bucket
+
+  // Rule #5 — score path delegates to the V1 classifier. is_used/peer_excluded
+  // already handled above (rules #1/#2), so flag them false here; the donut
+  // buckets {normal→healthy, watch+underperforming→abnormal, serious+dead→
+  // critical} come straight from perfBandToDonutBucket — the SAME source the
+  // /analysis cells use, so a string's arc and its cell can never disagree.
+  const band = classifyStringPerformance(input.healthScore, {
+    isUsed: true,
+    peerExcluded: false,
+    insufficientData: false,
+  })
+  const bucket = perfBandToDonutBucket(band)
+  // band is one of normal/watch/underperforming/serious_fault/dead here
+  // (non-null score, used, comparable) → bucket is healthy|abnormal|critical.
+  return (bucket ?? 'abnormal') as DonutBucket
 }
 
 /**

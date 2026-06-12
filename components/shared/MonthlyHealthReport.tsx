@@ -6,8 +6,7 @@ import {
 import { useState } from 'react'
 import {
   ACTIVE_CURRENT_THRESHOLD,
-  HEALTH_HEALTHY,
-  HEALTH_WARNING,
+  bucketHealthScore,
 } from '@/lib/string-health'
 import {
   STATUS_STYLES,
@@ -48,14 +47,19 @@ function getAlertCountClass(count: number): string {
   return 'text-red-700 font-bold'
 }
 
+// V1 band cutover: status derives from the central classifier (via
+// bucketHealthScore) — the SAME source as the /analysis cells and the donut —
+// so the monthly report can never disagree with them. healthy / warning
+// (watch+underperforming) / critical (serious+dead).
 function getStatusIcon(data: MonthlyHealthData) {
   if (data.trend === 'offline' || data.avg_current < ACTIVE_CURRENT_THRESHOLD) {
     return <Circle className="w-4 h-4 text-slate-400" strokeWidth={2} />
   }
-  if (data.avg_health_score < HEALTH_WARNING) {
+  const bucket = bucketHealthScore(data.avg_health_score)
+  if (bucket === 'critical') {
     return <XCircle className={cn('w-4 h-4', STATUS_STYLES.critical.fg)} strokeWidth={2} />
   }
-  if (data.avg_health_score < HEALTH_HEALTHY) {
+  if (bucket === 'warning') {
     return <AlertTriangle className={cn('w-4 h-4', STATUS_STYLES.warning.fg)} strokeWidth={2} />
   }
   return <CheckCircle className={cn('w-4 h-4', STATUS_STYLES.healthy.fg)} strokeWidth={2} />
@@ -63,8 +67,9 @@ function getStatusIcon(data: MonthlyHealthData) {
 
 function getStatusLabel(data: MonthlyHealthData): string {
   if (data.trend === 'offline' || data.avg_current < ACTIVE_CURRENT_THRESHOLD) return 'Offline'
-  if (data.avg_health_score < HEALTH_WARNING) return 'Critical'
-  if (data.avg_health_score < HEALTH_HEALTHY) return 'Warning'
+  const bucket = bucketHealthScore(data.avg_health_score)
+  if (bucket === 'critical') return 'Critical'
+  if (bucket === 'warning') return 'Warning'
   return 'Healthy'
 }
 
@@ -77,10 +82,11 @@ function HealthBar({ score }: { score: number }) {
   const cappedScore = Math.min(100, score)
   const filledSegments = Math.round((cappedScore / 100) * segments)
 
+  const bucket = bucketHealthScore(cappedScore)
   const filledDotClass =
-    cappedScore >= HEALTH_HEALTHY
+    bucket === 'healthy'
       ? STATUS_STYLES.healthy.dot
-      : cappedScore >= HEALTH_WARNING
+      : bucket === 'warning'
         ? STATUS_STYLES.warning.dot
         : STATUS_STYLES.critical.dot
 
@@ -312,11 +318,17 @@ export function MonthlyHealthReport({ data, inverterAvgCurrent }: MonthlyHealthR
                   <span
                     className={cn(
                       'text-xs font-mono font-semibold',
-                      row.uptime_percent >= HEALTH_HEALTHY
-                        ? STATUS_STYLES.healthy.fg
-                        : row.uptime_percent >= HEALTH_WARNING
-                          ? STATUS_STYLES.warning.fg
-                          : STATUS_STYLES.critical.fg,
+                      // Uptime/availability % shares the V1 bands via the central
+                      // classifier (bucketHealthScore) so its colour matches the
+                      // /analysis Avail column and the daily cells.
+                      (() => {
+                        const b = bucketHealthScore(row.uptime_percent)
+                        return b === 'healthy'
+                          ? STATUS_STYLES.healthy.fg
+                          : b === 'warning'
+                            ? STATUS_STYLES.warning.fg
+                            : STATUS_STYLES.critical.fg
+                      })(),
                     )}
                   >
                     {row.uptime_percent > 0 ? `${Math.round(row.uptime_percent)}%` : '—'}

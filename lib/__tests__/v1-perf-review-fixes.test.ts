@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildPerfInputsFromHourly, type HourlyMedianRow } from '@/lib/settled-day-performance'
+import { bucketDonutStatus } from '@/lib/string-health-donut'
 
 // Regression tests for the Opus-review findings on the V1 math chunk:
 //   I-1 — completeness gate must NOT falsely gate a deploy-day transition
@@ -54,5 +55,31 @@ describe('C-1 dead-hour handling — median_current 0 is included consistently',
     ]
     const repr = buildPerfInputsFromHourly(rows, cfg).perfInputs.find(p => p.string_number === 1)!.repr_current
     expect(repr).toBe(5) // median of [0,0,5,5,5,5,5,5] = 5 (the two 0s are low outliers, ignored by the median)
+  })
+})
+
+describe('Cutover C1 — live-SR donut stays on its SR anchor (decoupled from V1 daily bands)', () => {
+  const base = { isUsed: true, peerExcluded: false, openCircuit: false }
+  it('a supplied SR bucket overrides the V1 score path', () => {
+    // SR=0.90 → score 90. Under V1 daily bands, 90 is Watch → abnormal. But the
+    // live donut passes the SR-anchored bucket (0.90 ≥ 0.85 < 0.94 → abnormal too here),
+    // so use a case where they DIFFER: SR=0.92 → score 92 (V1 abnormal) but on the
+    // SR anchor 0.92 is still abnormal... pick 0.945: V1 score 94 = Watch/abnormal,
+    // SR 0.945 ≥ 0.94 = healthy. The override must win → healthy.
+    expect(bucketDonutStatus({ ...base, healthScore: 94, bucket: 'healthy' })).toBe('healthy')
+    // SR 0.70 → score 70 = V1 abnormal (underperforming), but SR anchor = critical (<0.85).
+    expect(bucketDonutStatus({ ...base, healthScore: 70, bucket: 'critical' })).toBe('critical')
+  })
+  it('exclusion / open-circuit / no-data overrides still beat the SR bucket', () => {
+    expect(bucketDonutStatus({ ...base, healthScore: 94, bucket: 'healthy', isUsed: false })).toBeNull()
+    expect(bucketDonutStatus({ ...base, healthScore: 94, bucket: 'healthy', peerExcluded: true })).toBeNull()
+    expect(bucketDonutStatus({ ...base, healthScore: 94, bucket: 'healthy', openCircuit: true })).toBe('critical')
+    expect(bucketDonutStatus({ ...base, healthScore: null, bucket: 'healthy' })).toBe('abnormal') // no-data wins
+  })
+  it('without a bucket, the daily path uses V1 bands (94 → abnormal, not healthy)', () => {
+    expect(bucketDonutStatus({ ...base, healthScore: 94 })).toBe('abnormal')
+    expect(bucketDonutStatus({ ...base, healthScore: 95 })).toBe('healthy')
+    expect(bucketDonutStatus({ ...base, healthScore: 70 })).toBe('abnormal')
+    expect(bucketDonutStatus({ ...base, healthScore: 50 })).toBe('critical')
   })
 })

@@ -1,7 +1,7 @@
 'use client'
 
 import { Power, Activity, TrendingUp, AlertTriangle } from 'lucide-react'
-import { HEALTH_HEALTHY, HEALTH_WARNING } from '@/lib/string-health'
+import { gradeFromScore } from '@/lib/design-tokens'
 
 interface PlantQuickStatsProps {
   totalPower: number
@@ -53,8 +53,10 @@ export function PlantQuickStats({
         </div>
         <p className={`text-xl font-semibold ${
           stringsTotal === 0 ? 'text-gray-400' :
-          healthPercent >= HEALTH_HEALTHY ? 'text-green-600' :
-          healthPercent >= HEALTH_WARNING ? 'text-yellow-600' : 'text-red-600'
+          // Plant-level health % via the central V1 grade (gradeFromScore) so it
+          // matches the per-string cells, the donut, and the NOC cutpoints.
+          gradeFromScore(healthPercent) === 'healthy' ? 'text-green-600' :
+          gradeFromScore(healthPercent) === 'warning' ? 'text-yellow-600' : 'text-red-600'
         }`}>
           {stringsTotal > 0 ? `${healthPercent}%` : '—'}
         </p>
