@@ -30,16 +30,23 @@ interface DeviceOption {
 
 // /analysis is SETTLED-ONLY — today (live, in-progress) is excluded. Default window
 // is the 7 most-recent SETTLED days, ending YESTERDAY.
-function getDefaultFrom(): string {
-  const d = new Date()
-  d.setDate(d.getDate() - 7)
+// PKT calendar date (YYYY-MM-DD), offsetDays relative to PKT today. /analysis is
+// PKT-based + settled-only; computing the default range in UTC caused an
+// off-by-one in the early-PKT-morning window (UTC still on the previous calendar
+// day → the grid stopped a day short, e.g. ending on the 11th at 02:00 PKT on the
+// 13th). Shift to PKT, then use UTC accessors on the shifted instant.
+function pktDate(offsetDays: number): string {
+  const d = new Date(Date.now() + 5 * 60 * 60 * 1000)
+  d.setUTCDate(d.getUTCDate() + offsetDays)
   return d.toISOString().split('T')[0]
 }
 
+function getDefaultFrom(): string {
+  return pktDate(-7)
+}
+
 function getDefaultTo(): string {
-  const d = new Date()
-  d.setDate(d.getDate() - 1) // yesterday — today is live, shown on NOC/plant Today donut
-  return d.toISOString().split('T')[0]
+  return pktDate(-1) // PKT yesterday — today is live, shown on NOC/plant Today donut
 }
 
 export default function AnalysisPage() {
