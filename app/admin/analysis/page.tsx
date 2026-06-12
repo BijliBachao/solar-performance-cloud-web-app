@@ -28,14 +28,18 @@ interface DeviceOption {
   plant_id: string
 }
 
+// /analysis is SETTLED-ONLY — today (live, in-progress) is excluded. Default window
+// is the 7 most-recent SETTLED days, ending YESTERDAY.
 function getDefaultFrom(): string {
   const d = new Date()
-  d.setDate(d.getDate() - 6)
+  d.setDate(d.getDate() - 7)
   return d.toISOString().split('T')[0]
 }
 
 function getDefaultTo(): string {
-  return new Date().toISOString().split('T')[0]
+  const d = new Date()
+  d.setDate(d.getDate() - 1) // yesterday — today is live, shown on NOC/plant Today donut
+  return d.toISOString().split('T')[0]
 }
 
 export default function AnalysisPage() {

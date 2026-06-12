@@ -91,11 +91,14 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    // Build date list
+    // Build date list — SETTLED-ONLY: drop the in-progress PKT day (live), so /analysis
+    // shows only complete days. Today lives on NOC "Today·live" + the plant Today donut.
+    const todayPkt = new Date(Date.now() + 5 * 3600 * 1000).toISOString().slice(0, 10)
     const dates: string[] = []
     const d = new Date(fromDate)
     while (d <= toDate) {
-      dates.push(d.toISOString().split('T')[0])
+      const ds = d.toISOString().split('T')[0]
+      if (ds < todayPkt) dates.push(ds) // settled days only
       d.setDate(d.getDate() + 1)
     }
 

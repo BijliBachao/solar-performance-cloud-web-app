@@ -193,18 +193,20 @@ export async function GET(request: NextRequest) {
       orderBy: [{ device_id: 'asc' }, { string_number: 'asc' }, { date: 'asc' }],
     })
 
-    // Build date list
+    // /analysis is SETTLED-ONLY: the current PKT day is still accumulating data (live),
+    // so it's dropped from the grid entirely — today lives on NOC "Today·live" + the
+    // plant "Today (live)" donut. The grid ends at YESTERDAY PKT. (todayPkt is also the
+    // settled-days denominator for the Data % completeness column below.)
+    const todayPkt = new Date(Date.now() + 5 * 3600 * 1000).toISOString().slice(0, 10)
+
+    // Build date list (settled days only — strictly before today PKT)
     const dates: string[] = []
     const d = new Date(fromDate)
     while (d <= toDate) {
-      dates.push(d.toISOString().split('T')[0])
+      const ds = d.toISOString().split('T')[0]
+      if (ds < todayPkt) dates.push(ds) // drop today (+ any future) — settled-only
       d.setDate(d.getDate() + 1)
     }
-
-    // Today's PKT (UTC+5) calendar date. Completeness is averaged over SETTLED
-    // days only (dates strictly before today PKT) — today is still accumulating
-    // readings, so its partial count is not a real coverage figure.
-    const todayPkt = new Date(Date.now() + 5 * 3600 * 1000).toISOString().slice(0, 10)
 
     // Index daily data
     const scoreMap = new Map<string, number | null>()

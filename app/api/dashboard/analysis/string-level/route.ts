@@ -157,14 +157,14 @@ export async function GET(request: NextRequest) {
       orderBy: [{ device_id: 'asc' }, { string_number: 'asc' }, { date: 'asc' }],
     })
 
+    // /analysis is SETTLED-ONLY: the current (live, in-progress) PKT day is dropped from
+    // the grid — today lives on NOC "Today·live" + the plant "Today (live)" donut. The
+    // grid ends at YESTERDAY PKT. (todayPkt is also the settled-days denominator below.)
+    const todayPkt = new Date(Date.now() + 5 * 3600 * 1000).toISOString().slice(0, 10)
+
     const dates: string[] = []
     const d = new Date(fromDate)
-    while (d <= toDate) { dates.push(d.toISOString().split('T')[0]); d.setDate(d.getDate() + 1) }
-
-    // Today's PKT (UTC+5) calendar date. Completeness is averaged over SETTLED
-    // days only (dates strictly before today PKT) — today is still accumulating
-    // readings, so its partial count is not a real coverage figure.
-    const todayPkt = new Date(Date.now() + 5 * 3600 * 1000).toISOString().slice(0, 10)
+    while (d <= toDate) { const ds = d.toISOString().split('T')[0]; if (ds < todayPkt) dates.push(ds); d.setDate(d.getDate() + 1) }
 
     const scoreMap = new Map<string, number | null>()
     const perfMap = new Map<string, number | null>()
