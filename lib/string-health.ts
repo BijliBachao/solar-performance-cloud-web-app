@@ -558,18 +558,26 @@ export function classifyDataCompleteness(pct: number | null): CompletenessBand |
   return 'insufficient'
 }
 
+// Admin-only sensor-fault flag threshold. >100% is NORMAL — roughly half of healthy
+// strings sit above their peer median, so flagging at the display cap would tag ~40%
+// of good strings (measured live on prod 2026-06-12: 190/464). A same-inverter string
+// cannot physically read >2× its peers' median without a faulty current sensor, so
+// 200% is the conservative "impossible reading" bar (Reyyan §6 note: catch the ~300%).
+export const SENSOR_FAULT_RAW_PCT = 200
+
 /**
  * §6 note: the customer cell shows MIN(%, 100). The raw, uncapped Performance %
  * is stored so an impossibly-high reading (e.g. a faulty current sensor showing
  * ~300%) can be flagged for review — ADMIN-side only. Returns true only when the
  * admin drill-down should surface the raw value with a "possible sensor fault"
- * note: admin context AND a raw % that exceeds the display cap (PERF_DISPLAY_MAX).
+ * note: admin context AND a raw % above SENSOR_FAULT_RAW_PCT (NOT the display cap —
+ * being above the peer median, i.e. >100%, is normal for ~half of all strings).
  */
 export function shouldFlagRawSensorFault(
   isAdmin: boolean,
   rawPerformance: number | null | undefined,
 ): boolean {
-  return Boolean(isAdmin) && rawPerformance != null && rawPerformance > PERF_DISPLAY_MAX
+  return Boolean(isAdmin) && rawPerformance != null && rawPerformance > SENSOR_FAULT_RAW_PCT
 }
 
 export interface PerfFlags { isUsed: boolean; peerExcluded: boolean; insufficientData: boolean }

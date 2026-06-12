@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Sparkline } from './Sparkline'
-import { shouldFlagRawSensorFault, PERF_DISPLAY_MAX } from '@/lib/string-health'
+import { shouldFlagRawSensorFault, PERF_DISPLAY_MAX, SENSOR_FAULT_RAW_PCT } from '@/lib/string-health'
 import { completenessStyleFromPct } from '@/lib/design-tokens'
 
 // ── API response shape (matches Task 7A contract) ──────────────────────────
@@ -319,8 +319,9 @@ export function StringCellDetail({
                       <p className="text-xs leading-snug text-rose-800">
                         Raw (uncapped) performance{' '}
                         <span className="font-mono font-bold">{Math.round(data.raw_performance as number)}%</span>{' '}
-                        exceeds {PERF_DISPLAY_MAX}% — possible sensor fault (e.g. faulty
-                        current sensor), flagged for review. Customer view shows {PERF_DISPLAY_MAX}%.
+                        exceeds {SENSOR_FAULT_RAW_PCT}% of the peer median — physically
+                        implausible, likely a faulty current sensor, flagged for review.
+                        Customer view shows {PERF_DISPLAY_MAX}%.
                       </p>
                     </div>
                   )}

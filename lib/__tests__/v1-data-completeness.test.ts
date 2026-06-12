@@ -7,6 +7,7 @@ import {
   COMPLETENESS_ACCEPTABLE,
   COMPLETENESS_POOR,
   PERF_DISPLAY_MAX,
+  SENSOR_FAULT_RAW_PCT,
   type CompletenessBand,
 } from '@/lib/string-health'
 import { COMPLETENESS_BAND_STYLES, completenessStyleFromPct } from '@/lib/design-tokens'
@@ -85,17 +86,20 @@ describe('completenessStyleFromPct — routes through the classifier', () => {
 })
 
 describe('shouldFlagRawSensorFault — §6 admin-only raw-% sensor-fault gate', () => {
-  it('flags only when admin AND raw > display cap', () => {
+  it('flags only when admin AND raw exceeds the impossible-reading bar (>200%)', () => {
     expect(shouldFlagRawSensorFault(true, 300)).toBe(true)
-    expect(shouldFlagRawSensorFault(true, PERF_DISPLAY_MAX + 0.1)).toBe(true)
+    expect(shouldFlagRawSensorFault(true, SENSOR_FAULT_RAW_PCT + 0.1)).toBe(true)
   })
 
   it('never flags in the customer (non-admin) view, even at 300%', () => {
     expect(shouldFlagRawSensorFault(false, 300)).toBe(false)
   })
 
-  it('does not flag a raw % at or below the display cap', () => {
-    expect(shouldFlagRawSensorFault(true, PERF_DISPLAY_MAX)).toBe(false)
+  it('does NOT flag merely-above-median strings (>100% is normal for ~half of strings)', () => {
+    // The whole point of the fix: 110%, 150%, even 200% are NOT sensor faults.
+    expect(shouldFlagRawSensorFault(true, PERF_DISPLAY_MAX + 0.1)).toBe(false) // 100.1%
+    expect(shouldFlagRawSensorFault(true, 150)).toBe(false)
+    expect(shouldFlagRawSensorFault(true, SENSOR_FAULT_RAW_PCT)).toBe(false)   // 200% exactly — strict >
     expect(shouldFlagRawSensorFault(true, 88)).toBe(false)
   })
 
