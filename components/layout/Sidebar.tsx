@@ -25,6 +25,7 @@ const adminSections = [
       { href: '/admin/recovery',         label: 'Recovery',       icon: HeartPulse },
       { href: '/admin/plants',           label: 'Plants',         icon: Zap },
       { href: '/admin/noc',              label: 'NOC',            icon: Activity },
+      { href: '/admin/alerts',           label: 'Alerts',         icon: Bell },
       { href: '/admin/analysis',         label: 'Analysis',       icon: BarChart3 },
     ],
   },
