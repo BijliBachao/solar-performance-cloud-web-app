@@ -11,7 +11,7 @@ const mockPrisma = {
     upsert: vi.fn().mockResolvedValue({}),
     update: vi.fn().mockResolvedValue({}),
   },
-  string_measurements: { createMany: vi.fn().mockResolvedValue({}) },
+  string_measurements: { createMany: vi.fn().mockResolvedValue({}), findMany: vi.fn().mockResolvedValue([]) },
   string_configs: { findMany: vi.fn().mockResolvedValue([]) },
   string_hourly: { upsert: vi.fn().mockResolvedValue({}) },
   string_daily: { upsert: vi.fn().mockResolvedValue({}) },
@@ -110,6 +110,44 @@ describe('pollGrowatt — degraded-path resilience', () => {
     await expect(pollGrowatt()).resolves.toBeUndefined()
 
     expect(mockPrisma.string_measurements.createMany).toHaveBeenCalled()
+  })
+
+  it('opens a CRITICAL vendor alarm from the real faultType field (revives the previously-dead proxy)', async () => {
+    clientInstance.getPlantList.mockResolvedValue([])
+    clientInstance.getDeviceList.mockResolvedValue([])
+    clientInstance.getLastData.mockResolvedValue([
+      { serialNum: 'KXJ7CDC02G', vpv1: 527.5, ipv1: 1.2, ppv1: 633, faultType: 5, warnCode: 0, eacToday: 5.2 },
+    ])
+    mockPrisma.devices.findMany.mockResolvedValue([
+      { id: 'KXJ7CDC02G', plant_id: '2251305', device_type_id: 200, max_strings: 4 },
+    ])
+
+    const { pollGrowatt } = await import('@/lib/growatt-poller')
+    await pollGrowatt()
+
+    expect(mockPrisma.vendor_alarms.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ provider: 'growatt', alarm_code: '5', severity: 'CRITICAL' }),
+      }),
+    )
+  })
+
+  it('does NOT touch vendor_alarms when fault/warn fields are absent (no false-resolve on a partial payload)', async () => {
+    clientInstance.getPlantList.mockResolvedValue([])
+    clientInstance.getDeviceList.mockResolvedValue([])
+    // Real strings (passes the write gate) but NO faultType/warnCode keys at all.
+    clientInstance.getLastData.mockResolvedValue([
+      { serialNum: 'KXJ7CDC02G', vpv1: 527.5, ipv1: 1.2, ppv1: 633, eacToday: 5.2 },
+    ])
+    mockPrisma.devices.findMany.mockResolvedValue([
+      { id: 'KXJ7CDC02G', plant_id: '2251305', device_type_id: 200, max_strings: 4 },
+    ])
+
+    const { pollGrowatt } = await import('@/lib/growatt-poller')
+    await pollGrowatt()
+
+    expect(mockPrisma.vendor_alarms.create).not.toHaveBeenCalled()
+    expect(mockPrisma.vendor_alarms.update).not.toHaveBeenCalled()
   })
 
   it('skips poll entirely when GROWATT_API_TOKEN unset (per growatt-poller.ts gate)', async () => {

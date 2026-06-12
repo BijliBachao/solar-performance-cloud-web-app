@@ -450,11 +450,21 @@ async function processDeviceData(
     await updateDailyAggregates(device.id, device.plant_id, effectiveStrings, stringConfigs, { model: null, max_strings: device.max_strings, strings_are_mppts: stringsAreMppts })
   }
 
-  // Process fault/warning codes → vendor_alarms
-  const faultcode = Number(deviceData.faultcode ?? 0)
-  const warningcode = Number(deviceData.warningcode ?? 0)
-  await processGrowattFaultCode(device.id, device.plant_id, faultcode, 'fault')
-  await processGrowattFaultCode(device.id, device.plant_id, warningcode, 'warn')
+  // Process fault/warning codes → vendor_alarms.
+  // The real MAX/SPH-S real-time fields are `faultType` / `warnCode` (probed
+  // live 2026-06-12). The previous `faultcode`/`warningcode` names do NOT exist
+  // in the payload → always undefined → this path was DEAD (never fired). Keep
+  // the legacy names as a defensive fallback. Only process when the field is
+  // PRESENT: a missing field on a partial response must not read as 0 and
+  // false-resolve an open alarm.
+  const faultRaw = deviceData.faultType ?? deviceData.faultcode
+  const warnRaw = deviceData.warnCode ?? deviceData.warningcode
+  if (faultRaw != null) {
+    await processGrowattFaultCode(device.id, device.plant_id, Number(faultRaw) || 0, 'fault')
+  }
+  if (warnRaw != null) {
+    await processGrowattFaultCode(device.id, device.plant_id, Number(warnRaw) || 0, 'warn')
+  }
 
   // Save hardware daily counter — source of truth for "today's energy" display
   const nativeKwh = deviceData.eacToday ?? deviceData.eToday ?? null
@@ -517,8 +527,12 @@ function extractStrings(
   return { strings, granularity: 'mppt' }
 }
 
-// Track active Growatt fault/warning codes per device.
-// No history API available — we derive open/resolved from real-time faultcode.
+// Track active Growatt fault/warning codes per device, from the real-time
+// snapshot (faultType / warnCode). No usable history/alarm-list API for our MAX
+// fleet, so open/resolved is inferred from the current code: a new code opens a
+// row (timestamped key → a recurrence reopens as a new row), code 0 resolves the
+// open row. The caller skips this entirely when the field is absent (no
+// false-resolve on a partial response).
 async function processGrowattFaultCode(
   deviceId: string,
   plantId: string,
