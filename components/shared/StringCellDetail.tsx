@@ -386,7 +386,7 @@ export function StringCellDetail({
                       Peer Strings — same inverter, same day
                     </h3>
                     <p className="text-[10px] leading-snug text-slate-400 mb-2">
-                      <span className="font-semibold">Repr. Current</span> = the <span className="font-semibold">median</span> of each string&apos;s hourly readings during the day&apos;s sun-up hours (not a single reading). Each string reports every few minutes → averaged per hour → the middle hour is its representative value.
+                      <span className="font-semibold">Repr. Current</span> = the <span className="font-semibold">median</span> of each string&apos;s hourly readings during the 8 AM–4 PM window (not a single reading). Each string reports every few minutes → averaged per hour → the middle hour is its representative value.
                     </p>
                     <div className="rounded-md border border-slate-200 overflow-hidden">
                       <table className="w-full text-xs">
@@ -462,7 +462,7 @@ export function StringCellDetail({
                       )}
                     </div>
                     <p className="text-[9px] text-slate-400 mt-1">
-                      {sparkValues.length} sun-up hours · each point = the average of that hour&apos;s readings (A)
+                      {sparkValues.length} window hours (8 AM–4 PM) · each point = the average of that hour&apos;s readings (A)
                     </p>
                   </div>
                 )}
@@ -478,7 +478,7 @@ export function StringCellDetail({
                       <span className="font-bold font-mono text-emerald-700">{data.availability.producingHours}</span>
                       {' '}of{' '}
                       <span className="font-bold font-mono text-slate-700">{data.availability.sunUpHours}</span>
-                      {' '}sun-up hours
+                      {' '}window hours (8 AM–4 PM)
                       {data.availability.pct !== null && (
                         <>
                           {' '}={' '}
