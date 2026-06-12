@@ -76,11 +76,12 @@ describe('V1 cutover (Task 10) — donut is fully V1; the SR-bucket override pat
   // DonutInput. Every donut surface (per-plant prev-day/today, NOC, analysis)
   // shares this one V1 path.
   const base = { isUsed: true, peerExcluded: false, openCircuit: false }
-  it('uses V1 bands for every score (94 → abnormal/Watch, not healthy)', () => {
+  it('uses the 3-band cutpoints for every score (85/50)', () => {
     expect(bucketDonutStatus({ ...base, healthScore: 95 })).toBe('healthy')   // Normal
-    expect(bucketDonutStatus({ ...base, healthScore: 94 })).toBe('abnormal')  // Watch
-    expect(bucketDonutStatus({ ...base, healthScore: 70 })).toBe('abnormal')  // Underperforming
-    expect(bucketDonutStatus({ ...base, healthScore: 50 })).toBe('critical')  // Serious fault
+    expect(bucketDonutStatus({ ...base, healthScore: 85 })).toBe('healthy')   // Normal edge
+    expect(bucketDonutStatus({ ...base, healthScore: 70 })).toBe('abnormal')  // Watch
+    expect(bucketDonutStatus({ ...base, healthScore: 50 })).toBe('abnormal')  // Watch edge
+    expect(bucketDonutStatus({ ...base, healthScore: 49 })).toBe('critical')  // Critical
   })
   it('exclusion / open-circuit / no-data overrides still apply', () => {
     expect(bucketDonutStatus({ ...base, healthScore: 95, isUsed: false })).toBeNull()

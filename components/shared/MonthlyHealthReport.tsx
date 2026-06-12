@@ -47,10 +47,10 @@ function getAlertCountClass(count: number): string {
   return 'text-red-700 font-bold'
 }
 
-// V1 band cutover: status derives from the central classifier (via
+// 3-band rebrand: status derives from the central classifier (via
 // bucketHealthScore) — the SAME source as the /analysis cells and the donut —
-// so the monthly report can never disagree with them. healthy / warning
-// (watch+underperforming) / critical (serious+dead).
+// so the monthly report can never disagree with them. healthy (normal) /
+// warning (watch) / critical.
 function getStatusIcon(data: MonthlyHealthData) {
   if (data.trend === 'offline' || data.avg_current < ACTIVE_CURRENT_THRESHOLD) {
     return <Circle className="w-4 h-4 text-slate-400" strokeWidth={2} />

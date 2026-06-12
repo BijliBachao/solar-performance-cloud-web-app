@@ -96,12 +96,15 @@ function formatDateHeader(dateStr: string): string {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-// 5 V1 bands as 5 text colours via the central map (same classifier as the
-// daily cells): Normal=green, Watch=yellow, Underperforming=orange,
-// Serious Fault=red, Dead=dark/grey, no-data=muted.
+// 5 V1 bands as 5 distinct COLOURED CHIPS via the central map (same classifier +
+// background-wash as the daily cells): Normal=green, Watch=yellow, Underperforming=
+// orange, Serious Fault=red, Dead=dark slate, no-data=muted. We use the background
+// wash (`.cell`), not the text-only `.fg` — on white, Watch's dark-yellow text read
+// as black and Underperforming's dark-orange read as red, collapsing the column to
+// green/red/black. Normal has an empty `.cell` → give it a clean green wash here.
 function metricCell(value: number | null): string {
   if (value === null) return 'text-gray-400'
-  return perfBandStyleFromScore(value).fg
+  return perfBandStyleFromScore(value).cell || 'bg-emerald-50 text-emerald-800 font-semibold'
 }
 
 export function StringLevelTable({
@@ -236,7 +239,7 @@ export function StringLevelTable({
                 <td className="sticky left-[204px] z-10 bg-white group-hover:bg-blue-50/50 px-2 py-1.5 text-xs font-medium text-gray-900 border-r border-gray-200 transition-colors">
                   PV{row.string_number}
                 </td>
-                <td className={cn('px-2 py-1.5 text-center text-xs font-mono border-r border-gray-200 bg-blue-50/30', metricCell(row.perf_avg))}>
+                <td className={cn('px-2 py-1.5 text-center text-xs font-mono border-r border-gray-200', metricCell(row.perf_avg))}>
                   {row.perf_avg !== null ? `${row.perf_avg}%` : '—'}
                 </td>
                 <td className={cn('px-2 py-1.5 text-center text-xs font-mono border-r border-gray-200 bg-sky-50/30', row.compl_avg != null ? completenessStyleFromPct(row.compl_avg)?.fg ?? 'text-gray-400' : 'text-gray-400')}>

@@ -91,17 +91,17 @@ export function bucketDonutStatus(input: DonutInput): DonutBucket | null {
 
   // Rule #5 — score path delegates to the V1 classifier. is_used/peer_excluded
   // already handled above (rules #1/#2), so flag them false here; the donut
-  // buckets {normal→healthy, watch+underperforming→abnormal, serious+dead→
-  // critical} come straight from perfBandToDonutBucket — the SAME source the
-  // /analysis cells use, so a string's arc and its cell can never disagree.
+  // buckets {normal→healthy, watch→abnormal, critical→critical} come straight
+  // from perfBandToDonutBucket — the SAME source the /analysis cells use, so a
+  // string's arc and its cell can never disagree.
   const band = classifyStringPerformance(input.healthScore, {
     isUsed: true,
     peerExcluded: false,
     insufficientData: false,
   })
   const bucket = perfBandToDonutBucket(band)
-  // band is one of normal/watch/underperforming/serious_fault/dead here
-  // (non-null score, used, comparable) → bucket is healthy|abnormal|critical.
+  // band is one of normal/watch/critical here (non-null score, used,
+  // comparable) → bucket is healthy|abnormal|critical.
   return (bucket ?? 'abnormal') as DonutBucket
 }
 

@@ -111,26 +111,26 @@ describe('classifyAlertSeverityWithHysteresis (pure)', () => {
 })
 
 describe('classifySrAlertSeverityWithHysteresis (pure) — V1-band-aligned severity', () => {
-  // V1 cutover (Task 18): the alert CRITICAL boundary now matches the cell's
-  // serious_fault cut (displayed < 60 ⇒ sr < 0.60), and 0.60–0.85 ⇒ WARNING.
-  // An alert can no longer say CRITICAL while the /analysis cell says Watch, nor
-  // vice-versa. The donut's bucketSrScore stays on 0.94/0.85 (live ring) —
-  // ONLY the alert severity moved.
-  it('no existing alert → CRITICAL < 0.60, WARNING [0.60,0.85), else none', () => {
-    expect(classifySrAlertSeverityWithHysteresis(0.50, null)).toBe('CRITICAL')
-    expect(classifySrAlertSeverityWithHysteresis(0.59, null)).toBe('CRITICAL') // serious_fault → CRITICAL
-    expect(classifySrAlertSeverityWithHysteresis(0.62, null)).toBe('WARNING')  // underperforming → WARNING
-    expect(classifySrAlertSeverityWithHysteresis(0.84, null)).toBe('WARNING')  // watch zone (0.60–0.85) → WARNING
+  // 3-band rebrand (2026-06-12): the alert CRITICAL boundary now matches the
+  // cell's 'critical' cut (display below PERF_CRITICAL ⇒ sr below 0.50), and
+  // [0.50, 0.85) ⇒ WARNING (the 'watch' band). An alert can no longer say
+  // CRITICAL while the /analysis cell says Watch, nor vice-versa. The donut's
+  // bucketSrScore stays on 0.94/0.85 (live ring) — ONLY the alert severity moved.
+  it('no existing alert → CRITICAL < 0.50, WARNING [0.50,0.85), else none', () => {
+    expect(classifySrAlertSeverityWithHysteresis(0.40, null)).toBe('CRITICAL')
+    expect(classifySrAlertSeverityWithHysteresis(0.49, null)).toBe('CRITICAL') // critical band → CRITICAL
+    expect(classifySrAlertSeverityWithHysteresis(0.52, null)).toBe('WARNING')  // watch band → WARNING
+    expect(classifySrAlertSeverityWithHysteresis(0.84, null)).toBe('WARNING')  // watch zone (0.50–0.85) → WARNING
     expect(classifySrAlertSeverityWithHysteresis(0.86, null)).toBeNull()       // ≥0.85 → no alert
     expect(classifySrAlertSeverityWithHysteresis(0.96, null)).toBeNull()
   })
-  it('escalation WARNING→CRITICAL only past 0.60 − margin', () => {
-    expect(classifySrAlertSeverityWithHysteresis(0.58, 'WARNING')).toBe('WARNING') // sticky in 0.57..0.60
-    expect(classifySrAlertSeverityWithHysteresis(0.56, 'WARNING')).toBe('CRITICAL')
+  it('escalation WARNING→CRITICAL only past 0.50 − margin', () => {
+    expect(classifySrAlertSeverityWithHysteresis(0.48, 'WARNING')).toBe('WARNING') // sticky in 0.47..0.50
+    expect(classifySrAlertSeverityWithHysteresis(0.46, 'WARNING')).toBe('CRITICAL')
   })
-  it('de-escalation CRITICAL→ requires rising above 0.60 + margin', () => {
-    expect(classifySrAlertSeverityWithHysteresis(0.62, 'CRITICAL')).toBe('CRITICAL') // sticky in 0.60..0.63
-    expect(classifySrAlertSeverityWithHysteresis(0.66, 'CRITICAL')).toBe('WARNING')  // clears critical, now warning
+  it('de-escalation CRITICAL→ requires rising above 0.50 + margin', () => {
+    expect(classifySrAlertSeverityWithHysteresis(0.52, 'CRITICAL')).toBe('CRITICAL') // sticky in 0.50..0.53
+    expect(classifySrAlertSeverityWithHysteresis(0.56, 'CRITICAL')).toBe('WARNING')  // clears critical, now warning
   })
   it('full recovery from WARNING needs sr above 0.85 + margin', () => {
     expect(classifySrAlertSeverityWithHysteresis(0.86, 'WARNING')).toBe('WARNING') // sticky in 0.85..0.88

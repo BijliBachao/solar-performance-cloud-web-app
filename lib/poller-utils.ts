@@ -463,13 +463,13 @@ export async function generateAlerts(
   for (const r of srResults) {
     if (r.sr == null) continue // open-circuit/offline/excluded/too-few-peers → Part 2 or no fault
     const gapPercent = Math.max(0, Math.min((1 - r.sr) * 100, 100))
-    // V1 cutover (Task 18): severity maps to the SAME bands the /analysis cell
-    // shows — CRITICAL when sr < SR_ALERT_CRITICAL (0.60 = the cell's
-    // serious_fault cut), WARNING in [0.60, 0.85) — so an alert can never say
-    // CRITICAL while the cell says Watch (nor the reverse). NOTE: the live donut
-    // ring (bucketSrScore) deliberately stays on the 0.94/0.85 SR anchor, so a
-    // string in [0.85, 0.94) is an 'abnormal' ring with no alert by design.
-    // SR-level hysteresis kills threshold-hover flapping.
+    // 3-band rebrand: severity maps to the SAME bands the /analysis cell
+    // shows — CRITICAL when sr < SR_ALERT_CRITICAL (0.50 = the cell's
+    // 'critical' cut), WARNING in [0.50, 0.85) (the 'watch' band) — so an alert
+    // can never say CRITICAL while the cell says Watch (nor the reverse). NOTE:
+    // the live donut ring (bucketSrScore) deliberately stays on the 0.94/0.85 SR
+    // anchor, so a string in [0.85, 0.94) is an 'abnormal' ring with no alert by
+    // design. SR-level hysteresis kills threshold-hover flapping.
     const severity = classifySrAlertSeverityWithHysteresis(
       r.sr,
       existingSeverity.get(r.string_number) ?? null,

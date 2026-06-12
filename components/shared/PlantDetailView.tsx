@@ -17,7 +17,9 @@ import { PlantHeader } from '@/components/shared/PlantHeader'
 import { InverterDetailSection } from '@/components/shared/InverterDetailSection'
 import { AlertHistoryLog } from '@/components/shared/AlertHistoryLog'
 import { StringHealthDonut } from '@/components/shared/StringHealthDonut'
-import { SunGateBanner } from '@/components/shared/SunGateBanner'
+// DISABLED 2026-06-12 (per Ali — sun-gate banner hidden for now; re-enable by
+// uncommenting this import + the <SunGateBanner/> render below):
+// import { SunGateBanner } from '@/components/shared/SunGateBanner'
 import {
   AlertTriangle, RefreshCw, ArrowLeft, Activity, ClipboardList,
 } from 'lucide-react'
@@ -418,10 +420,11 @@ export function PlantDetailView({
         )
       })()}
 
-      {/* Sun-gate banner — early morning the sun sits below the live-data
-          elevation floor, so live string readings/performance are withheld
-          (dawn output is too faint to score fairly). Auto-hides once it arms. */}
-      <SunGateBanner latRaw={plant.latitude} lngRaw={plant.longitude} />
+      {/* DISABLED 2026-06-12 (per Ali — sun-gate banner hidden for now). Re-enable by
+          uncommenting the import above + the line below:
+          Sun-gate banner — early morning the sun sits below the live-data elevation floor,
+          so live string readings/performance are withheld (dawn output too faint to score).
+          <SunGateBanner latRaw={plant.latitude} lngRaw={plant.longitude} /> */}
 
       <div className="px-4 sm:px-6 py-5 max-w-[1440px] mx-auto">
         <Tabs defaultValue="overview" className="w-full">

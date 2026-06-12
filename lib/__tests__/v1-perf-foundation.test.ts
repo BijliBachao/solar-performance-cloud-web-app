@@ -4,35 +4,30 @@ import {
   perfBandToDonutBucket,
   bucketHealthScore,
   PERF_NORMAL,
-  PERF_WATCH,
-  PERF_UNDERPERFORMING,
-  PERF_DEAD,
+  PERF_CRITICAL,
 } from '@/lib/string-health'
 import { bucketDonutStatus } from '@/lib/string-health-donut'
 import { perfBandStyleFromScore, gradeFromScore, PERF_BAND_STYLES } from '@/lib/design-tokens'
 
 // The V1 classifier + constants are now THE single source for every
-// daily-metric band surface. The band CUTOVER (2026-06-11) re-pointed
+// daily-metric band surface. The 3-band REBRAND (2026-06-12) re-pointed
 // bucketHealthScore / bucketDonutStatus / scoreToBucket / the NOC SQL FILTER /
 // the design-token cell map / the UI legends ALL onto this one classifier — in
 // one atomic change — so the /analysis cells, the per-plant donut, and the NOC
 // console can NEVER disagree. The consistency sweep below is the "NOC == cell"
-// guard.
+// guard. Bands: normal ≥85, watch [50,85), critical <50.
 
 const F = { isUsed: true, peerExcluded: false, insufficientData: false }
 
-describe('classifyStringPerformance — V1 single source of truth (inert for now)', () => {
+describe('classifyStringPerformance — V1 single source of truth (3-band)', () => {
   it('bands by display %, upper band owns the edge', () => {
     expect(classifyStringPerformance(100, F)).toBe('normal')
-    expect(classifyStringPerformance(95, F)).toBe('normal')
-    expect(classifyStringPerformance(94.9, F)).toBe('watch')
-    expect(classifyStringPerformance(85, F)).toBe('watch')
-    expect(classifyStringPerformance(84.9, F)).toBe('underperforming')
-    expect(classifyStringPerformance(60, F)).toBe('underperforming')
-    expect(classifyStringPerformance(59.9, F)).toBe('serious_fault')
-    expect(classifyStringPerformance(10, F)).toBe('serious_fault')
-    expect(classifyStringPerformance(9.9, F)).toBe('dead')
-    expect(classifyStringPerformance(0, F)).toBe('dead')
+    expect(classifyStringPerformance(85, F)).toBe('normal')
+    expect(classifyStringPerformance(84.9, F)).toBe('watch')
+    expect(classifyStringPerformance(50, F)).toBe('watch')
+    expect(classifyStringPerformance(49.9, F)).toBe('critical')
+    expect(classifyStringPerformance(10, F)).toBe('critical')
+    expect(classifyStringPerformance(0, F)).toBe('critical')
   })
 
   it('flag overrides beat the number', () => {
@@ -43,17 +38,15 @@ describe('classifyStringPerformance — V1 single source of truth (inert for now
   })
 
   it('band lower-bounds match the locked constants', () => {
-    expect([PERF_NORMAL, PERF_WATCH, PERF_UNDERPERFORMING, PERF_DEAD]).toEqual([95, 85, 60, 10])
+    expect([PERF_NORMAL, PERF_CRITICAL]).toEqual([85, 50])
   })
 })
 
-describe('perfBandToDonutBucket — 5 bands → 3 donut buckets (+ no_data/excluded)', () => {
+describe('perfBandToDonutBucket — 3 bands → 3 donut buckets (+ no_data/excluded)', () => {
   it('rolls up correctly', () => {
     expect(perfBandToDonutBucket('normal')).toBe('healthy')
     expect(perfBandToDonutBucket('watch')).toBe('abnormal')
-    expect(perfBandToDonutBucket('underperforming')).toBe('abnormal')
-    expect(perfBandToDonutBucket('serious_fault')).toBe('critical')
-    expect(perfBandToDonutBucket('dead')).toBe('critical')
+    expect(perfBandToDonutBucket('critical')).toBe('critical')
     expect(perfBandToDonutBucket('insufficient_data')).toBe('no_data')
     expect(perfBandToDonutBucket('unused')).toBeNull()
     expect(perfBandToDonutBucket('peer_excluded')).toBeNull()
@@ -71,16 +64,16 @@ describe('perfBandToDonutBucket — 5 bands → 3 donut buckets (+ no_data/exclu
 // (Reuses the module-level `F` flags fixture declared at the top of this file.)
 
 /** Mirror of loadFleetCounts' SQL FILTER cutpoints (interpolated PERF_* consts).
- *  healthy ≥ PERF_NORMAL; abnormal [PERF_UNDERPERFORMING, PERF_NORMAL); critical
- *  < PERF_UNDERPERFORMING; no-data = NULL. The donut folds no-data INTO abnormal. */
+ *  healthy ≥ PERF_NORMAL; abnormal [PERF_CRITICAL, PERF_NORMAL); critical
+ *  < PERF_CRITICAL; no-data = NULL. The donut folds no-data INTO abnormal. */
 function sqlDonutBucket(score: number | null): 'healthy' | 'abnormal' | 'critical' {
   if (score === null) return 'abnormal' // no-data folds into the abnormal arc
   if (score >= PERF_NORMAL) return 'healthy'
-  if (score >= PERF_UNDERPERFORMING) return 'abnormal'
+  if (score >= PERF_CRITICAL) return 'abnormal'
   return 'critical'
 }
 
-/** The 5-band cell colour and the 3-arc donut bucket must come from ONE source.
+/** The cell colour and the 3-arc donut bucket must come from ONE source.
  *  This is the expected donut bucket given the cell's band. */
 function expectedDonutFromCell(score: number | null): 'healthy' | 'abnormal' | 'critical' {
   const band = classifyStringPerformance(score, F)
@@ -93,7 +86,7 @@ describe('CONSISTENCY GUARD: /analysis cell band ↔ donut arc ↔ NOC SQL ↔ t
   // Integer sweep [0..100] plus the exact band boundaries (upper band owns edge).
   const scores: (number | null)[] = [
     ...Array.from({ length: 101 }, (_, i) => i),
-    9.99, 10, 59.99, 60, 84.99, 85, 94.99, 95, 99.99, 100,
+    49.99, 50, 84.99, 85, 99.99, 100,
     null,
   ]
 
@@ -142,15 +135,12 @@ describe('CONSISTENCY GUARD: /analysis cell band ↔ donut arc ↔ NOC SQL ↔ t
     }
   })
 
-  it('boundary scores land on the documented 5 cell bands (upper band owns edge)', () => {
-    expect(classifyStringPerformance(95, F)).toBe('normal')
-    expect(classifyStringPerformance(94.99, F)).toBe('watch')
-    expect(classifyStringPerformance(85, F)).toBe('watch')
-    expect(classifyStringPerformance(84.99, F)).toBe('underperforming')
-    expect(classifyStringPerformance(60, F)).toBe('underperforming')
-    expect(classifyStringPerformance(59.99, F)).toBe('serious_fault')
-    expect(classifyStringPerformance(10, F)).toBe('serious_fault')
-    expect(classifyStringPerformance(9.99, F)).toBe('dead')
-    expect(classifyStringPerformance(0, F)).toBe('dead')
+  it('boundary scores land on the documented 3 cell bands (upper band owns edge)', () => {
+    expect(classifyStringPerformance(85, F)).toBe('normal')
+    expect(classifyStringPerformance(84.99, F)).toBe('watch')
+    expect(classifyStringPerformance(50, F)).toBe('watch')
+    expect(classifyStringPerformance(49.99, F)).toBe('critical')
+    expect(classifyStringPerformance(10, F)).toBe('critical')
+    expect(classifyStringPerformance(0, F)).toBe('critical')
   })
 })

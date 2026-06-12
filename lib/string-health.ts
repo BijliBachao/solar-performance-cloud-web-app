@@ -504,12 +504,14 @@ export const MIN_PRODUCING_CURRENT = 0.5
 /** Minimum sun-up HOURS before a PKT day is scoreable. */
 export const MIN_SUNUP_HOURS_FOR_DAILY_SCORE = 2
 
-// ─── V1 String-Performance (intra-inverter, current-only) — LOCKED 2026-06-11 ──
+// ─── V1 String-Performance (intra-inverter, current-only) ─────────────────────
 // Reyyan V1 spec: median-of-medians, fixed 8AM–4PM PKT window, 60% completeness
-// gate, display cap 100 (raw kept), bands 95/85/60/Dead. classifyStringPerformance
-// is THE single source of truth — the /analysis cell, drill-down, per-plant donut,
-// and NOC counts/rows ALL derive from it (via perfBandToDonutBucket). Nothing else
-// may compare a performance % to a band threshold.
+// gate, display cap 100 (raw kept). 3-BAND REBRAND (2026-06-12, Ali-approved —
+// replaces Reyyan §10's 5 bands): two cutpoints (85 and 50) → normal/watch/
+// critical. classifyStringPerformance is THE single source of truth — the
+// /analysis cell, drill-down, per-plant donut, and NOC counts/rows ALL derive
+// from it (via perfBandToDonutBucket). Nothing else may compare a performance %
+// to a band threshold.
 /** Fixed daily window (PKT, local Pakistan time). In UTC this is 03:00–11:00. */
 export const PERF_WINDOW_START_HOUR_PKT = 8
 export const PERF_WINDOW_END_HOUR_PKT = 16
@@ -519,14 +521,14 @@ export const PERF_EXPECTED_READINGS = 96
 export const PERF_COMPLETENESS_GATE = 0.60
 /** Customer-facing display cap. The raw (uncapped) value is stored separately. */
 export const PERF_DISPLAY_MAX = 100
-/** Status band lower bounds (the upper band owns each edge). Dead = below PERF_DEAD. */
-export const PERF_NORMAL = 95
-export const PERF_WATCH = 85
-export const PERF_UNDERPERFORMING = 60
-export const PERF_DEAD = 10
+/** Status band lower bounds (the upper band owns each edge):
+ *  score ≥ PERF_NORMAL (85) → normal; PERF_CRITICAL (50) ≤ score < 85 → watch;
+ *  score < PERF_CRITICAL (50) → critical. */
+export const PERF_NORMAL = 85
+export const PERF_CRITICAL = 50
 
 export type PerfBand =
-  | 'normal' | 'watch' | 'underperforming' | 'serious_fault' | 'dead'
+  | 'normal' | 'watch' | 'critical'
   | 'insufficient_data' | 'unused' | 'peer_excluded'
 
 // ─── V1 Data-Completeness bands (Reyyan §9 + §10 second table) ────────────────
@@ -594,23 +596,19 @@ export function classifyStringPerformance(displayPct: number | null, flags: Perf
   if (!flags.isUsed) return 'unused'
   if (flags.peerExcluded) return 'peer_excluded'
   if (flags.insufficientData || displayPct == null) return 'insufficient_data'
-  if (displayPct < PERF_DEAD) return 'dead'
-  if (displayPct < PERF_UNDERPERFORMING) return 'serious_fault'
-  if (displayPct < PERF_WATCH) return 'underperforming'
+  if (displayPct < PERF_CRITICAL) return 'critical'
   if (displayPct < PERF_NORMAL) return 'watch'
   return 'normal'
 }
 
-/** Rolls the 5 performance bands into the 3-bucket donut (+ no_data / excluded=null). */
+/** Rolls the 3 performance bands into the 3-bucket donut (+ no_data / excluded=null). */
 export function perfBandToDonutBucket(
   band: PerfBand,
 ): 'healthy' | 'abnormal' | 'critical' | 'no_data' | null {
   switch (band) {
     case 'normal': return 'healthy'
-    case 'watch':
-    case 'underperforming': return 'abnormal'
-    case 'serious_fault':
-    case 'dead': return 'critical'
+    case 'watch': return 'abnormal'
+    case 'critical': return 'critical'
     case 'insufficient_data': return 'no_data'
     case 'unused':
     case 'peer_excluded': return null
@@ -627,10 +625,8 @@ export function perfBandToBackCompatStatus(
 ): 'healthy' | 'warning' | 'critical' | 'no_data' | 'peer_excluded' | 'unused' {
   switch (band) {
     case 'normal': return 'healthy'
-    case 'watch':
-    case 'underperforming': return 'warning'
-    case 'serious_fault':
-    case 'dead': return 'critical'
+    case 'watch': return 'warning'
+    case 'critical': return 'critical'
     case 'insufficient_data': return 'no_data'
     case 'unused': return 'unused'
     case 'peer_excluded': return 'peer_excluded'
@@ -940,25 +936,25 @@ export function classifyAlertSeverityWithHysteresis(
 /** Hysteresis margin in SR units (~3pp of gap) for the SR-bucket alert mapping. */
 export const SR_ALERT_HYSTERESIS = 0.03
 
-// ─── SR→alert boundaries, aligned to the V1 display bands (Task 18) ──────────
+// ─── SR→alert boundaries, aligned to the V1 display bands ─────────────────────
 // The real-time peer alert maps an SR ratio (0–1) to a severity using the SAME
 // cut-points the /analysis cell shows, expressed on the SR scale (band ÷ 100):
-//   sr < PERF_UNDERPERFORMING/100 (0.60) ⇒ CRITICAL  (the cell's serious_fault)
-//   PERF_UNDERPERFORMING/100 ≤ sr < PERF_WATCH/100 (0.85) ⇒ WARNING
-//   sr ≥ PERF_WATCH/100 ⇒ no alert
+//   sr < PERF_CRITICAL/100 (0.50) ⇒ CRITICAL  (the cell's 'critical' band)
+//   PERF_CRITICAL/100 ≤ sr < PERF_NORMAL/100 (0.85) ⇒ WARNING (the 'watch' band)
+//   sr ≥ PERF_NORMAL/100 ⇒ no alert
 // This guarantees an alert can NEVER say CRITICAL while the cell says Watch (nor
 // the reverse). Derived from the central PERF_* constants — no inline numbers.
 // NOTE: this is the ALERT-severity mapping only; the donut's live ring
 // (bucketSrScore) deliberately keeps the 0.94/0.85 SR anchor.
-export const SR_ALERT_CRITICAL = PERF_UNDERPERFORMING / 100
-export const SR_ALERT_WARNING = PERF_WATCH / 100
+export const SR_ALERT_CRITICAL = PERF_CRITICAL / 100
+export const SR_ALERT_WARNING = PERF_NORMAL / 100
 
-/** Map an SR ratio to an alert severity using the V1 display bands (Task 18),
- *  so the alert list and the /analysis cell can never contradict each other:
- *  serious_fault (sr < SR_ALERT_CRITICAL=0.60) ⇒ CRITICAL; the watch+
- *  underperforming band [0.60, 0.85) ⇒ WARNING; ≥0.85 ⇒ no alert. Sticky
- *  hysteresis on the boundaries prevents threshold-hover flap. (INFO is unused
- *  for peer alerts.) The donut's bucketSrScore is untouched (0.94/0.85 ring). */
+/** Map an SR ratio to an alert severity using the V1 display bands, so the
+ *  alert list and the /analysis cell can never contradict each other:
+ *  critical (sr < SR_ALERT_CRITICAL=0.50) ⇒ CRITICAL; the watch band
+ *  [0.50, 0.85) ⇒ WARNING; ≥0.85 ⇒ no alert. Sticky hysteresis on the
+ *  boundaries prevents threshold-hover flap. (INFO is unused for peer
+ *  alerts.) The donut's bucketSrScore is untouched (0.94/0.85 ring). */
 export function classifySrAlertSeverityWithHysteresis(
   sr: number,
   existing: AlertSeverity | null,
@@ -1001,13 +997,14 @@ export function computeAvailability(stringCount: number, maxCount: number): numb
 /**
  * Classify a daily health/performance score into the /analysis display bucket.
  *
- * V1 band cutover (2026-06-11): derived from the central V1 classifier so the
+ * 3-band rebrand (2026-06-12): derived from the central V1 classifier so the
  * /analysis tally, the per-plant donut, the NOC console, and the per-string
- * cells can NEVER disagree. The 5 V1 bands fold into the 4 analysis buckets:
- *   normal               → healthy
- *   watch+underperforming→ warning  (the donut's 'abnormal')
- *   serious_fault+dead   → critical
- *   insufficient_data    → no_data
+ * cells can NEVER disagree. The 3 perf bands fold into the 4 analysis buckets
+ * (cutpoints 85 / 50):
+ *   normal (≥85)            → healthy
+ *   watch  ([50,85))        → warning  (the donut's 'abnormal')
+ *   critical (<50)          → critical
+ *   insufficient_data       → no_data
  * This is the DAILY-metric consumer — NOT the live-SR/alert path (which keeps
  * bucketSrScore / SR_HEALTHY / SR_ABNORMAL on the 0.94/0.85 anchor).
  */

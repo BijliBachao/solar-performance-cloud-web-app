@@ -50,12 +50,12 @@ describe('scoreStringPerformance (V1 — raw + display + band)', () => {
   })
 
   it('bands a weak string by its DISPLAY value through the central classifier', () => {
-    // peers at 10, weak at 7 → 70% → underperforming
+    // peers at 10, weak at 7 → 70% → watch (50 ≤ 70 < 85)
     const r = scoreStringPerformance([inp(1, 10), inp(2, 10), inp(3, 10), inp(4, 7)])
     const weak = r.find(x => x.string_number === 4)!
     expect(weak.performance).toBe(70)
     expect(weak.raw_performance).toBe(70)
-    expect(weak.band).toBe('underperforming')
+    expect(weak.band).toBe('watch')
   })
 
   it('peer-excluded → band peer_excluded, null score, not in pool', () => {

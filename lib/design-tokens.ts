@@ -227,20 +227,19 @@ export function plantHealthLabel(state: number | null): string {
   return 'Disconnected'
 }
 
-// ━━━ V1 PERFORMANCE-BAND CELL STYLES (5 colours) ━━━━━━━━━━━━━━━━
-// THE central 5-band → Tailwind map for per-string DAILY-score cells
+// ━━━ V1 PERFORMANCE-BAND CELL STYLES (3 colours) ━━━━━━━━━━━━━━━━
+// THE central 3-band → Tailwind map for per-string DAILY-score cells
 // (/analysis daily cells, perf/avail columns, PerformanceCell, monthly report).
-// Cells show all 5 V1 bands as 5 distinct colours; the donut + NOC roll these
-// up to 3 arcs via perfBandToDonutBucket — but BOTH derive from the ONE
-// classifier (classifyStringPerformance), so a cell colour and its donut arc
-// can never disagree. Band cutpoints live in string-health.ts (95/85/60/10).
+// 3-band rebrand (2026-06-12): cells show the 3 perf bands as 3 distinct
+// colours; the donut + NOC roll these up to 3 arcs via perfBandToDonutBucket —
+// BOTH derive from the ONE classifier (classifyStringPerformance), so a cell
+// colour and its donut arc can never disagree. Band cutpoints live in
+// string-health.ts (85 / 50).
 //
-//   normal           → green   (emerald)
-//   watch            → amber/yellow
-//   underperforming  → orange
-//   serious_fault    → red
-//   dead             → dark/grey (slate-800)
-//   insufficient_data→ muted grey (no score)
+//   normal  (≥85)      → green   (emerald)  — "OK"
+//   watch   ([50,85))  → light orange       — "Watch"
+//   critical (<50)     → red                — "Critical"
+//   insufficient_data  → muted grey (no score)
 //   unused/peer_excluded → handled by callers (rendered blank / chip), no cell wash
 
 export interface PerfBandStyle {
@@ -262,39 +261,24 @@ export const PERF_BAND_STYLES: Record<PerfBand, PerfBandStyle> = {
     bg: 'bg-emerald-50',
     cell: '', // clean default — a healthy string needs no wash
     dot: 'bg-emerald-500',
-    label: 'Normal',
+    label: 'OK',
   },
   watch: {
-    fg: 'text-yellow-700 font-semibold',
-    bg: 'bg-yellow-100',
-    cell: 'bg-yellow-100 text-yellow-900 font-bold',
-    dot: 'bg-yellow-400',
-    label: 'Watch',
-  },
-  underperforming: {
+    // LIGHT orange (orange-100 wash, orange-400 dot) — deliberately lighter than
+    // the retired underperforming band's orange-200, to read as "keep an eye on
+    // it" rather than a hard fault.
     fg: 'text-orange-700 font-semibold',
     bg: 'bg-orange-100',
-    cell: 'bg-orange-200 text-orange-900 font-bold',
-    dot: 'bg-orange-500',
-    label: 'Underperforming',
+    cell: 'bg-orange-100 text-orange-800 font-bold',
+    dot: 'bg-orange-400',
+    label: 'Watch',
   },
-  serious_fault: {
+  critical: {
     fg: 'text-red-700 font-bold',
-    bg: 'bg-red-50',
-    cell: 'bg-red-200 text-red-900 font-bold',
+    bg: 'bg-red-100',
+    cell: 'bg-red-100 text-red-800 font-bold',
     dot: 'bg-red-500',
-    label: 'Serious Fault',
-  },
-  dead: {
-    // fg is used on a WHITE background (the Perf/Avail summary text) — it MUST be
-    // dark or it renders invisible (the old text-slate-100 was near-white = unreadable).
-    fg: 'text-slate-700 font-bold',
-    bg: 'bg-slate-200',
-    // cell is the filled grid cell: a dark slate wash with EXPLICIT white text for
-    // high contrast (not the near-black slate-800 that read as black-on-black).
-    cell: 'bg-slate-600 text-white font-bold',
-    dot: 'bg-slate-600',
-    label: 'Dead',
+    label: 'Critical',
   },
   insufficient_data: {
     fg: 'text-gray-400',
@@ -397,8 +381,8 @@ export function completenessStyleFromPct(pct: number | null | undefined): Comple
 // ━━━ HEALTH GRADE STYLES (3-band rollup) ━━━━━━━━━━━━━━━━━━━━━━━━
 // For PLANT-LEVEL aggregate health % and 3-band rollup surfaces (heatmaps,
 // monthly summary headers). Derived from the SAME classifier as the cells via
-// the donut rollup, so the cutpoints move in lockstep with the 5-band cells:
-//   normal→healthy, watch+underperforming→warning, serious+dead→critical.
+// the donut rollup, so the cutpoints move in lockstep with the cells:
+//   normal→healthy, watch→warning, critical→critical.
 
 export type HealthGrade =
   | 'healthy'

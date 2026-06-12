@@ -249,7 +249,7 @@ describe('updateDailyAggregates — poller writes today\'s live verdict (V1 wind
 
   it('an underperforming string scores below its healthy peers (V1 banding)', async () => {
     // Three healthy strings at 4000W (~6.67A) and one weak string at 2000W (~3.33A).
-    // Peer median over 4 strings = 6.67A; weak string = 3.33/6.67 ≈ 50% → serious_fault.
+    // Peer median over 4 strings = 6.67A; weak string = 3.33/6.67 ≈ 50% (watch band).
     const healthy = fullHours([8, 9, 10, 11], 4000, [1, 2, 3])
     const weak = fullHours([8, 9, 10, 11], 2000, [4])
     mockPrisma.string_measurements.findMany.mockResolvedValue([...healthy, ...weak])

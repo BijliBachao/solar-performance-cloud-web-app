@@ -88,21 +88,20 @@ describe('bucketSrScore', () => {
   })
 })
 
-describe('bucketHealthScore (V1 daily bands) is independent of bucketSrScore (SR alert path)', () => {
-  // V1 band cutover (2026-06-11): bucketHealthScore now delegates to the V1
-  // classifier (95/85/60/10) for the DAILY metric — /analysis cells, donut,
+describe('bucketHealthScore (daily bands) is independent of bucketSrScore (SR alert path)', () => {
+  // 3-band rebrand (2026-06-12): bucketHealthScore delegates to the central
+  // classifier (cutpoints 85/50) for the DAILY metric — /analysis cells, donut,
   // NOC. bucketSrScore stays on the SolarEdge ±6% anchor (0.94/0.85) for the
-  // LIVE-SR / alert path (untouched). They DELIBERATELY diverge now: e.g. a
-  // score of 94 is 'warning' (Watch) under V1 but sr=0.94 is 'healthy' on the
+  // LIVE-SR / alert path (untouched). They DELIBERATELY diverge: e.g. a score of
+  // 84 is 'warning' (Watch) on the daily metric but sr=0.84 is 'critical' on the
   // SR anchor. This test pins the divergence so a future "re-align" of the two
   // is a conscious choice, not an accident.
-  it('bucketHealthScore uses V1 cutpoints (95/85/60), not the SR 0.94/0.85 anchor', () => {
+  it('bucketHealthScore uses the 85/50 cutpoints, not the SR 0.94/0.85 anchor', () => {
+    expect(bucketHealthScore(85)).toBe('healthy')  // Normal edge
     expect(bucketHealthScore(95)).toBe('healthy')  // Normal
-    expect(bucketHealthScore(94)).toBe('warning')  // Watch — would be 'healthy' on the 94 anchor
-    expect(bucketHealthScore(85)).toBe('warning')  // Watch edge
-    expect(bucketHealthScore(84)).toBe('warning')  // Underperforming — would be 'critical' on the 85 anchor
-    expect(bucketHealthScore(60)).toBe('warning')  // Underperforming edge
-    expect(bucketHealthScore(59)).toBe('critical') // Serious Fault
+    expect(bucketHealthScore(84)).toBe('warning')  // Watch — would be 'critical' on the 0.85 SR anchor
+    expect(bucketHealthScore(50)).toBe('warning')  // Watch edge
+    expect(bucketHealthScore(49)).toBe('critical') // Critical
     expect(bucketHealthScore(null)).toBe('no_data')
   })
 

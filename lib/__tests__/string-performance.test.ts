@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { scoreStringPerformance, computeOperatingAvailability, median, type PerfStringInput } from '@/lib/string-performance'
 
-// V1 (2026-06-11): scorer now returns { performance(display ≤100), raw_performance(uncapped),
-// band, peer_median_current } and the input carries `insufficient_data`. These cases were
-// migrated from the old `status`/cap-150/94-85 shape to the V1 band + cap-100 behaviour.
+// V1 (2026-06-11) + 3-band rebrand (2026-06-12): scorer returns
+// { performance(display ≤100), raw_performance(uncapped), band, peer_median_current }
+// and the input carries `insufficient_data`. Bands: normal ≥85, watch [50,85),
+// critical <50.
 const used = (string_number: number, repr_current: number | null): PerfStringInput =>
   ({ string_number, is_used: true, exclude_from_peer_comparison: false, repr_current, insufficient_data: false })
 
@@ -17,18 +18,18 @@ describe('scoreStringPerformance', () => {
     const r = scoreStringPerformance([used(1, 5), used(2, 5), used(3, 5), used(4, 5)])
     expect(r.every(x => x.performance === 100 && x.band === 'normal')).toBe(true)
   })
-  it('one weak string → serious_fault, peers normal', () => {
+  it('one weak string → critical, peers normal', () => {
     const r = scoreStringPerformance([used(1, 5), used(2, 5), used(3, 5), used(4, 2)])
     const m = new Map(r.map(x => [x.string_number, x]))
     expect(m.get(1)!.band).toBe('normal')
-    expect(m.get(4)!.performance).toBe(40) // 2/5 = 40%, below 60 → serious_fault
-    expect(m.get(4)!.band).toBe('serious_fault')
+    expect(m.get(4)!.performance).toBe(40) // 2/5 = 40%, below 50 → critical
+    expect(m.get(4)!.band).toBe('critical')
   })
-  it('watch band (88%)', () => {
-    const r = scoreStringPerformance([used(1, 10), used(2, 10), used(3, 10), used(4, 8.8)])
+  it('watch band (70%)', () => {
+    const r = scoreStringPerformance([used(1, 10), used(2, 10), used(3, 10), used(4, 7)])
     const w = r.find(x => x.string_number === 4)!
-    expect(w.performance).toBe(88)
-    expect(w.band).toBe('watch') // 85 ≤ 88 < 95
+    expect(w.performance).toBe(70)
+    expect(w.band).toBe('watch') // 50 ≤ 70 < 85
   })
   it('whole group low together → all normal (systemic blind spot, documented)', () => {
     const r = scoreStringPerformance([used(1, 2), used(2, 2), used(3, 2), used(4, 2)])

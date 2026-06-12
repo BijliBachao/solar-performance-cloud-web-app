@@ -76,20 +76,20 @@ describe('GET /api/dashboard/analysis/string-cell (V1)', () => {
     expect(body.peers.length).toBe(3)
   })
 
-  it('a weak string reports its underperforming band + uncapped raw', async () => {
+  it('a weak string reports its watch band + uncapped raw', async () => {
     const win = [8, 9, 10, 11, 12, 13, 14, 15]
     mockPrisma.string_hourly.findMany.mockResolvedValue([
       ...hourly(win, 1, 10),
       ...hourly(win, 2, 10),
       ...hourly(win, 3, 10),
-      ...hourly(win, 4, 7), // 70%
+      ...hourly(win, 4, 7), // 70% → watch (50 ≤ 70 < 85)
     ])
     mockPrisma.string_configs.findMany.mockResolvedValue([])
 
     const body = await invoke('?device_id=dev1&string_number=4&date=2026-06-15')
     expect(body.performance).toBe(70)
     expect(body.raw_performance).toBe(70)
-    expect(body.band).toBe('underperforming')
+    expect(body.band).toBe('watch')
     expect(body.status).toBe('warning') // back-compat (abnormal → warning)
   })
 
