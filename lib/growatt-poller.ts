@@ -450,20 +450,24 @@ async function processDeviceData(
     await updateDailyAggregates(device.id, device.plant_id, effectiveStrings, stringConfigs, { model: null, max_strings: device.max_strings, strings_are_mppts: stringsAreMppts })
   }
 
-  // Process fault/warning codes → vendor_alarms.
-  // The real MAX/SPH-S real-time fields are `faultType` / `warnCode` (probed
-  // live 2026-06-12). The previous `faultcode`/`warningcode` names do NOT exist
-  // in the payload → always undefined → this path was DEAD (never fired). Keep
-  // the legacy names as a defensive fallback. Only process when the field is
-  // PRESENT: a missing field on a partial response must not read as 0 and
-  // false-resolve an open alarm.
-  const faultRaw = deviceData.faultType ?? deviceData.faultcode
-  const warnRaw = deviceData.warnCode ?? deviceData.warningcode
-  if (faultRaw != null) {
-    await processGrowattFaultCode(device.id, device.plant_id, Number(faultRaw) || 0, 'fault')
-  }
-  if (warnRaw != null) {
-    await processGrowattFaultCode(device.id, device.plant_id, Number(warnRaw) || 0, 'warn')
+  // Process fault/warning codes → vendor_alarms — ONLY on a trusted production
+  // cycle (measurements present). On a zero-measurement night/off cycle the
+  // write gate above never runs, so processing here could let a faultType:0
+  // false-resolve a real open alarm; gate it like the native-counter block below.
+  // The real MAX/SPH-S fields are `faultType` / `warnCode` (probed live
+  // 2026-06-12); the legacy `faultcode`/`warningcode` names do NOT exist in the
+  // payload (this path was DEAD before). A missing OR unparseable code is
+  // treated as "unknown → skip": only a parsed value ≥ 0 is acted on, so a
+  // genuine 0 resolves but a NaN/garbage value never false-resolves.
+  if (measurements.length > 0) {
+    const faultCode = Number(deviceData.faultType ?? deviceData.faultcode)
+    const warnCodeVal = Number(deviceData.warnCode ?? deviceData.warningcode)
+    if (Number.isFinite(faultCode) && faultCode >= 0) {
+      await processGrowattFaultCode(device.id, device.plant_id, faultCode, 'fault')
+    }
+    if (Number.isFinite(warnCodeVal) && warnCodeVal >= 0) {
+      await processGrowattFaultCode(device.id, device.plant_id, warnCodeVal, 'warn')
+    }
   }
 
   // Save hardware daily counter — source of truth for "today's energy" display
@@ -560,8 +564,15 @@ async function processGrowattFaultCode(
         provider: PROVIDERS.GROWATT,
         vendor_alarm_id: `${deviceId}_${kind}_${Date.now()}`,
         alarm_code: String(code),
+        // TODO: Growatt's snapshot carries no severity taxonomy or human text;
+        // fault→CRITICAL/warn→WARNING + bare-code message is the proxy ceiling.
+        // A real code→description/severity map needs the v1 fault-LIST endpoint
+        // (permission-gated for our MAX fleet) — see Working/all_API/growatt.
         severity: kind === 'fault' ? 'CRITICAL' : 'WARNING',
         message: kind === 'fault' ? `Inverter fault code ${code}` : `Inverter warning code ${code}`,
+        advice: 'Check the Growatt ShinePhone / ShineServer portal for the full fault description. ' +
+          'Common causes: grid voltage/frequency out of range, insulation/PID fault, ' +
+          'over-temperature, or string fault. Contact Growatt support if it persists.',
         started_at: new Date(),
       },
     })
