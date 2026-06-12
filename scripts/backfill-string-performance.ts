@@ -28,5 +28,25 @@ async function main() {
     if (updated === 0) console.warn(`⚠️  ${date}: 0 rows updated — date-filter mismatch? (C1)`)
     else console.log(`backfilled ${date}: ${updated} rows`)
   }
+
+  // Clear stale pre-V1 leftovers. computeSettledDayPerformance only RECOMPUTES
+  // strings that have 8–4 PKT hourly data that day; a string with an old-metric
+  // string_daily row but no window data (logger gap) keeps its OLD, possibly
+  // UNCAPPED health_score (e.g. 127%). Under V1 such a row has NO valid score, so
+  // it must read "no data", not a stale number. V1 ALWAYS sets data_completeness
+  // when it scores, so `data_completeness IS NULL && health_score IS NOT NULL`
+  // uniquely identifies an un-recomputed pre-V1 leftover. NULL only the derived
+  // display columns — the raw truth (string_measurements / string_hourly) and the
+  // uncapped raw_performance are never touched.
+  const earliest = dates[dates.length - 1] // oldest YYYY-MM-DD in the window
+  const cleared = await prisma.string_daily.updateMany({
+    where: {
+      date: { gte: new Date(`${earliest}T00:00:00Z`) },
+      data_completeness: null,
+      health_score: { not: null },
+    },
+    data: { health_score: null, performance: null },
+  })
+  console.log(`cleared ${cleared.count} stale pre-V1 rows → no-V1-score (health_score/performance NULLed; raw data untouched)`)
 }
 main().then(() => prisma.$disconnect()).then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1) })
