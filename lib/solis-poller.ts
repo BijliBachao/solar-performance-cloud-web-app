@@ -379,19 +379,30 @@ async function fetchSolisAlarms(client: SolisClient): Promise<void> {
     })
     const deviceBySn = new Map(solisDevices.map(d => [d.device_name, d]))
 
+    // Query window: 7 days back through tomorrow (UTC). The end is widened by a
+    // day so PKT-today alarms (PKT = UTC+5, ahead of UTC at the day boundary)
+    // are never missed. Solis filter dates are yyyy-MM-dd.
+    const fmt = (d: Date) => d.toISOString().split('T')[0]
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-    const today = new Date()
-    const fmt = (d: Date) => d.toISOString().split('T')[0] // yyyy-MM-dd
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    // Floor of the window — bounds the diff-resolve sweep so we never
+    // false-resolve an alarm that merely aged out of the query window.
+    const windowStart = new Date(`${fmt(sevenDaysAgo)}T00:00:00.000Z`)
 
     const alarms = await client.getAlarmList({
       beginDate: fmt(sevenDaysAgo),
-      endDate: fmt(today),
+      endDate: fmt(tomorrow),
     })
 
     let stored = 0
+    let droppedUnknown = 0
+    // vendorAlarmIds of alarms that are STILL OPEN in this fetch (not closed).
+    // Anything open in our DB but absent from this set has cleared.
+    const activeOpenIds = new Set<string>()
+
     for (const alarm of alarms) {
       const device = deviceBySn.get(alarm.alarmDeviceSn)
-      if (!device) continue // unknown device — skip
+      if (!device) { droppedUnknown++; continue } // unknown device — skip + count
 
       const level = String(alarm.alarmLevel)
       const severity = level === '3' ? 'CRITICAL' : level === '2' ? 'WARNING' : 'INFO'
@@ -408,6 +419,12 @@ async function fetchSolisAlarms(client: SolisClient): Promise<void> {
       // Solis always returns id="-1" — not a real unique ID.
       // Use composite key: SN + code + begin-time (unique per alarm event).
       const vendorAlarmId = `${alarm.alarmDeviceSn}_${alarm.alarmCode}_${alarm.alarmBeginTime}`
+      if (!resolvedAt) activeOpenIds.add(vendorAlarmId)
+
+      const code = alarm.alarmCode ? String(alarm.alarmCode) : null
+      // alarmMsg/advice are frequently blank from Solis — fall back to the code
+      // so the alert feed never shows a bare "Unknown alarm".
+      const message = alarm.alarmMsg?.trim() || (code ? `Solis alarm ${code}` : 'Solis device alarm')
 
       try {
         await prisma.vendor_alarms.upsert({
@@ -420,10 +437,10 @@ async function fetchSolisAlarms(client: SolisClient): Promise<void> {
             plant_id: device.plant_id,
             provider: PROVIDERS.SOLIS,
             vendor_alarm_id: vendorAlarmId,
-            alarm_code: alarm.alarmCode ? String(alarm.alarmCode) : null,
+            alarm_code: code,
             severity,
-            message: alarm.alarmMsg || 'Unknown alarm',
-            advice: alarm.advice || null,
+            message,
+            advice: alarm.advice?.trim() || null,
             started_at: new Date(Number(alarm.alarmBeginTime)),
             resolved_at: resolvedAt,
             raw_data: alarm,
@@ -435,7 +452,29 @@ async function fetchSolisAlarms(client: SolisClient): Promise<void> {
       }
     }
 
-    console.log(`[Solis] Stored/updated ${stored} vendor alarms`)
+    // Diff-resolve: an alarm open in our DB, started within the query window,
+    // but no longer present-and-open in Solis's list has cleared (Solis
+    // sometimes drops resolved alarms instead of flipping their state). The
+    // windowStart guard prevents false-resolving alarms that aged out.
+    const openSolisAlarms = await prisma.vendor_alarms.findMany({
+      where: { provider: PROVIDERS.SOLIS, resolved_at: null, started_at: { gte: windowStart } },
+      select: { id: true, vendor_alarm_id: true },
+    })
+    const toResolve = openSolisAlarms.filter(a => !activeOpenIds.has(a.vendor_alarm_id))
+    if (toResolve.length > 0) {
+      await prisma.vendor_alarms.updateMany({
+        where: { id: { in: toResolve.map(a => a.id) } },
+        data: { resolved_at: new Date() },
+      })
+    }
+
+    if (droppedUnknown > 0) {
+      console.warn(`[Solis] ${droppedUnknown} alarm(s) skipped — device SN not in our DB`)
+    }
+    if (alarms.length >= 2000) {
+      console.warn(`[Solis] alarm list hit the ${alarms.length}-row pagination ceiling — some alarms may be truncated`)
+    }
+    console.log(`[Solis] ${stored} alarms stored/updated, ${activeOpenIds.size} active, resolved ${toResolve.length}`)
   } catch (error) {
     console.error('[Solis] Failed to fetch vendor alarms:', error)
   }
