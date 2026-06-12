@@ -20,6 +20,7 @@ const mockPrisma = {
   vendor_alarms: {
     findMany: vi.fn().mockResolvedValue([]),
     upsert: vi.fn().mockResolvedValue({}),
+    updateMany: vi.fn().mockResolvedValue({}),
   },
   $transaction: vi.fn().mockImplementation(async (arg) => {
     if (Array.isArray(arg)) return Promise.all(arg)
@@ -151,5 +152,59 @@ describe('pollSungrow — degraded-path resilience', () => {
     const { pollSungrow } = await import('@/lib/sungrow-poller')
     await expect(pollSungrow()).resolves.toBeUndefined()
     expect(clientInstance.getPowerStationList).not.toHaveBeenCalled()
+  })
+})
+
+describe('fetchSungrowAlarms — completeness guard + reopen', () => {
+  // resetModules per test so the module-level alarm-sync hour gate (lastAlarmSync)
+  // starts at 0 and the alarm path actually runs.
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.resetModules()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-06-05T07:00:00Z')) // 12:00 PKT
+    process.env.SUNGROW_APP_KEY = 'fake'
+    process.env.SUNGROW_SECRET_KEY = 'fake'
+    process.env.SUNGROW_USERNAME = 'fake'
+    process.env.SUNGROW_PASSWORD = 'fake'
+    // getPowerStationList [] keeps the device-sync path from calling getDeviceList,
+    // so getDeviceList is exercised only inside fetchSungrowAlarms.
+    clientInstance.getPowerStationList.mockResolvedValue([])
+    clientInstance.getDeviceRealTimeData.mockResolvedValue([])
+    mockPrisma.plants.findMany.mockResolvedValue([{ id: 'ps1' }])
+    mockPrisma.devices.findMany.mockResolvedValue([{ id: 'sn1', plant_id: 'ps1' }])
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('does NOT resolve open alarms when a plant device list is empty (completeness guard)', async () => {
+    clientInstance.getDeviceList.mockResolvedValue([]) // empty → complete=false
+    // An open Sungrow alarm exists — it must NOT be swept on an untrusted fetch.
+    mockPrisma.vendor_alarms.findMany.mockResolvedValue([
+      { id: 'va1', vendor_alarm_id: 'ps1_sn1_devfault' },
+    ])
+
+    const { pollSungrow } = await import('@/lib/sungrow-poller')
+    await pollSungrow()
+
+    expect(mockPrisma.vendor_alarms.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('reopens a recurring fault on upsert (update sets resolved_at: null)', async () => {
+    clientInstance.getDeviceList.mockResolvedValue([
+      { ps_key: '', device_code: 0, device_type: 1, device_name: 'INV', device_sn: 'sn1',
+        device_model: '', ps_id: 'ps1', dev_fault_status: 4, dev_status: 0 },
+    ])
+
+    const { pollSungrow } = await import('@/lib/sungrow-poller')
+    await pollSungrow()
+
+    expect(mockPrisma.vendor_alarms.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({ resolved_at: null }),
+      }),
+    )
   })
 })

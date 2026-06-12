@@ -385,12 +385,14 @@ async function processSungrowDevice(
   }
 }
 
-// Minimum-viable Sungrow vendor-alarm ingestion using `dev_fault_status` from
-// getDeviceList. Sungrow's full alarm-list endpoint (e.g. getDeviceFault) is
-// not yet researched in our knowledge base, so we synthesize one row per
-// faulty device. When Sungrow exposes proper alarm codes/names we'll replace
-// this with the real endpoint and richer data; until then, even a binary
-// "device X has a fault" beats the current behaviour of zero alarms ever.
+// Interim Sungrow vendor-alarm ingestion using `dev_fault_status` from
+// getDeviceList (1 = no fault; non-1 = some fault). Sungrow's REAL fault-list
+// endpoint (real codes/names/levels/occur-times — proven to exist by the portal
+// CSV export + the getOpenPointInfo alarm catalog's fault_level taxonomy) is NOT
+// in our API docs and unverified against our app key, so per "read the docs
+// before provider code" we keep the binary proxy until the endpoint is confirmed
+// on the developer portal. The proxy is hardened: a completeness guard prevents
+// empty-fetch mass-false-resolves, and the upsert reopens a row on recurrence.
 async function fetchSungrowAlarms(client: SungrowClient): Promise<void> {
   console.log('[Sungrow] Fetching vendor alarms...')
   try {
@@ -408,9 +410,27 @@ async function fetchSungrowAlarms(client: SungrowClient): Promise<void> {
     const deviceById = new Map(sungrowDevices.map(d => [d.id, d]))
 
     const activeIds = new Set<string>()
+    // Completeness guard: the diff-resolve below runs ONLY when every plant
+    // returned a trustworthy device list. getDeviceList returns [] on a transient
+    // glitch (safeArray over a null pageList); since a Sungrow plant always has
+    // ≥1 inverter, an empty/failed list means "don't trust it", not "all
+    // healthy". Without this, one bad fetch mass-false-resolves every open
+    // Sungrow alarm.
+    let complete = true
 
     for (const plant of plants) {
-      const devices = await client.getDeviceList(plant.id)
+      let devices: Awaited<ReturnType<typeof client.getDeviceList>>
+      try {
+        devices = await client.getDeviceList(plant.id)
+      } catch {
+        console.warn(`[Sungrow] device list failed for plant ${plant.id} — will skip diff-resolve this cycle`)
+        complete = false
+        continue
+      }
+      if (devices.length === 0) {
+        complete = false // empty list for a plant that should have devices
+        continue
+      }
       for (const dev of devices) {
         const deviceRow = deviceById.get(dev.device_sn)
         if (!deviceRow) continue
@@ -419,9 +439,11 @@ async function fetchSungrowAlarms(client: SungrowClient): Promise<void> {
         const isFaulty = dev.dev_fault_status !== 1
         if (!isFaulty) continue
 
-        // Composite key: plant + device-sn + 'devfault' (one synthetic
-        // row per faulty device; reopens automatically when fault clears
-        // and recurs).
+        // Composite key: plant + device-sn + 'devfault' — one synthetic row per
+        // faulty device. The key is stable (no timestamp), so the row is reused
+        // across cycles; the update branch reopens it (resolved_at: null) when a
+        // fault recurs after a prior clear — otherwise a resolved row would stay
+        // resolved forever and the recurrence would never surface.
         const vendorAlarmId = `${plant.id}_${dev.device_sn}_devfault`
         activeIds.add(vendorAlarmId)
 
@@ -433,7 +455,14 @@ async function fetchSungrowAlarms(client: SungrowClient): Promise<void> {
                 vendor_alarm_id: vendorAlarmId,
               },
             },
-            update: {},
+            update: {
+              // Reopen on recurrence + refresh the snapshot. started_at is left
+              // as the original occurrence (resetting it every poll would lie
+              // about when the fault began).
+              resolved_at: null,
+              alarm_code: String(dev.dev_fault_status),
+              raw_data: dev as any,
+            },
             create: {
               device_id: deviceRow.id,
               plant_id: deviceRow.plant_id,
@@ -456,20 +485,28 @@ async function fetchSungrowAlarms(client: SungrowClient): Promise<void> {
       }
     }
 
-    // Diff-resolve: any open Sungrow alarm not in the active set has cleared.
-    const openSungrowAlarms = await prisma.vendor_alarms.findMany({
-      where: { provider: PROVIDERS.SUNGROW, resolved_at: null },
-      select: { id: true, vendor_alarm_id: true },
-    })
-    const toResolve = openSungrowAlarms.filter(a => !activeIds.has(a.vendor_alarm_id))
-    if (toResolve.length > 0) {
-      await prisma.vendor_alarms.updateMany({
-        where: { id: { in: toResolve.map(a => a.id) } },
-        data: { resolved_at: new Date() },
+    // Diff-resolve: any open Sungrow alarm not in the active set has cleared —
+    // but ONLY when every plant returned a trustworthy device list. On an
+    // incomplete fetch, skip the sweep to avoid mass false-resolves.
+    let resolvedCount = 0
+    if (complete) {
+      const openSungrowAlarms = await prisma.vendor_alarms.findMany({
+        where: { provider: PROVIDERS.SUNGROW, resolved_at: null },
+        select: { id: true, vendor_alarm_id: true },
       })
+      const toResolve = openSungrowAlarms.filter(a => !activeIds.has(a.vendor_alarm_id))
+      if (toResolve.length > 0) {
+        await prisma.vendor_alarms.updateMany({
+          where: { id: { in: toResolve.map(a => a.id) } },
+          data: { resolved_at: new Date() },
+        })
+        resolvedCount = toResolve.length
+      }
+    } else {
+      console.warn('[Sungrow] Incomplete device fetch — skipping diff-resolve to avoid mass false-resolves')
     }
 
-    console.log(`[Sungrow] ${activeIds.size} active alarms, resolved ${toResolve.length}`)
+    console.log(`[Sungrow] ${activeIds.size} active alarms, resolved ${resolvedCount}`)
   } catch (error) {
     console.error('[Sungrow] Failed to fetch vendor alarms:', error)
   }
