@@ -531,15 +531,18 @@ export type PerfBand =
 
 // ─── V1 Data-Completeness bands (Reyyan §9 + §10 second table) ────────────────
 // Data completeness is a SEPARATE data-QUALITY axis from performance (§9: "do
-// NOT merge performance and data completeness"). It has its own 5 bands and is
-// purely informational — completeness is never itself a fault. Same "upper band
-// owns the edge" convention as the locked performance bands.
-//   Excellent 95–100 / Good 90–95 / Acceptable 80–90 / Poor 60–80 / Insufficient <60
+// NOT merge performance and data completeness"). Purely informational — never a
+// fault. Completeness = hours-of-coverage out of the 8 window hours (cadence-proof),
+// so the only reachable values are 8/8=100, 7/8≈88, 6/8=75, 5/8≈63 (below 5h is
+// gated). Cutpoints are set so each of those maps to a distinct, reachable band —
+// "missing 0 / 1 / 2 / 3 window-hours". (Reyyan §10b's 95/90/80/60 were for the
+// per-reading scale; on the hours scale "Good 90–95" was unreachable.)
+//   Excellent = 8h · Good = 7h · Acceptable = 6h · Poor = 5h · Insufficient = <5h (gated)
 /** Status band lower bounds for data completeness (the upper band owns each edge). */
-export const COMPLETENESS_EXCELLENT = 95
-export const COMPLETENESS_GOOD = 90
-export const COMPLETENESS_ACCEPTABLE = 80
-export const COMPLETENESS_POOR = 60
+export const COMPLETENESS_EXCELLENT = 95  // 8/8 = 100%
+export const COMPLETENESS_GOOD = 80       // 7/8 ≈ 88%
+export const COMPLETENESS_ACCEPTABLE = 70 // 6/8 = 75%
+export const COMPLETENESS_POOR = 60       // 5/8 ≈ 63%  (below = <5h → Insufficient, gated)
 
 export type CompletenessBand = 'excellent' | 'good' | 'acceptable' | 'poor' | 'insufficient'
 

@@ -13,24 +13,33 @@ import {
 import { COMPLETENESS_BAND_STYLES, completenessStyleFromPct } from '@/lib/design-tokens'
 
 // Chunk E — Reyyan §9 "Data Completeness" + §10 second table.
-// Completeness is a separate DATA-QUALITY axis from performance. It has its own
-// 5 bands (Excellent 95–100 / Good 90–95 / Acceptable 80–90 / Poor 60–80 /
-// Insufficient <60) with the SAME "upper band owns the edge" convention as the
-// locked performance bands. It is NEVER itself a fault — purely informational.
+// Completeness is a separate DATA-QUALITY axis from performance, purely
+// informational (never a fault). It's measured as hours-of-coverage out of the 8
+// window hours (cadence-proof), so the reachable values are 8/8=100, 7/8≈88,
+// 6/8=75, 5/8≈63 (below 5h is gated). Cutpoints map each to a distinct band:
+// Excellent=8h(95–100) / Good=7h(80–95) / Acceptable=6h(70–80) / Poor=5h(60–70) /
+// Insufficient=<5h(<60). Upper band owns each edge.
 
-describe('classifyDataCompleteness — V1 §10 completeness bands', () => {
+describe('classifyDataCompleteness — V1 §10 completeness bands (hours-of-coverage scale)', () => {
   it('null → null (legacy / no-data day, not 0%)', () => {
     expect(classifyDataCompleteness(null)).toBeNull()
   })
 
-  it('upper band owns each edge (matches the locked performance convention)', () => {
-    expect(classifyDataCompleteness(100)).toBe('excellent')
+  it('each reachable hours-of-coverage step maps to its own band', () => {
+    expect(classifyDataCompleteness(100)).toBe('excellent')   // 8/8
+    expect(classifyDataCompleteness(88)).toBe('good')         // 7/8 ≈ 87.5 → 88
+    expect(classifyDataCompleteness(75)).toBe('acceptable')   // 6/8
+    expect(classifyDataCompleteness(63)).toBe('poor')         // 5/8 ≈ 62.5 → 63
+    expect(classifyDataCompleteness(50)).toBe('insufficient') // 4/8 (gated in practice)
+  })
+
+  it('upper band owns each edge', () => {
     expect(classifyDataCompleteness(95)).toBe('excellent')
     expect(classifyDataCompleteness(94.9)).toBe('good')
-    expect(classifyDataCompleteness(90)).toBe('good')
-    expect(classifyDataCompleteness(89.9)).toBe('acceptable')
-    expect(classifyDataCompleteness(80)).toBe('acceptable')
-    expect(classifyDataCompleteness(79.9)).toBe('poor')
+    expect(classifyDataCompleteness(80)).toBe('good')
+    expect(classifyDataCompleteness(79.9)).toBe('acceptable')
+    expect(classifyDataCompleteness(70)).toBe('acceptable')
+    expect(classifyDataCompleteness(69.9)).toBe('poor')
     expect(classifyDataCompleteness(60)).toBe('poor')
     expect(classifyDataCompleteness(59.9)).toBe('insufficient')
     expect(classifyDataCompleteness(0)).toBe('insufficient')
@@ -42,17 +51,17 @@ describe('classifyDataCompleteness — V1 §10 completeness bands', () => {
       COMPLETENESS_GOOD,
       COMPLETENESS_ACCEPTABLE,
       COMPLETENESS_POOR,
-    ]).toEqual([95, 90, 80, 60])
+    ]).toEqual([95, 80, 70, 60])
   })
 })
 
 describe('completenessStyleFromPct — routes through the classifier', () => {
   const cases: Array<[number, CompletenessBand]> = [
-    [100, 'excellent'],
+    [100, 'excellent'], // 8/8
     [95, 'excellent'],
-    [92, 'good'],
-    [85, 'acceptable'],
-    [70, 'poor'],
+    [88, 'good'],       // 7/8
+    [75, 'acceptable'], // 6/8
+    [63, 'poor'],       // 5/8
     [40, 'insufficient'],
   ]
 
