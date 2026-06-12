@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { prepSettledDayInputs, type HourlyMedianRow } from '@/lib/settled-day-performance'
 import { scoreStringPerformance, computeOperatingAvailability } from '@/lib/string-performance'
 import { perfBandToBackCompatStatus } from '@/lib/string-health'
+import { loadStringHistorical } from '@/lib/string-cell-historical'
 
 export async function GET(request: NextRequest) {
   try {
@@ -59,6 +60,14 @@ export async function GET(request: NextRequest) {
     const me = scored.find(s => s.string_number === stringNumber)
     const av = availability.get(stringNumber)
     const myCfg = cfgRows.find(c => c.string_number === stringNumber)
+    const myReprCurrent = perfInputs.find(p => p.string_number === stringNumber)?.repr_current ?? null
+
+    // Peer-excluded strings (shaded / different orientation): peer comparison is
+    // unfair, so add an INFORMATIONAL own-trend block (today vs the string's own
+    // ~30-day normal). Never a fault, never alerted, NOT weather-adjusted (V1).
+    const historical = peerExcluded.has(stringNumber)
+      ? await loadStringHistorical(deviceId, stringNumber, date, myReprCurrent)
+      : null
 
     return NextResponse.json({
       device_id: deviceId, device_name: device.device_name, string_number: stringNumber, date,
@@ -66,10 +75,11 @@ export async function GET(request: NextRequest) {
       band: me?.band ?? 'insufficient_data',
       performance: me?.performance ?? null,
       raw_performance: me?.raw_performance ?? null,
-      repr_current: perfInputs.find(p => p.string_number === stringNumber)?.repr_current ?? null,
+      repr_current: myReprCurrent,
       peer_median_current: me?.peer_median_current ?? null,
       data_completeness: completeness.get(stringNumber) ?? null,
       condition_tag: myCfg?.condition_tag ?? null,
+      historical,
       peers: perfInputs
         .filter(p => p.is_used && !p.exclude_from_peer_comparison && !p.insufficient_data && p.repr_current != null)
         .map(p => ({ string_number: p.string_number, repr_current: p.repr_current }))

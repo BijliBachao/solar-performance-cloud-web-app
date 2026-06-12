@@ -25,14 +25,11 @@ import {
   classifyStringPerformance,
   perfBandToDonutBucket,
 } from '@/lib/string-health'
-import { scoreLiveSr, type LiveStringInput } from '@/lib/string-health-live'
 import { deviceConnectivity } from '@/lib/connectivity'
-import { isDaylight, solarElevationDeg } from '@/lib/solar-geometry'
+import { isDaylight } from '@/lib/solar-geometry'
 import {
   clampToFleetCoords,
   rollupPlantStatus,
-  bucketSrScore,
-  ALERT_MIN_SUN_ELEVATION_DEG,
   type ConnectivityStatus,
   type PlantOpStatus,
 } from '@/lib/string-health'
@@ -140,23 +137,6 @@ export function getPktTodayDate(now: Date = new Date()): Date {
     nowPKT.getUTCDate(),
     0, 0, 0, 0,
   ))
-}
-
-/**
- * Returns the UTC timestamp for "start of N PKT hours ago, aligned to PKT
- * hour boundary". Used for string_hourly window queries.
- */
-export function getPktHoursAgoStart(hoursAgo: number, now: Date = new Date()): Date {
-  const nowPKT = new Date(now.getTime() + PKT_OFFSET_MS)
-  const hourStartPKT = new Date(Date.UTC(
-    nowPKT.getUTCFullYear(),
-    nowPKT.getUTCMonth(),
-    nowPKT.getUTCDate(),
-    nowPKT.getUTCHours() - hoursAgo,
-    0, 0, 0,
-  ))
-  // Convert PKT-encoded UTC back to real UTC
-  return new Date(hourStartPKT.getTime() - PKT_OFFSET_MS)
 }
 
 function formatPktDateLabel(date: Date): string {
@@ -272,58 +252,36 @@ export async function loadPlantDonutPrevDay(plantCode: string): Promise<PlantDon
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Per-plant: last-3-hour rolling mode
+// Per-plant: today · live mode (V1 cutover, Task 10)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Replaces the retired last-3h SR-anchored donut. Reads TODAY's PKT
+// string_daily — recomputed every poll cycle by updateDailyAggregates via the
+// shared buildPerfInputsFromHourly (8–4 PKT window, median-of-medians, 60%
+// completeness gate) — and buckets it with the SAME V1 classifier the NOC
+// "today" donut and the /analysis today cell use. So per-plant Today (live) ==
+// NOC today == /analysis today cell, by construction. Mirrors
+// loadPlantDonutPrevDay; only the date differs (today instead of yesterday).
 
-interface PlantLast3hRow {
-  device_id: string
-  string_number: number
-  avg_current: Prisma.Decimal | number | null
-  avg_voltage: Prisma.Decimal | number | null
-  avg_power: Prisma.Decimal | number | null
-  hour: Date
-  is_used: boolean
-  exclude_from_peer_comparison: boolean
-  panel_count: number | null
-  model: string | null
-  max_strings: number | null
-  strings_are_mppts: boolean
-  latitude: Prisma.Decimal | number | null
-  longitude: Prisma.Decimal | number | null
-}
+export async function loadPlantDonutToday(plantCode: string): Promise<PlantDonutResult> {
+  const today = getPktTodayDate()
 
-export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonutResult> {
-  const windowStart = getPktHoursAgoStart(3)
-  // Cap upper bound at current PKT hour boundary so the window is exactly 3
-  // completed hours, not 3 + partial-current-hour (which would mislabel the
-  // donut as "Last 3 hours" while including 4 distinct hour buckets).
-  const windowEnd = getPktHoursAgoStart(0)
-
-  const [rows, unusedRows] = await Promise.all([
-    prisma.$queryRaw<PlantLast3hRow[]>`
+  // Parallel fetch: daily aggregates + admin-flagged "unused" configs.
+  // The poller filters is_used=false rows before writing string_daily, so we
+  // cannot derive `excluded.unused` from the daily rows themselves; pull
+  // them from string_configs directly. (Identical to prev-day, date = today.)
+  const [rows, unusedRows, freshRows] = await Promise.all([
+    prisma.$queryRaw<PlantPrevDayRow[]>`
       SELECT
-        sh.device_id,
-        sh.string_number,
-        sh.avg_current,
-        sh.avg_voltage,
-        sh.avg_power,
-        sh.hour,
+        sd.device_id,
+        sd.string_number,
+        sd.health_score,
         COALESCE(sc.is_used, true) as is_used,
-        COALESCE(sc.exclude_from_peer_comparison, false) as exclude_from_peer_comparison,
-        sc.panel_count,
-        d.model,
-        d.max_strings,
-        d.strings_are_mppts,
-        p.latitude,
-        p.longitude
-      FROM string_hourly sh
+        COALESCE(sc.exclude_from_peer_comparison, false) as exclude_from_peer_comparison
+      FROM string_daily sd
       LEFT JOIN string_configs sc
-        ON sc.device_id = sh.device_id AND sc.string_number = sh.string_number
-      JOIN devices d ON d.id = sh.device_id
-      JOIN plants p ON p.id = sh.plant_id
-      WHERE sh.plant_id = ${plantCode}
-        AND sh.hour >= ${windowStart}
-        AND sh.hour < ${windowEnd}
+        ON sc.device_id = sd.device_id AND sc.string_number = sd.string_number
+      WHERE sd.plant_id = ${plantCode}
+        AND sd.date = ${today}
     `,
     prisma.$queryRaw<{ unused: bigint }[]>`
       SELECT COUNT(*)::bigint AS unused
@@ -332,179 +290,57 @@ export async function loadPlantDonutLast3h(plantCode: string): Promise<PlantDonu
       WHERE d.plant_id = ${plantCode}
         AND sc.is_used = false
     `,
+    // Honest liveness for the "Today (live)" donut: the newest poll cycle that
+    // saw any of this plant's devices. last_seen_at is stamped every cycle the
+    // poller observes the device (even on a frozen feed — that case is surfaced
+    // separately by the connectivity layer), so it goes stale exactly when the
+    // pipeline stops delivering — which is what the component's 30-min isStale()
+    // check means. We deliberately do NOT report "now" (which would make the
+    // live donut incapable of ever showing the stale badge).
+    prisma.$queryRaw<{ last_seen: Date | null }[]>`
+      SELECT MAX(last_seen_at) AS last_seen
+      FROM devices
+      WHERE plant_id = ${plantCode}
+    `,
   ])
 
-  if (rows.length === 0) {
-    const empty = emptyLast3hResult(windowStart, 'NO_DATA_WINDOW', 'No string data in the last 3 hours. Check if the plant is producing or use Previous Day mode.')
-    empty.excluded.unused = bigintToNumber(unusedRows[0]?.unused ?? BigInt(0))
-    return empty
-  }
-
-  // Group rows: device → string → mean V/I/P over the window. We collapse the
-  // 3 hourly samples into one mean reading per string and score it with the SAME
-  // Self-Referencing Ratio used by the live plant-tab chart (Algorithm v2 §4c):
-  // per-panel power, MPPT-grouped, max-anchored. The SR ratio (0–1) is rescaled
-  // to the 0-100 health_score scale by ×100, so the donut's unified 94/85
-  // bucketing reproduces the SR bucket (sr≥0.94→healthy, 0.85≤sr<0.94→abnormal,
-  // sr<0.85→critical) — keeping Last-3h consistent with the live chart and (in
-  // spirit) the Prev-day / Analysis P2P.
-  type StringSamples = {
-    hours: Set<string>; currents: number[]; voltages: number[]; powers: number[]
-    isUsed: boolean; peerExcluded: boolean; panelCount: number | null
-  }
-  const byDeviceString = new Map<string, Map<number, StringSamples>>()
-  const deviceTopology = new Map<string, { model: string | null; maxStrings: number | null; stringsAreMppts: boolean }>()
-  const allHours = new Set<string>()
-  let lastDataAt: Date = new Date(0)
-
-  for (const r of rows) {
-    const hourKey = r.hour.toISOString()
-    allHours.add(hourKey)
-    if (r.hour.getTime() > lastDataAt.getTime()) lastDataAt = r.hour
-    if (!deviceTopology.has(r.device_id)) {
-      deviceTopology.set(r.device_id, { model: r.model, maxStrings: r.max_strings, stringsAreMppts: r.strings_are_mppts })
-    }
-
-    let strMap = byDeviceString.get(r.device_id)
-    if (!strMap) {
-      strMap = new Map()
-      byDeviceString.set(r.device_id, strMap)
-    }
-    let samples = strMap.get(r.string_number)
-    if (!samples) {
-      samples = {
-        hours: new Set(), currents: [], voltages: [], powers: [],
-        isUsed: r.is_used, peerExcluded: r.exclude_from_peer_comparison, panelCount: r.panel_count,
-      }
-      strMap.set(r.string_number, samples)
-    }
-    samples.hours.add(hourKey)
-    const cur = decimalToNumberOrNull(r.avg_current)
-    const volt = decimalToNumberOrNull(r.avg_voltage)
-    const pow = decimalToNumberOrNull(r.avg_power)
-    if (cur !== null) samples.currents.push(cur)
-    if (volt !== null) samples.voltages.push(volt)
-    if (pow !== null) samples.powers.push(pow)
-  }
-
-  const hoursCovered = allHours.size
-  const mean = (a: number[]) => (a.length > 0 ? a.reduce((s, n) => s + n, 0) / a.length : 0)
-
-  // Sun-elevation arming (audit 2026-06-07): one plant ⇒ one armed value. Below
-  // the floor the live SR scorer must not flag standby voltage (~0 A) as
-  // open-circuit critical. Clamped coords guard vendor-default (Beijing) values.
-  const { lat: plantLat, lng: plantLng } = clampToFleetCoords(rows[0]?.latitude, rows[0]?.longitude)
-  const armed = solarElevationDeg(plantLat, plantLng, new Date()) >= ALERT_MIN_SUN_ELEVATION_DEG
-
-  // Per device: collapse to one mean reading per string, score with scoreLiveSr.
-  // The live donut buckets on the SR 0.94/0.85 anchor (bucketSrScore) — supplied
-  // as a pre-computed `bucket` on each DonutInput — so it stays in lockstep with
-  // the live plant chart + SR alert severities and is NOT moved onto the V1 daily
-  // 95/85/60 bands (which drive the settled donut / NOC / analysis cells).
-  const inputs: DonutInput[] = []
-  let lowConfidenceScored = 0
-  for (const [deviceId, stringMap] of byDeviceString) {
-    const topo = deviceTopology.get(deviceId) ?? { model: null, maxStrings: null, stringsAreMppts: false }
-    const liveInputs: LiveStringInput[] = []
-    for (const [strNum, s] of stringMap) {
-      liveInputs.push({
-        string_number: strNum,
-        voltage: mean(s.voltages),
-        current: mean(s.currents),
-        power: mean(s.powers),
-        panel_count: s.panelCount,
-        is_used: s.isUsed,
-        exclude_from_peer_comparison: s.peerExcluded,
-        stale: false, // window is the last 3 completed hours — recent by construction
-      })
-    }
-    const results = scoreLiveSr(liveInputs, {
-      deviceId,
-      inverterModel: topo.model,
-      inverterMaxStrings: topo.maxStrings,
-      stringsAreMppts: topo.stringsAreMppts ?? false,
-      armed,
-    })
-    for (const r of results) {
-      const s = stringMap.get(r.string_number)!
-      inputs.push({
-        // healthScore retained ONLY for the no-data check + breakdown; the actual
-        // bucket comes from bucketSrScore(r.sr) below (SR 0.94/0.85 anchor), kept
-        // decoupled from the V1 daily bands.
-        healthScore: r.sr != null ? Math.floor(r.sr * 100) : null,
-        isUsed: s.isUsed,
-        peerExcluded: s.peerExcluded,
-        openCircuit: r.status === 'OPEN_CIRCUIT',
-        // SR-anchored bucket (undefined when sr is null/non-finite → falls to the
-        // no-data → abnormal rule, exactly as before the V1 cutover).
-        bucket: r.sr != null ? (bucketSrScore(r.sr) ?? undefined) : undefined,
-      })
-      // Confidence tracking: count scored strings resting on guessed config.
-      if (r.bucket != null && (r.panel_count_is_default || r.topology_is_fallback)) {
-        lowConfidenceScored += 1
-      }
-    }
-  }
+  const inputs: DonutInput[] = rows.map((r) => ({
+    healthScore: decimalToNumberOrNull(r.health_score),
+    isUsed: r.is_used,
+    peerExcluded: r.exclude_from_peer_comparison,
+    openCircuit: false, // v2: deferred to v2.1 (see spec §3c). It's V1 now — no bucket override.
+  }))
 
   const aggregate = aggregateForDonut(inputs)
+  // Override excluded.unused with the true count from string_configs.
   aggregate.excluded.unused = bigintToNumber(unusedRows[0]?.unused ?? BigInt(0))
 
   const warnings: Warning[] = []
-  let label: string
-  if (hoursCovered < 3) {
-    label = `Since sunrise · ${hoursCovered} hour${hoursCovered === 1 ? '' : 's'}`
+  if (rows.length === 0) {
     warnings.push({
-      code: 'LIMITED_WINDOW',
-      message: `Only ${hoursCovered} hour${hoursCovered === 1 ? '' : 's'} of data available. Plant may have just woken up.`,
-    })
-  } else {
-    label = `Last 3 hours`
-  }
-
-  // Confidence badge (audit 2026-06-07): verdict confidence must track data
-  // confidence. When scored strings rest on a guessed panel count or fallback
-  // MPPT topology, say so instead of rendering a fully-confident donut.
-  if (lowConfidenceScored > 0) {
-    warnings.push({
-      code: 'INCOMPLETE_CONFIG',
-      message: `${lowConfidenceScored} string${lowConfidenceScored === 1 ? '' : 's'} scored with incomplete config (default panel count or inferred MPPT layout) — verdict confidence reduced. Complete per-string config for exact results.`,
+      code: 'NO_DATA_TODAY',
+      message: 'No string scores yet for today (PKT). Scores appear once the plant starts producing after sunrise, and update every poll cycle.',
     })
   }
 
+  const startsAt = today
+  // Today's window is still open — it ends "now", not at PKT midnight.
   const endsAt = new Date()
-  const actualStart = lastDataAt.getTime() > 0
-    ? new Date(lastDataAt.getTime() - hoursCovered * 60 * 60 * 1000)
-    : windowStart
 
   return {
     ...aggregate,
     timeBasis: {
-      label,
-      startsAt: actualStart,
+      label: `Today · ${formatPktDateLabel(today)} · live`,
+      startsAt,
       endsAt,
-      hoursCovered,
     },
     freshness: {
-      lastDataAt: lastDataAt.getTime() > 0 ? lastDataAt : null,
-      coveragePct: Math.round((hoursCovered / 3) * 100),
+      // Real last-poll time (not "now") so isStale() can fire if the poller dies
+      // mid-afternoon; null pre-dawn / brand-new plant so it doesn't false-alarm.
+      lastDataAt: rows.length > 0 ? (freshRows[0]?.last_seen ?? null) : null,
+      coveragePct: rows.length > 0 ? 100 : 0,
     },
     warnings,
-  }
-}
-
-function emptyLast3hResult(windowStart: Date, code: string, message: string): PlantDonutResult {
-  return {
-    totalStrings: 0,
-    counts: { healthy: 0, abnormal: 0, critical: 0, noData: 0 },
-    breakdown: {
-      healthy: { byScore: 0 },
-      abnormal: { byScore: 0, noData: 0 },
-      critical: { byScore: 0, openCircuit: 0 },
-    },
-    excluded: { unused: 0, nonStandard: 0 },
-    timeBasis: { label: 'Last 3 hours', startsAt: windowStart, endsAt: new Date(), hoursCovered: 0 },
-    freshness: { lastDataAt: null, coveragePct: 0 },
-    warnings: [{ code, message }],
   }
 }
 

@@ -886,29 +886,41 @@ export function classifyAlertSeverityWithHysteresis(
 /** Hysteresis margin in SR units (~3pp of gap) for the SR-bucket alert mapping. */
 export const SR_ALERT_HYSTERESIS = 0.03
 
-/** Map an SR ratio to an alert severity using the SAME boundaries as the donut
- *  buckets (bucketSrScore), so the donut's coloured ring and the alert list can
- *  never contradict each other (audit 2026-06-08): donut 'critical' (sr <
- *  SR_ABNORMAL) ⇒ CRITICAL alert; donut 'abnormal' (SR_ABNORMAL ≤ sr <
- *  SR_HEALTHY) ⇒ WARNING; donut 'healthy' ⇒ no alert. Sticky hysteresis on the
- *  SR boundaries prevents threshold-hover flap. (INFO is unused for peer alerts;
- *  it has no donut counterpart.) */
+// ─── SR→alert boundaries, aligned to the V1 display bands (Task 18) ──────────
+// The real-time peer alert maps an SR ratio (0–1) to a severity using the SAME
+// cut-points the /analysis cell shows, expressed on the SR scale (band ÷ 100):
+//   sr < PERF_UNDERPERFORMING/100 (0.60) ⇒ CRITICAL  (the cell's serious_fault)
+//   PERF_UNDERPERFORMING/100 ≤ sr < PERF_WATCH/100 (0.85) ⇒ WARNING
+//   sr ≥ PERF_WATCH/100 ⇒ no alert
+// This guarantees an alert can NEVER say CRITICAL while the cell says Watch (nor
+// the reverse). Derived from the central PERF_* constants — no inline numbers.
+// NOTE: this is the ALERT-severity mapping only; the donut's live ring
+// (bucketSrScore) deliberately keeps the 0.94/0.85 SR anchor.
+export const SR_ALERT_CRITICAL = PERF_UNDERPERFORMING / 100
+export const SR_ALERT_WARNING = PERF_WATCH / 100
+
+/** Map an SR ratio to an alert severity using the V1 display bands (Task 18),
+ *  so the alert list and the /analysis cell can never contradict each other:
+ *  serious_fault (sr < SR_ALERT_CRITICAL=0.60) ⇒ CRITICAL; the watch+
+ *  underperforming band [0.60, 0.85) ⇒ WARNING; ≥0.85 ⇒ no alert. Sticky
+ *  hysteresis on the boundaries prevents threshold-hover flap. (INFO is unused
+ *  for peer alerts.) The donut's bucketSrScore is untouched (0.94/0.85 ring). */
 export function classifySrAlertSeverityWithHysteresis(
   sr: number,
   existing: AlertSeverity | null,
 ): AlertSeverity | null {
   const plain: AlertSeverity | null =
-    sr < SR_ABNORMAL ? 'CRITICAL' : sr < SR_HEALTHY ? 'WARNING' : null
+    sr < SR_ALERT_CRITICAL ? 'CRITICAL' : sr < SR_ALERT_WARNING ? 'WARNING' : null
   if (existing !== 'WARNING' && existing !== 'CRITICAL') return plain
   if (plain === existing) return existing
   if (existing === 'WARNING' && plain === 'CRITICAL') {
     // escalate only when sr drops clearly below the critical boundary
-    return sr < SR_ABNORMAL - SR_ALERT_HYSTERESIS ? 'CRITICAL' : 'WARNING'
+    return sr < SR_ALERT_CRITICAL - SR_ALERT_HYSTERESIS ? 'CRITICAL' : 'WARNING'
   }
   // de-escalation / recovery: sr must rise clearly above the EXISTING bucket's
-  // upper boundary before we relax it (CRITICAL→ above SR_ABNORMAL, WARNING→
-  // above SR_HEALTHY).
-  const existingUpper = existing === 'CRITICAL' ? SR_ABNORMAL : SR_HEALTHY
+  // upper boundary before we relax it (CRITICAL→ above SR_ALERT_CRITICAL,
+  // WARNING→ above SR_ALERT_WARNING).
+  const existingUpper = existing === 'CRITICAL' ? SR_ALERT_CRITICAL : SR_ALERT_WARNING
   return sr >= existingUpper + SR_ALERT_HYSTERESIS ? plain : existing
 }
 

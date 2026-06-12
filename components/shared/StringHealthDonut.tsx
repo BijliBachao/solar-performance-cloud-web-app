@@ -6,8 +6,13 @@
  * v2 (2026-05-24): replaced the real-time 5-bucket view with a settled,
  * window-based 3-bucket view (Healthy / Abnormal / Critical) backed by
  * /api/plants/[code]/string-health-donut. Default mode is "Previous Day
- * End"; user can toggle to "Last 3 Hours". Real-time noise (nighttime
+ * End"; user can toggle to "Today (live)". Real-time noise (nighttime
  * 100%-offline, dawn 0A-fault spikes) is gone by design.
+ *
+ * V1 cutover (Task 10): the live toggle is "Today (live)" — it reads today's
+ * PKT string_daily (the SAME V1 metric the NOC "today" donut and the /analysis
+ * today cell use), replacing the retired SR-anchored "Last 3 Hours" mode. So
+ * the per-plant Today donut == NOC today == /analysis today cell.
  *
  * Spec: Working/2_Sunday_24_May_2026/STRING-HEALTH-DONUT-V2.md §5b
  */
@@ -24,7 +29,7 @@ import type {
 
 // ─── Types ──────────────────────────────────────────────────────────
 
-type DonutMode = 'prev-day' | 'last-3h'
+type DonutMode = 'prev-day' | 'today'
 
 interface DonutApiResponse extends DonutAggregate {
   mode: DonutMode
@@ -47,7 +52,7 @@ interface StringHealthDonutProps {
 // ─── Constants ──────────────────────────────────────────────────────
 
 const STORAGE_KEY = 'spcStringDonutMode'
-const VALID_MODES: ReadonlySet<DonutMode> = new Set(['prev-day', 'last-3h'])
+const VALID_MODES: ReadonlySet<DonutMode> = new Set(['prev-day', 'today'])
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
@@ -55,6 +60,8 @@ function readStoredMode(): DonutMode | null {
   if (typeof window === 'undefined') return null
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
+    // V1 cutover (Task 10): migrate the retired 'last-3h' value to 'today'.
+    if (raw === 'last-3h') return 'today'
     if (raw && VALID_MODES.has(raw as DonutMode)) return raw as DonutMode
   } catch {
     // localStorage can throw in sandboxed iframes / private browsing
@@ -94,8 +101,9 @@ const fetcher = async (url: string): Promise<DonutApiResponse> => {
 
 function isStale(lastDataAt: string | null, mode: DonutMode): boolean {
   if (!lastDataAt) return false
-  // Stale = no data in the last 30 minutes (only meaningful for last-3h mode)
-  if (mode !== 'last-3h') return false
+  // Stale = no data in the last 30 minutes (only meaningful for the live "today"
+  // mode; prev-day is a settled snapshot that never reads stale).
+  if (mode !== 'today') return false
   const ageMs = Date.now() - new Date(lastDataAt).getTime()
   return ageMs > 30 * 60 * 1000
 }
@@ -124,8 +132,8 @@ export function StringHealthDonut({ plantCode, initialMode }: StringHealthDonutP
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: true,
-      // Refresh interval matches server cache: 60s for last-3h, 300s for prev-day
-      refreshInterval: mode === 'last-3h' ? 60_000 : 300_000,
+      // Refresh interval matches server cache: 60s for today (live), 300s for prev-day
+      refreshInterval: mode === 'today' ? 60_000 : 300_000,
       shouldRetryOnError: (err: { status?: number }) => {
         // Don't retry 4xx — bad request / unauthorized won't fix itself
         return !err?.status || err.status >= 500
@@ -172,7 +180,7 @@ export function StringHealthDonut({ plantCode, initialMode }: StringHealthDonutP
   // ── Empty state ──
   if (total === 0) {
     const noDataWarning = data.warnings.find(
-      (w) => w.code === 'NO_DATA_YESTERDAY' || w.code === 'NO_DATA_WINDOW',
+      (w) => w.code === 'NO_DATA_YESTERDAY' || w.code === 'NO_DATA_TODAY',
     )
     return (
       <CardShell title="String Health" mode={mode} onModeChange={handleModeChange} subtitle={data.timeBasis.label}>
@@ -186,7 +194,7 @@ export function StringHealthDonut({ plantCode, initialMode }: StringHealthDonutP
           <p className="text-xs text-slate-500 max-w-xs">
             {noDataWarning?.message ?? 'Data will appear once the poller syncs from your inverter provider.'}
           </p>
-          {mode === 'last-3h' && noDataWarning && (
+          {mode === 'today' && noDataWarning && (
             <button
               type="button"
               onClick={() => handleModeChange('prev-day')}
@@ -300,7 +308,7 @@ function CardShell({
 function ModeToggle({ mode, onChange }: { mode: DonutMode; onChange: (m: DonutMode) => void }) {
   const opts: Array<{ value: DonutMode; label: string; tooltip: string }> = [
     { value: 'prev-day', label: 'Prev day', tooltip: 'Yesterday\'s settled scores — stable, refreshes once per morning' },
-    { value: 'last-3h', label: 'Last 3h', tooltip: 'Rolling 3-hour window — more current, may have transient noise' },
+    { value: 'today', label: 'Today (live)', tooltip: 'Today\'s V1 scores so far (PKT) — recomputed every poll cycle, settles by end of day. Matches the NOC today donut and the analysis today cell.' },
   ]
   return (
     <div

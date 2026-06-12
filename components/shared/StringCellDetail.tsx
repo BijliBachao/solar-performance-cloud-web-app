@@ -25,6 +25,15 @@ interface AvailabilityInfo {
   pct: number | null
 }
 
+// Own-trend block for peer-excluded strings (shaded / different orientation).
+// Informational only — never a fault, never alerted, NOT weather-adjusted (V1).
+interface HistoricalInfo {
+  todayRepr: number | null
+  baseline: number | null
+  pct: number | null
+  source: 'manual' | '30d' | null
+}
+
 interface StringCellDetailData {
   device_id: string
   device_name: string | null
@@ -37,6 +46,7 @@ interface StringCellDetailData {
   peers: PeerEntry[]
   hourly: HourlyEntry[]
   availability: AvailabilityInfo | null
+  historical?: HistoricalInfo | null
 }
 
 // ── Props ──────────────────────────────────────────────────────────────────
@@ -279,9 +289,59 @@ export function StringCellDetail({
                   )}
                 </div>
 
+                {/* 2b. Historical own-trend — only for peer-excluded strings.
+                    Peer comparison is unfair for known-shaded / differently
+                    oriented strings, so we show today vs the string's OWN ~30-day
+                    normal. INFORMATIONAL: not a fault, not alerted, and (V1) NOT
+                    weather-adjusted, so a cloudy day legitimately reads lower. */}
+                {data.status === 'peer_excluded' && data.historical && (
+                  <div className="rounded-md border border-indigo-200 bg-indigo-50/60 px-4 py-3">
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <h3 className="text-[10px] font-bold uppercase tracking-widest text-indigo-700">
+                        Known Shaded / Different Orientation — Historical Monitoring
+                      </h3>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-100 border border-indigo-200 rounded px-1.5 py-0.5">
+                        Informational
+                      </span>
+                    </div>
+                    {data.historical.baseline !== null ? (
+                      <>
+                        <p className="text-sm text-slate-700 font-mono">
+                          Today{' '}
+                          <span className="font-bold text-blue-700">{fmtA(data.historical.todayRepr)} A</span>
+                          <span className="text-slate-400 mx-2">vs</span>
+                          its own ~30-day normal{' '}
+                          <span className="font-bold text-violet-700">{fmtA(data.historical.baseline)} A</span>
+                          {data.historical.pct !== null && (
+                            <>
+                              <span className="text-slate-400 mx-2">=</span>
+                              <span className="font-bold text-indigo-700">{data.historical.pct}%</span>
+                            </>
+                          )}
+                        </p>
+                        <p className="text-[10px] leading-snug text-slate-500 mt-1.5">
+                          {data.historical.pct === null
+                            ? 'No scored reading today, so no ratio yet — the baseline shown is established.'
+                            : null}
+                          {' '}Self-referenced trend ({data.historical.source === 'manual' ? 'manual baseline' : '30-day own median'}).
+                          Not compared to peers and <span className="font-semibold">not weather-adjusted</span> — a low-irradiance
+                          day will read lower without being a fault. No alert is raised from this value.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-slate-500 italic">
+                        Not enough own history yet to establish a baseline. Set a manual baseline current in
+                        string config, or wait for ~30 days of data.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* 3. Peer table — only when the string was actually scored;
                     on no_data (performance === null) the peer table is misleading
-                    (no median to highlight), so suppress it entirely. */}
+                    (no median to highlight), so suppress it entirely. Peer-excluded
+                    strings always have performance === null, so the peer table is
+                    already suppressed for them — the historical panel above replaces it. */}
                 {data.performance !== null && data.peers.length > 0 && (
                   <div>
                     <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">

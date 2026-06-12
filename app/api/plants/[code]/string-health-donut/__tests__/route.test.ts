@@ -8,11 +8,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 //   - Returns the loader's result + cache headers
 
 const mockLoadPlantPrevDay = vi.fn()
-const mockLoadPlantLast3h = vi.fn()
+const mockLoadPlantToday = vi.fn()
 
 vi.mock('@/lib/donut-data-loader', () => ({
   loadPlantDonutPrevDay: (...args: any[]) => mockLoadPlantPrevDay(...args),
-  loadPlantDonutLast3h: (...args: any[]) => mockLoadPlantLast3h(...args),
+  loadPlantDonutToday: (...args: any[]) => mockLoadPlantToday(...args),
 }))
 
 vi.mock('@/lib/api-auth', () => ({
@@ -64,7 +64,7 @@ async function invoke(query: string, plantCode = 'plantX') {
 beforeEach(() => {
   vi.clearAllMocks()
   mockLoadPlantPrevDay.mockResolvedValue(sampleResult)
-  mockLoadPlantLast3h.mockResolvedValue({ ...sampleResult, timeBasis: { ...sampleResult.timeBasis, label: 'Last 3 hours', hoursCovered: 3 } })
+  mockLoadPlantToday.mockResolvedValue({ ...sampleResult, timeBasis: { ...sampleResult.timeBasis, label: 'Today · 2026-05-24 · live' } })
 })
 
 afterEach(() => {
@@ -76,17 +76,24 @@ describe('GET /api/plants/[code]/string-health-donut', () => {
     const { res, body } = await invoke('?mode=prev-day')
     expect(res.status).toBe(200)
     expect(mockLoadPlantPrevDay).toHaveBeenCalledWith('plantX')
-    expect(mockLoadPlantLast3h).not.toHaveBeenCalled()
+    expect(mockLoadPlantToday).not.toHaveBeenCalled()
     expect(body.totalStrings).toBe(100)
     expect(body.timeBasis.label).toBe('Yesterday · 2026-05-23')
   })
 
-  it('returns 200 with last-3h data when ?mode=last-3h', async () => {
-    const { res, body } = await invoke('?mode=last-3h')
+  it('returns 200 with today (live) data when ?mode=today', async () => {
+    const { res, body } = await invoke('?mode=today')
     expect(res.status).toBe(200)
-    expect(mockLoadPlantLast3h).toHaveBeenCalledWith('plantX')
+    expect(mockLoadPlantToday).toHaveBeenCalledWith('plantX')
     expect(mockLoadPlantPrevDay).not.toHaveBeenCalled()
-    expect(body.timeBasis.label).toBe('Last 3 hours')
+    expect(body.timeBasis.label).toBe('Today · 2026-05-24 · live')
+  })
+
+  it('returns 400 when the retired last-3h mode is requested', async () => {
+    const { res, body } = await invoke('?mode=last-3h')
+    expect(res.status).toBe(400)
+    expect(body.code).toBe('INVALID_QUERY')
+    expect(mockLoadPlantToday).not.toHaveBeenCalled()
   })
 
   it('returns 400 when mode is missing', async () => {
@@ -130,8 +137,8 @@ describe('GET /api/plants/[code]/string-health-donut', () => {
     expect(cc).toMatch(/private/)
   })
 
-  it('sets Cache-Control to 60s for last-3h mode', async () => {
-    const { res } = await invoke('?mode=last-3h')
+  it('sets Cache-Control to 60s for today (live) mode', async () => {
+    const { res } = await invoke('?mode=today')
     const cc = res.headers.get('Cache-Control') ?? ''
     expect(cc).toMatch(/max-age=60/)
   })

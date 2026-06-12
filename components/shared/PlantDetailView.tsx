@@ -438,8 +438,8 @@ export function PlantDetailView({
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-5">
-            {/* String health donut — settled (prev-day / last-3h) view, fetched
-                independently from real-time data to avoid dawn/dusk/night noise. */}
+            {/* String health donut — V1 view (prev-day settled / today live),
+                reads string_daily so it matches the NOC + analysis cells. */}
             <StringHealthDonut plantCode={plantCode} />
 
             {/* Per-Inverter Sections */}

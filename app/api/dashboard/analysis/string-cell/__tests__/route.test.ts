@@ -9,7 +9,8 @@ const mockPrisma = {
   plant_assignments: { findMany: vi.fn() },
   devices: { findFirst: vi.fn() },
   string_hourly: { findMany: vi.fn() },
-  string_configs: { findMany: vi.fn() },
+  string_configs: { findMany: vi.fn(), findUnique: vi.fn() },
+  string_daily: { findMany: vi.fn() },
 }
 vi.mock('@/lib/prisma', () => ({ prisma: mockPrisma }))
 
@@ -48,6 +49,8 @@ describe('GET /api/dashboard/analysis/string-cell (V1)', () => {
     vi.clearAllMocks()
     mockPrisma.plant_assignments.findMany.mockResolvedValue([{ plant_id: 'p1' }])
     mockPrisma.devices.findFirst.mockResolvedValue({ id: 'dev1', device_name: 'INV-1' })
+    mockPrisma.string_daily.findMany.mockResolvedValue([])
+    mockPrisma.string_configs.findUnique.mockResolvedValue(null)
   })
 
   it('returns raw_performance, data_completeness, band, condition_tag for a healthy string', async () => {
@@ -102,5 +105,32 @@ describe('GET /api/dashboard/analysis/string-cell (V1)', () => {
     expect(body.band).toBe('insufficient_data')
     expect(body.status).toBe('no_data')
     expect(body.data_completeness).toBe(25)
+    expect(body.historical).toBeNull() // not peer-excluded → no own-trend block
+  })
+
+  it('peer-excluded string returns a historical own-trend block (informational, not a peer ratio)', async () => {
+    const win = [8, 9, 10, 11, 12, 13, 14, 15]
+    mockPrisma.string_hourly.findMany.mockResolvedValue([
+      ...hourly(win, 1, 10),
+      ...hourly(win, 2, 10),
+      ...hourly(win, 3, 4), // shaded string runs low — but it's peer-excluded
+    ])
+    mockPrisma.string_configs.findMany.mockResolvedValue([
+      { string_number: 3, is_used: true, exclude_from_peer_comparison: true, condition_tag: 'shaded' },
+    ])
+    // Own 30-day history → median 5; today's repr_current is 4 → 80%.
+    mockPrisma.string_daily.findMany.mockResolvedValue([
+      { avg_current: 4 }, { avg_current: 6 },
+    ])
+
+    const body = await invoke('?device_id=dev1&string_number=3&date=2026-06-15')
+    expect(body.band).toBe('peer_excluded')
+    expect(body.status).toBe('peer_excluded')
+    expect(body.performance).toBeNull() // no peer ratio for excluded strings
+    expect(body.historical).not.toBeNull()
+    expect(body.historical.source).toBe('30d')
+    expect(body.historical.baseline).toBe(5)
+    expect(body.historical.todayRepr).toBe(4)
+    expect(body.historical.pct).toBe(80)
   })
 })

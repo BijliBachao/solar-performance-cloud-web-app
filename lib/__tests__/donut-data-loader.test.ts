@@ -187,134 +187,112 @@ describe('loadPlantDonutPrevDay', () => {
   })
 })
 
-function mockLast3h(hourlyRows: any[], unusedCount: number = 0) {
+// loadPlantDonutToday mirrors loadPlantDonutPrevDay but reads TODAY's PKT
+// string_daily (the V1 metric the poller recomputes every cycle), so the
+// query shape is identical to prev-day.
+function mockToday(dailyRows: any[], unusedCount: number = 0, lastSeen: Date | null = new Date('2026-05-24T04:55:00Z')) {
   mockPrisma.$queryRaw
-    .mockResolvedValueOnce(hourlyRows)
+    .mockResolvedValueOnce(dailyRows)
     .mockResolvedValueOnce([{ unused: BigInt(unusedCount) }])
+    .mockResolvedValueOnce([{ last_seen: lastSeen }]) // MAX(devices.last_seen_at) — real liveness, not "now"
 }
 
-// Build an hourly row for the SR-based Last-3h donut. power=null → no data.
-// model/max_strings null → device-wide peer pool (max-anchored). 16 panels @ ~600V.
-function hRow(
-  sn: number, hour: string, power: number | null,
-  opts: { is_used?: boolean; exclude?: boolean; panel_count?: number | null } = {},
-) {
-  return {
-    device_id: 'd1', string_number: sn,
-    avg_current: power == null ? null : new Decimal((power / 600).toFixed(3)),
-    avg_voltage: power == null ? null : new Decimal('600'),
-    avg_power: power == null ? null : new Decimal(String(power)),
-    hour: new Date(hour),
-    is_used: opts.is_used ?? true,
-    exclude_from_peer_comparison: opts.exclude ?? false,
-    panel_count: opts.panel_count ?? 16,
-    model: null,
-    max_strings: null,
-  }
-}
+describe('loadPlantDonutToday (V1 cutover — reads today\'s string_daily)', () => {
+  it('queries string_daily for the plant on TODAY (PKT)', async () => {
+    mockToday([])
+    const { loadPlantDonutToday } = await import('@/lib/donut-data-loader')
 
-describe('loadPlantDonutLast3h', () => {
-  it('queries string_hourly for the last 3 completed hours', async () => {
-    mockLast3h([])
-    const { loadPlantDonutLast3h } = await import('@/lib/donut-data-loader')
+    await loadPlantDonutToday('plantX')
 
-    await loadPlantDonutLast3h('plantX')
-
-    // Two calls: hourly rows + unused count
-    expect(mockPrisma.$queryRaw).toHaveBeenCalledTimes(2)
+    // Three calls: daily rows + unused count from configs + MAX(last_seen_at) liveness
+    expect(mockPrisma.$queryRaw).toHaveBeenCalledTimes(3)
     const firstCall = mockPrisma.$queryRaw.mock.calls[0]
     const interpolated = firstCall.slice(1)
     expect(interpolated).toContain('plantX')
-    // Window starts 3 hours before the current PKT hour boundary.
-    // Now = 2026-05-24T05:00:00Z = 2026-05-24T10:00 PKT, current hour bucket 10:00 PKT.
-    // 3 hours before = 07:00 PKT = 02:00 UTC; upper bound = current hour = 05:00 UTC.
-    expect(interpolated.some((v: any) => v instanceof Date && v.toISOString() === '2026-05-24T02:00:00.000Z')).toBe(true)
-    expect(interpolated.some((v: any) => v instanceof Date && v.toISOString() === '2026-05-24T05:00:00.000Z')).toBe(true)
+    // Now = 2026-05-24T05:00:00Z = 2026-05-24 10:00 PKT → today = 2026-05-24.
+    expect(interpolated.some((v: any) => v instanceof Date && v.toISOString() === '2026-05-24T00:00:00.000Z')).toBe(true)
   })
 
-  it('scores strings by SR over hourly per-panel power; equal strings → Healthy', async () => {
-    // Two strings, equal per-panel power (6400W / 16 panels = 400 W/panel, above the live floor) → SR 1.0 each.
-    mockLast3h([
-      hRow(1, '2026-05-24T02:00:00Z', 6400), hRow(1, '2026-05-24T03:00:00Z', 6400), hRow(1, '2026-05-24T04:00:00Z', 6400),
-      hRow(2, '2026-05-24T02:00:00Z', 6400), hRow(2, '2026-05-24T03:00:00Z', 6400), hRow(2, '2026-05-24T04:00:00Z', 6400),
+  it('buckets via the V1 classifier (95/85/60), same as prev-day / NOC / analysis', async () => {
+    mockToday([
+      { device_id: 'd1', string_number: 1, health_score: new Decimal('96'), is_used: true, exclude_from_peer_comparison: false }, // healthy (Normal >=95)
+      { device_id: 'd1', string_number: 2, health_score: new Decimal('90'), is_used: true, exclude_from_peer_comparison: false }, // abnormal (Watch)
+      { device_id: 'd1', string_number: 3, health_score: new Decimal('70'), is_used: true, exclude_from_peer_comparison: false }, // abnormal (Underperforming)
+      { device_id: 'd1', string_number: 4, health_score: new Decimal('40'), is_used: true, exclude_from_peer_comparison: false }, // critical (Serious Fault <60)
     ])
-    const { loadPlantDonutLast3h } = await import('@/lib/donut-data-loader')
+    const { loadPlantDonutToday } = await import('@/lib/donut-data-loader')
 
-    const result = await loadPlantDonutLast3h('plantX')
+    const result = await loadPlantDonutToday('plantX')
 
-    expect(result.totalStrings).toBe(2)
-    expect(result.counts.healthy).toBe(2)
-    expect(result.timeBasis.hoursCovered).toBe(3)
+    expect(result.totalStrings).toBe(4)
+    expect(result.counts).toEqual({ healthy: 1, abnormal: 2, critical: 1, noData: 0 })
+    expect(result.timeBasis.label).toMatch(/^Today · 2026-05-24 · live$/)
   })
 
-  it('one string far below its MPPT peers (per-panel) → Critical', async () => {
-    // s1,s2 = 400 W/panel; s3 = 160 W/panel → SR 0.4 vs median → Critical (group max 400 > live floor).
-    mockLast3h([
-      hRow(1, '2026-05-24T02:00:00Z', 6400), hRow(1, '2026-05-24T03:00:00Z', 6400), hRow(1, '2026-05-24T04:00:00Z', 6400),
-      hRow(2, '2026-05-24T02:00:00Z', 6400), hRow(2, '2026-05-24T03:00:00Z', 6400), hRow(2, '2026-05-24T04:00:00Z', 6400),
-      hRow(3, '2026-05-24T02:00:00Z', 2560),  hRow(3, '2026-05-24T03:00:00Z', 2560),  hRow(3, '2026-05-24T04:00:00Z', 2560),
+  it('treats NULL health_score as no-data → Abnormal (override rule #4)', async () => {
+    mockToday([
+      { device_id: 'd1', string_number: 1, health_score: null, is_used: true, exclude_from_peer_comparison: false },
+      { device_id: 'd1', string_number: 2, health_score: new Decimal('96'), is_used: true, exclude_from_peer_comparison: false },
     ])
-    const { loadPlantDonutLast3h } = await import('@/lib/donut-data-loader')
+    const { loadPlantDonutToday } = await import('@/lib/donut-data-loader')
 
-    const result = await loadPlantDonutLast3h('plantX')
+    const result = await loadPlantDonutToday('plantX')
 
-    expect(result.counts.critical).toBeGreaterThanOrEqual(1)
-    expect(result.counts.healthy).toBe(2)
-  })
-
-  it('morning ramp (below the live production floor) → no critical verdicts (dawn/ramp flood guard)', async () => {
-    // All strings at 100 W/panel (1600W/16) — below SR_LIVE_MIN_PER_PANEL_W=150.
-    // Uneven warm-up would otherwise flag the lagger; the floor suppresses any
-    // verdict during the ramp (audit 2026-06-08: 100 false alerts at sun 17°).
-    mockLast3h([
-      hRow(1, '2026-05-24T02:00:00Z', 1600), hRow(1, '2026-05-24T03:00:00Z', 1600), hRow(1, '2026-05-24T04:00:00Z', 1600),
-      hRow(2, '2026-05-24T02:00:00Z', 1600), hRow(2, '2026-05-24T03:00:00Z', 1600), hRow(2, '2026-05-24T04:00:00Z', 1600),
-      hRow(3, '2026-05-24T02:00:00Z', 640),  hRow(3, '2026-05-24T03:00:00Z', 640),  hRow(3, '2026-05-24T04:00:00Z', 640),
-    ])
-    const { loadPlantDonutLast3h } = await import('@/lib/donut-data-loader')
-    const result = await loadPlantDonutLast3h('plantX')
-    expect(result.counts.critical).toBe(0) // no false red while warming up
-  })
-
-  it('falls back to since-sunrise label when fewer than 3 hours available', async () => {
-    // Only 1 hour of data
-    mockLast3h([
-      { device_id: 'd1', string_number: 1, avg_current: new Decimal('5.0'), hour: new Date('2026-05-24T04:00:00Z'), is_used: true, exclude_from_peer_comparison: false },
-    ])
-    const { loadPlantDonutLast3h } = await import('@/lib/donut-data-loader')
-
-    const result = await loadPlantDonutLast3h('plantX')
-
-    expect(result.timeBasis.label).toMatch(/Since sunrise/i)
-    expect(result.timeBasis.hoursCovered).toBe(1)
-    expect(result.warnings.some(w => w.code === 'LIMITED_WINDOW')).toBe(true)
-  })
-
-  it('returns empty + warning when zero hourly rows in window', async () => {
-    mockLast3h([])
-    const { loadPlantDonutLast3h } = await import('@/lib/donut-data-loader')
-
-    const result = await loadPlantDonutLast3h('plantX')
-
-    expect(result.totalStrings).toBe(0)
-    expect(result.warnings.some(w => w.code === 'NO_DATA_WINDOW')).toBe(true)
-  })
-
-  it('treats no-data rows as no-data instead of dropping them (C2 regression guard)', async () => {
-    // 3 strings reporting; string #3 has no power/current for all hours.
-    // Should appear as Abnormal/no-data, not vanish.
-    mockLast3h([
-      hRow(1, '2026-05-24T02:00:00Z', 6400), hRow(1, '2026-05-24T03:00:00Z', 6400), hRow(1, '2026-05-24T04:00:00Z', 6400),
-      hRow(2, '2026-05-24T02:00:00Z', 6400), hRow(2, '2026-05-24T03:00:00Z', 6400), hRow(2, '2026-05-24T04:00:00Z', 6400),
-      hRow(3, '2026-05-24T02:00:00Z', null), hRow(3, '2026-05-24T03:00:00Z', null), hRow(3, '2026-05-24T04:00:00Z', null),
-    ])
-    const { loadPlantDonutLast3h } = await import('@/lib/donut-data-loader')
-
-    const result = await loadPlantDonutLast3h('plantX')
-
-    expect(result.totalStrings).toBe(3)
     expect(result.counts.noData).toBe(1)
     expect(result.counts.abnormal).toBe(1)
+    expect(result.counts.healthy).toBe(1)
+  })
+
+  it('returns empty + NO_DATA_TODAY warning when no rows for today', async () => {
+    mockToday([], 3)
+    const { loadPlantDonutToday } = await import('@/lib/donut-data-loader')
+
+    const result = await loadPlantDonutToday('plantX')
+
+    expect(result.totalStrings).toBe(0)
+    expect(result.warnings.some(w => w.code === 'NO_DATA_TODAY')).toBe(true)
+    // excluded.unused is pulled from string_configs even when no daily rows exist
+    expect(result.excluded.unused).toBe(3)
+  })
+
+  it('does NOT use the SR-anchored bucket path (peer-excluded is dropped, not scored)', async () => {
+    mockToday([
+      { device_id: 'd1', string_number: 1, health_score: new Decimal('96'), is_used: true, exclude_from_peer_comparison: false },
+      { device_id: 'd1', string_number: 2, health_score: new Decimal('30'), is_used: true, exclude_from_peer_comparison: true }, // peer-excluded → excluded.nonStandard, not critical
+    ])
+    const { loadPlantDonutToday } = await import('@/lib/donut-data-loader')
+
+    const result = await loadPlantDonutToday('plantX')
+
+    expect(result.totalStrings).toBe(1)
+    expect(result.counts.healthy).toBe(1)
+    expect(result.counts.critical).toBe(0)
+    expect(result.excluded.nonStandard).toBe(1)
+  })
+
+  it('freshness.lastDataAt reflects the real MAX(last_seen_at), NOT "now" (so isStale can fire)', async () => {
+    const realLastSeen = new Date('2026-05-24T04:30:00Z') // 30 min before the frozen "now"
+    mockToday(
+      [{ device_id: 'd1', string_number: 1, health_score: new Decimal('96'), is_used: true, exclude_from_peer_comparison: false }],
+      0,
+      realLastSeen,
+    )
+    const { loadPlantDonutToday } = await import('@/lib/donut-data-loader')
+
+    const result = await loadPlantDonutToday('plantX')
+
+    // Must be the device's last poll time, not request time — else a dead poller
+    // would show frozen morning scores under a permanently-"live" badge.
+    expect(result.freshness.lastDataAt).toEqual(realLastSeen)
+  })
+
+  it('freshness.lastDataAt is null when there are no scores yet (pre-dawn — no false stale)', async () => {
+    mockToday([], 0, new Date('2026-05-24T04:55:00Z'))
+    const { loadPlantDonutToday } = await import('@/lib/donut-data-loader')
+
+    const result = await loadPlantDonutToday('plantX')
+
+    expect(result.freshness.lastDataAt).toBeNull()
   })
 })
 

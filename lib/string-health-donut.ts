@@ -43,15 +43,6 @@ export interface DonutInput {
    * samples in an open-circuit state (V > 0 with I < ACTIVE_CURRENT_THRESHOLD)?
    */
   openCircuit: boolean
-  /**
-   * Optional pre-computed bucket — used ONLY by the live "Last-3h" donut, which
-   * buckets on the SR 0.94/0.85 anchor (bucketSrScore), NOT the V1 daily 95/85/60
-   * bands. When set, it overrides the V1 score path below (after the exclusion /
-   * open-circuit / no-data overrides) so the live-SR donut stays in lockstep with
-   * the live plant chart + SR alert severities, decoupled from the daily metric.
-   * Daily (settled / NOC) inputs leave this undefined → V1 score path.
-   */
-  bucket?: DonutBucket
 }
 
 export interface DonutCounts {
@@ -97,11 +88,6 @@ export function bucketDonutStatus(input: DonutInput): DonutBucket | null {
   // map to 'no_data', which the donut surfaces as the noData subset of abnormal
   // via aggregateForDonut; this guard ensures the bucket itself is 'abnormal'.)
   if (input.healthScore === null) return 'abnormal'
-
-  // Live-SR override — the live "Last-3h" donut supplies an SR-anchored bucket
-  // (bucketSrScore at 0.94/0.85); use it directly so the live donut is NOT moved
-  // onto the V1 daily bands (which would contradict the live chart + SR alerts).
-  if (input.bucket) return input.bucket
 
   // Rule #5 — score path delegates to the V1 classifier. is_used/peer_excluded
   // already handled above (rules #1/#2), so flag them false here; the donut
