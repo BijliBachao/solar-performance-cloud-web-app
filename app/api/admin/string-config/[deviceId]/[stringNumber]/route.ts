@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest, requireRole, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
-import { StringConfigUpsertSchema } from '@/lib/api-validation'
+import { StringConfigUpsertSchema, autoExcludeForConditionTag } from '@/lib/api-validation'
 
 interface Params {
   params: Promise<{ deviceId: string; stringNumber: string }>
@@ -34,7 +34,20 @@ export async function PUT(request: NextRequest, { params }: Params) {
         { status: 400 },
       )
     }
-    const { panel_count, panel_make, panel_rating_w, notes, is_used, exclude_from_peer_comparison } = parsed.data
+    const { panel_count, panel_make, panel_rating_w, notes, is_used, condition_tag } = parsed.data
+
+    // Condition tag → peer-comparison auto-set.
+    //   - If the request explicitly sent exclude_from_peer_comparison, the admin
+    //     override always wins (detected on the RAW body, since an omitted
+    //     optional field also parses to `undefined`).
+    //   - Else, derive it from the tag (known_shaded/different_tilt/
+    //     different_orientation/excluded → true; normal/under_observation →
+    //     false; "other" → leave untouched).
+    const excludeExplicitlySent =
+      body != null && typeof body === 'object' && 'exclude_from_peer_comparison' in body
+    const derivedExclude = excludeExplicitlySent
+      ? parsed.data.exclude_from_peer_comparison
+      : autoExcludeForConditionTag(condition_tag)
 
     // Build update payload — only include fields that were sent.
     // This lets the admin toggle is_used or exclude_from_peer_comparison
@@ -46,7 +59,8 @@ export async function PUT(request: NextRequest, { params }: Params) {
     if (panel_rating_w !== undefined) updateData.panel_rating_w = panel_rating_w ?? null
     if (notes !== undefined) updateData.notes = notes ?? null
     if (is_used !== undefined) updateData.is_used = is_used
-    if (exclude_from_peer_comparison !== undefined) updateData.exclude_from_peer_comparison = exclude_from_peer_comparison
+    if (condition_tag !== undefined) updateData.condition_tag = condition_tag ?? null
+    if (derivedExclude !== undefined) updateData.exclude_from_peer_comparison = derivedExclude
 
     const saved = await prisma.string_configs.upsert({
       where: { device_id_string_number: { device_id: deviceId, string_number: sn } },
@@ -57,8 +71,9 @@ export async function PUT(request: NextRequest, { params }: Params) {
         panel_make: panel_make ?? null,
         panel_rating_w: panel_rating_w ?? null,
         notes: notes ?? null,
+        condition_tag: condition_tag ?? null,
         is_used: is_used ?? true,  // default to used — preserves current behavior
-        exclude_from_peer_comparison: exclude_from_peer_comparison ?? false,  // default to standard — preserves current behavior
+        exclude_from_peer_comparison: derivedExclude ?? false,  // default to standard — preserves current behavior
         updated_by: userContext.userId,
       },
       update: updateData,
@@ -85,7 +100,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
           resolved_by: userContext.userId,
         },
       })
-    } else if (exclude_from_peer_comparison === true) {
+    } else if (derivedExclude === true) {
       await prisma.alerts.updateMany({
         where: {
           device_id: deviceId,
@@ -111,6 +126,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
       panel_make: saved.panel_make,
       panel_rating_w: saved.panel_rating_w,
       notes: saved.notes,
+      condition_tag: saved.condition_tag,
       is_used: saved.is_used,
       exclude_from_peer_comparison: saved.exclude_from_peer_comparison,
       updated_at: saved.updated_at,

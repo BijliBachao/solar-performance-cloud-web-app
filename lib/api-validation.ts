@@ -9,6 +9,21 @@ export const VALID_ORG_STATUSES = ['ACTIVE', 'INACTIVE'] as const
 export const VALID_SEVERITIES = ['CRITICAL', 'WARNING', 'INFO'] as const
 export const VALID_PROVIDERS = ['huawei', 'solis', 'growatt', 'sungrow'] as const
 
+// Human-readable per-string condition tag (string_configs.condition_tag).
+// Drives the peer-comparison auto-set rule in the string-config write paths.
+export const VALID_CONDITION_TAGS = [
+  'normal',
+  'known_shaded',
+  'different_tilt',
+  'different_orientation',
+  'under_observation',
+  'excluded',
+  'other',
+] as const
+
+// V1 scoring is identical for single_location; multi_location is a V1.1 marker.
+export const VALID_PLANT_TYPES = ['single_location', 'multi_location'] as const
+
 // ─── User Schemas ─────────────────────────────────────────────────────
 
 export const UserUpdateSchema = z.object({
@@ -52,6 +67,7 @@ export const StringConfigUpsertSchema = z.object({
   notes: z.string().max(500).nullable().optional(),
   is_used: z.boolean().optional(),
   exclude_from_peer_comparison: z.boolean().optional(),
+  condition_tag: z.enum(VALID_CONDITION_TAGS).nullable().optional(),
 })
 
 export const StringConfigBulkSchema = z.object({
@@ -64,7 +80,43 @@ export const StringConfigBulkSchema = z.object({
   only_unconfigured: z.boolean().default(false),
   is_used: z.boolean().optional(),
   exclude_from_peer_comparison: z.boolean().optional(),
+  condition_tag: z.enum(VALID_CONDITION_TAGS).nullable().optional(),
 })
+
+// ─── Plant Update Schema ──────────────────────────────────────────────
+// Plants are auto-created by pollers (syncPlants upsert) — there is no admin
+// create form. plant_type is the only admin-editable field today.
+
+export const PlantUpdateSchema = z.object({
+  plant_type: z.enum(VALID_PLANT_TYPES).optional(),
+})
+
+// ─── Condition-tag → peer-comparison auto-set ─────────────────────────
+// A condition tag implies whether a string belongs in the inverter peer pool.
+// Shading / non-standard tilt-or-orientation / explicit exclusion are unfair to
+// peer-compare → exclude. normal / under_observation are comparable → include.
+// "other" is ambiguous → leave the existing flag untouched.
+//
+// Returns the exclude value the tag implies, or `undefined` when the tag does
+// not imply one (i.e. "other"). Callers MUST let an explicitly-sent
+// exclude_from_peer_comparison override this derived value (admin override).
+export function autoExcludeForConditionTag(
+  tag: (typeof VALID_CONDITION_TAGS)[number] | null | undefined,
+): boolean | undefined {
+  switch (tag) {
+    case 'known_shaded':
+    case 'different_tilt':
+    case 'different_orientation':
+    case 'excluded':
+      return true
+    case 'normal':
+    case 'under_observation':
+      return false
+    // 'other', null, undefined → no implied value
+    default:
+      return undefined
+  }
+}
 
 // ─── Analysis Date Range Schema ───────────────────────────────────────
 

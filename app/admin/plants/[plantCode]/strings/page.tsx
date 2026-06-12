@@ -15,12 +15,15 @@ import {
   ArrowLeft, Save, Loader2, Check, X, Cpu, Zap, RotateCcw, Layers, AlertCircle,
 } from 'lucide-react'
 import { providerBadge, STATUS_STYLES } from '@/lib/design-tokens'
+import { ConditionTagSelect, type ConditionTag } from '@/components/shared/ConditionTagSelect'
+import { autoExcludeForConditionTag } from '@/lib/api-validation'
 
 interface StringConfig {
   panel_count: number | null
   panel_make: string | null
   panel_rating_w: number | null
   notes: string | null
+  condition_tag: ConditionTag | null
   is_used: boolean
   exclude_from_peer_comparison: boolean
   updated_at: string
@@ -55,12 +58,14 @@ interface EditState {
   panel_make: string
   panel_rating_w: string
   notes: string
+  condition_tag: ConditionTag | null
   is_used: boolean
   exclude_from_peer_comparison: boolean
 }
 
 const emptyEdit: EditState = {
   panel_count: '', panel_make: '', panel_rating_w: '', notes: '',
+  condition_tag: null,
   is_used: true, exclude_from_peer_comparison: false,
 }
 
@@ -71,6 +76,7 @@ const fromConfig = (c: StringConfig | null): EditState =>
         panel_make: c.panel_make ?? '',
         panel_rating_w: c.panel_rating_w != null ? String(c.panel_rating_w) : '',
         notes: c.notes ?? '',
+        condition_tag: c.condition_tag ?? null,
         is_used: c.is_used,
         exclude_from_peer_comparison: c.exclude_from_peer_comparison,
       }
@@ -166,6 +172,7 @@ export default function AdminStringsConfigPage() {
       a.panel_make !== b.panel_make ||
       a.panel_rating_w !== b.panel_rating_w ||
       a.notes !== b.notes ||
+      a.condition_tag !== b.condition_tag ||
       a.is_used !== b.is_used ||
       a.exclude_from_peer_comparison !== b.exclude_from_peer_comparison
   }
@@ -203,7 +210,10 @@ export default function AdminStringsConfigPage() {
           panel_make: e.panel_make.trim() || null,
           panel_rating_w: ratingNum,
           notes: e.notes.trim() || null,
+          condition_tag: e.condition_tag,
           is_used: e.is_used,
+          // Send the (possibly admin-re-flipped) peer-comp value explicitly so
+          // the server honours the override instead of re-deriving from the tag.
           exclude_from_peer_comparison: e.exclude_from_peer_comparison,
         }),
       })
@@ -229,6 +239,7 @@ export default function AdminStringsConfigPage() {
                 panel_make: saved.panel_make,
                 panel_rating_w: saved.panel_rating_w,
                 notes: saved.notes,
+                condition_tag: saved.condition_tag ?? null,
                 is_used: saved.is_used,
                 exclude_from_peer_comparison: saved.exclude_from_peer_comparison,
                 updated_at: saved.updated_at,
@@ -507,6 +518,14 @@ export default function AdminStringsConfigPage() {
                         </div>
                       </th>
                       <th className="px-3 py-2 text-left">
+                        <div
+                          className="text-[10px] font-bold uppercase tracking-widest text-slate-500"
+                          title="Why this string looks the way it does. Picking a tag auto-sets the Peer-comp toggle: Known Shaded / Different Tilt / Different Orientation / Excluded remove it from the peer pool; Normal / Under Observation keep it in. You can re-flip Peer-comp afterwards."
+                        >
+                          Condition Tag
+                        </div>
+                      </th>
+                      <th className="px-3 py-2 text-left">
                         <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Status</div>
                       </th>
                       <th className="px-3 py-2 text-left">
@@ -517,6 +536,9 @@ export default function AdminStringsConfigPage() {
                       </th>
                       <th className="px-3 py-2 text-left">
                         <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Rating (W)</div>
+                      </th>
+                      <th className="px-3 py-2 text-left">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Notes</div>
                       </th>
                       <th className="px-3 py-2 text-right">
                         <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Nameplate</div>
@@ -610,6 +632,34 @@ export default function AdminStringsConfigPage() {
                               />
                             </button>
                           </td>
+                          {/* Condition Tag — picking a tag auto-flips the Peer-comp
+                              toggle in LOCAL edit state to match the auto-set rule
+                              (known_shaded/different_tilt/different_orientation/
+                              excluded → excluded; normal/under_observation →
+                              included; other → leave as-is). Admin can still
+                              re-flip Peer-comp before saving; the save payload
+                              sends the resulting flag explicitly so the server
+                              honours the override. Disabled for unused rows. */}
+                          <td className="px-3 py-2">
+                            <ConditionTagSelect
+                              value={e.condition_tag}
+                              disabled={isUnusedRow}
+                              onChange={(tag) => setEdits(p => {
+                                const derived = autoExcludeForConditionTag(tag)
+                                return {
+                                  ...p,
+                                  [key]: {
+                                    ...e,
+                                    condition_tag: tag,
+                                    // Only flip when the tag implies a value
+                                    // ("other"/none leave the toggle alone).
+                                    exclude_from_peer_comparison:
+                                      derived === undefined ? e.exclude_from_peer_comparison : derived,
+                                  },
+                                }
+                              })}
+                            />
+                          </td>
                           {/* Status pill — distinguishes admin-flagged vs auto-detected unused.
                               Non-standard (peer-excluded but used) gets its own pill. Wording
                               stays consistent across edit-state and saved-state so the pill
@@ -673,6 +723,20 @@ export default function AdminStringsConfigPage() {
                               className={cn('h-7 w-20 text-[12px]', isUnusedRow && 'opacity-50')}
                               placeholder="optional"
                               disabled={isUnusedRow}
+                            />
+                          </td>
+                          {/* Notes — free-text annotation. Round-trips through
+                              StringConfig.notes + the PUT; previously saved but
+                              not surfaced in the table. Editable even on unused
+                              rows so a note can explain WHY a port is empty. */}
+                          <td className="px-3 py-2">
+                            <Input
+                              type="text"
+                              value={e.notes}
+                              onChange={ev => setEdits(p => ({ ...p, [key]: { ...e, notes: ev.target.value } }))}
+                              className="h-7 w-40 text-[12px]"
+                              placeholder="optional"
+                              maxLength={500}
                             />
                           </td>
                           <td className={cn(

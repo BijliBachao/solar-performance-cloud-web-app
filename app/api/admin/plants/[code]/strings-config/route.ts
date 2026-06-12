@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest, requireRole, createErrorResponse, ApiAuthError } from '@/lib/api-auth'
 import { prisma } from '@/lib/prisma'
 import { INVERTER_DEVICE_TYPE_IDS } from '@/lib/constants'
-import { StringConfigBulkSchema } from '@/lib/api-validation'
+import { StringConfigBulkSchema, autoExcludeForConditionTag } from '@/lib/api-validation'
 
 interface Params {
   params: Promise<{ code: string }>
@@ -88,6 +88,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
                 panel_make: cfg.panel_make,
                 panel_rating_w: cfg.panel_rating_w,
                 notes: cfg.notes,
+                condition_tag: cfg.condition_tag,
                 is_used: cfg.is_used,
                 exclude_from_peer_comparison: cfg.exclude_from_peer_comparison,
                 updated_at: cfg.updated_at,
@@ -133,7 +134,16 @@ export async function POST(request: NextRequest, { params }: Params) {
         { status: 400 },
       )
     }
-    const { panel_count, panel_make, panel_rating_w, notes, only_unconfigured, is_used, exclude_from_peer_comparison } = parsed.data
+    const { panel_count, panel_make, panel_rating_w, notes, only_unconfigured, is_used, condition_tag } = parsed.data
+
+    // Condition tag → peer-comparison auto-set (same rule as the per-string PUT).
+    // Explicit exclude_from_peer_comparison on the raw body always overrides the
+    // tag-derived value (admin override).
+    const excludeExplicitlySent =
+      body != null && typeof body === 'object' && 'exclude_from_peer_comparison' in body
+    const derivedExclude = excludeExplicitlySent
+      ? parsed.data.exclude_from_peer_comparison
+      : autoExcludeForConditionTag(condition_tag)
 
     const devices = await prisma.devices.findMany({
       where: { plant_id: plantId, device_type_id: { in: INVERTER_DEVICE_TYPE_IDS } },
@@ -181,8 +191,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (panel_make !== undefined) updateData.panel_make = panel_make ?? null
     if (panel_rating_w !== undefined) updateData.panel_rating_w = panel_rating_w ?? null
     if (notes !== undefined) updateData.notes = notes ?? null
+    if (condition_tag !== undefined) updateData.condition_tag = condition_tag ?? null
     if (is_used !== undefined) updateData.is_used = is_used
-    if (exclude_from_peer_comparison !== undefined) updateData.exclude_from_peer_comparison = exclude_from_peer_comparison
+    if (derivedExclude !== undefined) updateData.exclude_from_peer_comparison = derivedExclude
 
     // Per-row try/catch so one DB error doesn't lose the partial-success count.
     // Track successful targets separately so the auto-resolve below only fires
@@ -201,8 +212,9 @@ export async function POST(request: NextRequest, { params }: Params) {
             panel_make: panel_make ?? null,
             panel_rating_w: panel_rating_w ?? null,
             notes: notes ?? null,
+            condition_tag: condition_tag ?? null,
             is_used: is_used ?? true,
-            exclude_from_peer_comparison: exclude_from_peer_comparison ?? false,
+            exclude_from_peer_comparison: derivedExclude ?? false,
             updated_by: userContext.userId,
           },
           update: updateData,
@@ -241,7 +253,7 @@ export async function POST(request: NextRequest, { params }: Params) {
           resolved_by: userContext.userId,
         },
       })
-    } else if (exclude_from_peer_comparison === true && succeeded.length > 0) {
+    } else if (derivedExclude === true && succeeded.length > 0) {
       await prisma.alerts.updateMany({
         where: {
           OR: succeeded.map(t => ({
