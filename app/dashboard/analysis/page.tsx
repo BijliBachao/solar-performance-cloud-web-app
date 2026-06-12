@@ -436,7 +436,7 @@ export default function DashboardAnalysisPage() {
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-yellow-100 border border-yellow-300" /> {PERF_WATCH}%–{PERF_NORMAL - 1}% Watch</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-200 border border-orange-300" /> {PERF_UNDERPERFORMING}%–{PERF_WATCH - 1}% Underperforming</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-200 border border-red-300" /> {PERF_DEAD}%–{PERF_UNDERPERFORMING - 1}% Serious Fault</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-slate-800 border border-slate-900" /> &lt;{PERF_DEAD}% Dead</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-slate-600 border border-slate-700" /> &lt;{PERF_DEAD}% Dead</span>
           <span className="flex items-center gap-1" title="No score for this day (string did not report or was not scoreable). Gray means 'unscored', NOT 'OK'."><span className="w-3 h-3 rounded bg-gray-100 border border-gray-200" /> No data / unscored</span>
           <span className="flex items-center gap-1" title="Non-standard orientation/shade — excluded from peer comparison, so no comparable score. Counted separately, not in Healthy/Warning/Critical."><span className="w-3 h-3 rounded bg-indigo-50 border border-indigo-200" /> Non-standard (excluded)</span>
         </div>

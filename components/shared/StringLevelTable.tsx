@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { StringCellDetail } from './StringCellDetail'
 import { cn } from '@/lib/utils'
-import { STATUS_STYLES, perfBandStyleFromScore } from '@/lib/design-tokens'
+import { STATUS_STYLES, perfBandStyleFromScore, completenessStyleFromPct } from '@/lib/design-tokens'
 import { providerLabel } from '@/lib/constants'
 
 // ── Clickable performance cell ─────────────────────────────────────────────
@@ -57,6 +57,8 @@ interface StringRow {
   kw_per_string: number | null
   perf_avg: number | null
   avail_avg: number | null
+  /** Avg Data Completeness % (received ÷ 96) over the range — Reyyan §9, own column. */
+  compl_avg?: number | null
   energy_kwh: number | null
   scores: Record<string, number | null>
   type?: 'active' | 'inactive' | 'unused'
@@ -169,6 +171,9 @@ export function StringLevelTable({
             <th className="px-2 py-2 text-center text-xs font-semibold text-violet-700 border-r border-gray-200 min-w-[52px] bg-violet-50/50">
               Avail
             </th>
+            <th className="px-2 py-2 text-center text-xs font-semibold text-sky-700 border-r border-gray-200 min-w-[56px] bg-sky-50/50" title="Data Completeness — readings received ÷ 96 expected (a data-quality measure, kept separate from performance)">
+              Data&nbsp;%
+            </th>
             <th className="px-2 py-2 text-center text-xs font-semibold text-emerald-700 border-r border-gray-200 min-w-[60px] bg-emerald-50/50">
               kWh
             </th>
@@ -240,6 +245,9 @@ export function StringLevelTable({
                 </td>
                 <td className={cn('px-2 py-1.5 text-center text-xs font-mono border-r border-gray-200 bg-violet-50/30', metricCell(row.avail_avg, 'avail'))}>
                   {row.avail_avg !== null ? `${row.avail_avg}%` : '—'}
+                </td>
+                <td className={cn('px-2 py-1.5 text-center text-xs font-mono border-r border-gray-200 bg-sky-50/30', row.compl_avg != null ? completenessStyleFromPct(row.compl_avg)?.fg ?? 'text-gray-400' : 'text-gray-400')}>
+                  {row.compl_avg != null ? `${row.compl_avg}%` : '—'}
                 </td>
                 <td className="px-2 py-1.5 text-center text-xs font-mono font-semibold border-r border-gray-200 bg-emerald-50/30 text-emerald-700">
                   {row.energy_kwh !== null ? row.energy_kwh.toFixed(1) : '—'}

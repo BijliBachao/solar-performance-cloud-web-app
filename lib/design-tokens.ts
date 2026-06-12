@@ -286,10 +286,14 @@ export const PERF_BAND_STYLES: Record<PerfBand, PerfBandStyle> = {
     label: 'Serious Fault',
   },
   dead: {
-    fg: 'text-slate-100 font-bold',
-    bg: 'bg-slate-800',
-    cell: 'bg-slate-800 text-slate-100 font-bold',
-    dot: 'bg-slate-800',
+    // fg is used on a WHITE background (the Perf/Avail summary text) — it MUST be
+    // dark or it renders invisible (the old text-slate-100 was near-white = unreadable).
+    fg: 'text-slate-700 font-bold',
+    bg: 'bg-slate-200',
+    // cell is the filled grid cell: a dark slate wash with EXPLICIT white text for
+    // high contrast (not the near-black slate-800 that read as black-on-black).
+    cell: 'bg-slate-600 text-white font-bold',
+    dot: 'bg-slate-600',
     label: 'Dead',
   },
   insufficient_data: {

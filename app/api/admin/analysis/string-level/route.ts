@@ -188,6 +188,7 @@ export async function GET(request: NextRequest) {
         health_score: true,
         performance: true,
         availability: true,
+        data_completeness: true,
         energy_kwh: true,
       },
       orderBy: [{ device_id: 'asc' }, { string_number: 'asc' }, { date: 'asc' }],
@@ -205,10 +206,12 @@ export async function GET(request: NextRequest) {
     const scoreMap = new Map<string, number | null>()
     const perfMap = new Map<string, number | null>()
     const availMap = new Map<string, number | null>()
+    const complMap = new Map<string, number | null>()
     const energyMap = new Map<string, number>()
     for (const row of dailyData) {
       const dateStr = new Date(row.date).toISOString().split('T')[0]
       const key = `${row.device_id}:${row.string_number}:${dateStr}`
+      complMap.set(key, row.data_completeness == null ? null : Number(row.data_completeness))
       // Explicit null check — a real health_score of 0 (string dead at peak vs a
       // healthy peer group) is the single most important value this feature
       // surfaces. Truthiness (`x ? .. : null`) would coerce 0 → null and the
@@ -263,6 +266,7 @@ export async function GET(request: NextRequest) {
 
       const scores: Record<string, number | null> = {}
       let perfSum = 0, perfCount = 0, availSum = 0, availCount = 0, energySum = 0
+      let complSum = 0, complCount = 0
 
       if (type !== 'unused') {
         for (const date of dates) {
@@ -270,8 +274,10 @@ export async function GET(request: NextRequest) {
           scores[date] = scoreMap.get(mk) ?? null
           const p = perfMap.get(mk)
           const a = availMap.get(mk)
+          const c = complMap.get(mk)
           if (p !== null && p !== undefined) { perfSum += p; perfCount++ }
           if (a !== null && a !== undefined) { availSum += a; availCount++ }
+          if (c !== null && c !== undefined) { complSum += c; complCount++ }
           const e = energyMap.get(mk)
           if (e !== undefined) energySum += e
         }
@@ -298,6 +304,9 @@ export async function GET(request: NextRequest) {
         kw_per_string: kwPerString,
         perf_avg: perfCount > 0 ? Math.round(perfSum / perfCount) : null,
         avail_avg: availCount > 0 ? Math.round(availSum / availCount) : null,
+        // Data Completeness % (received ÷ 96 expected) — Reyyan §9, shown as its
+        // OWN column, never merged into performance. Avg over the scored days in range.
+        compl_avg: complCount > 0 ? Math.round(complSum / complCount) : null,
         energy_kwh: energySum > 0 ? Math.round(energySum * 10) / 10 : null,
         scores,
         type,
