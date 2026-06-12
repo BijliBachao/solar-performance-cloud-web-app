@@ -436,6 +436,9 @@ async function fetchSungrowAlarms(client: SungrowClient): Promise<void> {
         if (!deviceRow) continue
 
         // dev_fault_status: 1 = no fault. Anything else (0, 2, 3, etc.) = fault.
+        // (The enum beyond 1 is unverified in our docs — a literal 0 is ASSUMED
+        // a fault; a missing/non-numeric value already defaults to 1 in the
+        // client, so absence-of-data is not flagged.)
         const isFaulty = dev.dev_fault_status !== 1
         if (!isFaulty) continue
 
@@ -447,40 +450,54 @@ async function fetchSungrowAlarms(client: SungrowClient): Promise<void> {
         const vendorAlarmId = `${plant.id}_${dev.device_sn}_devfault`
         activeIds.add(vendorAlarmId)
 
+        // Find-then-write (not a plain upsert) so started_at is stamped fresh
+        // ONLY on a genuine (re)open. A plain upsert's `update` runs every poll
+        // and would either freeze started_at (the recurrence sorts to the
+        // bottom of the started_at-DESC feed and can fall off the 500-row cap →
+        // invisible) or reset it every cycle (an ongoing fault would always
+        // read "just now"). Faulty devices are few, so the extra read is cheap.
+        const code = String(dev.dev_fault_status)
+        const message = `Device fault detected (status ${dev.dev_fault_status})`
+        const advice = 'Check the Sungrow iSolarCloud portal for fault details. ' +
+          'Possible causes: communication loss, inverter trip, AC/DC fault, ' +
+          'sensor error. Refer to the inverter manual or contact Sungrow ' +
+          'support if the fault persists.'
         try {
-          await prisma.vendor_alarms.upsert({
-            where: {
-              provider_vendor_alarm_id: {
+          const existing = await prisma.vendor_alarms.findUnique({
+            where: { provider_vendor_alarm_id: { provider: PROVIDERS.SUNGROW, vendor_alarm_id: vendorAlarmId } },
+            select: { id: true, resolved_at: true },
+          })
+          if (!existing) {
+            await prisma.vendor_alarms.create({
+              data: {
+                device_id: deviceRow.id,
+                plant_id: deviceRow.plant_id,
                 provider: PROVIDERS.SUNGROW,
                 vendor_alarm_id: vendorAlarmId,
+                alarm_code: code,
+                severity: 'CRITICAL',
+                message,
+                advice,
+                started_at: new Date(),
+                raw_data: dev as any,
               },
-            },
-            update: {
-              // Reopen on recurrence + refresh the snapshot. started_at is left
-              // as the original occurrence (resetting it every poll would lie
-              // about when the fault began).
-              resolved_at: null,
-              alarm_code: String(dev.dev_fault_status),
-              raw_data: dev as any,
-            },
-            create: {
-              device_id: deviceRow.id,
-              plant_id: deviceRow.plant_id,
-              provider: PROVIDERS.SUNGROW,
-              vendor_alarm_id: vendorAlarmId,
-              alarm_code: String(dev.dev_fault_status),
-              severity: 'CRITICAL',
-              message: `Device fault detected (status ${dev.dev_fault_status})`,
-              advice: 'Check the Sungrow iSolarCloud portal for fault details. ' +
-                      'Possible causes: communication loss, inverter trip, ' +
-                      'AC/DC fault, sensor error. Refer to inverter manual ' +
-                      'or contact Sungrow support if the fault persists.',
-              started_at: new Date(),
-              raw_data: dev as any,
-            },
-          })
+            })
+          } else if (existing.resolved_at !== null) {
+            // Recurrence reusing the stable-key row → new occurrence: reopen and
+            // stamp a fresh started_at so it surfaces at the top of the feed.
+            await prisma.vendor_alarms.update({
+              where: { id: existing.id },
+              data: { resolved_at: null, started_at: new Date(), alarm_code: code, raw_data: dev as any },
+            })
+          } else {
+            // Already open — refresh the snapshot, keep the original started_at.
+            await prisma.vendor_alarms.update({
+              where: { id: existing.id },
+              data: { alarm_code: code, raw_data: dev as any },
+            })
+          }
         } catch {
-          // unique constraint race — safe to skip
+          // unique-constraint race on create — safe to skip
         }
       }
     }

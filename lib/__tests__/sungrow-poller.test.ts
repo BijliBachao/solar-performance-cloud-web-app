@@ -19,6 +19,9 @@ const mockPrisma = {
   alerts: { findMany: vi.fn().mockResolvedValue([]), update: vi.fn(), create: vi.fn(), updateMany: vi.fn(), createMany: vi.fn() },
   vendor_alarms: {
     findMany: vi.fn().mockResolvedValue([]),
+    findUnique: vi.fn().mockResolvedValue(null),
+    create: vi.fn().mockResolvedValue({}),
+    update: vi.fn().mockResolvedValue({}),
     upsert: vi.fn().mockResolvedValue({}),
     updateMany: vi.fn().mockResolvedValue({}),
   },
@@ -167,8 +170,10 @@ describe('fetchSungrowAlarms — completeness guard + reopen', () => {
     process.env.SUNGROW_SECRET_KEY = 'fake'
     process.env.SUNGROW_USERNAME = 'fake'
     process.env.SUNGROW_PASSWORD = 'fake'
-    // getPowerStationList [] keeps the device-sync path from calling getDeviceList,
-    // so getDeviceList is exercised only inside fetchSungrowAlarms.
+    // getPowerStationList [] keeps the device-sync path from iterating plants.
+    // (getDeviceList is still called by both syncSungrowDevices — over the DB
+    // plants below — and fetchSungrowAlarms; the assertions target vendor_alarms
+    // ops, which only fetchSungrowAlarms performs.)
     clientInstance.getPowerStationList.mockResolvedValue([])
     clientInstance.getDeviceRealTimeData.mockResolvedValue([])
     mockPrisma.plants.findMany.mockResolvedValue([{ id: 'ps1' }])
@@ -192,19 +197,58 @@ describe('fetchSungrowAlarms — completeness guard + reopen', () => {
     expect(mockPrisma.vendor_alarms.updateMany).not.toHaveBeenCalled()
   })
 
-  it('reopens a recurring fault on upsert (update sets resolved_at: null)', async () => {
+  it('creates a new alarm with a fresh started_at on first occurrence', async () => {
     clientInstance.getDeviceList.mockResolvedValue([
       { ps_key: '', device_code: 0, device_type: 1, device_name: 'INV', device_sn: 'sn1',
         device_model: '', ps_id: 'ps1', dev_fault_status: 4, dev_status: 0 },
     ])
+    mockPrisma.vendor_alarms.findUnique.mockResolvedValue(null) // no prior row
 
     const { pollSungrow } = await import('@/lib/sungrow-poller')
     await pollSungrow()
 
-    expect(mockPrisma.vendor_alarms.upsert).toHaveBeenCalledWith(
+    expect(mockPrisma.vendor_alarms.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        update: expect.objectContaining({ resolved_at: null }),
+        data: expect.objectContaining({ vendor_alarm_id: 'ps1_sn1_devfault', started_at: expect.any(Date) }),
       }),
     )
+  })
+
+  it('reopens a recurring fault: clears resolved_at AND stamps a fresh started_at', async () => {
+    clientInstance.getDeviceList.mockResolvedValue([
+      { ps_key: '', device_code: 0, device_type: 1, device_name: 'INV', device_sn: 'sn1',
+        device_model: '', ps_id: 'ps1', dev_fault_status: 4, dev_status: 0 },
+    ])
+    // A previously-RESOLVED row exists for this device → recurrence must reopen it
+    // and re-stamp started_at so it surfaces at the top of the (started_at-DESC) feed.
+    mockPrisma.vendor_alarms.findUnique.mockResolvedValue({
+      id: 'va1', resolved_at: new Date('2026-06-01T00:00:00Z'),
+    })
+
+    const { pollSungrow } = await import('@/lib/sungrow-poller')
+    await pollSungrow()
+
+    expect(mockPrisma.vendor_alarms.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'va1' },
+        data: expect.objectContaining({ resolved_at: null, started_at: expect.any(Date) }),
+      }),
+    )
+  })
+
+  it('does NOT re-stamp started_at while a fault stays continuously open', async () => {
+    clientInstance.getDeviceList.mockResolvedValue([
+      { ps_key: '', device_code: 0, device_type: 1, device_name: 'INV', device_sn: 'sn1',
+        device_model: '', ps_id: 'ps1', dev_fault_status: 4, dev_status: 0 },
+    ])
+    // An already-OPEN row exists → refresh snapshot only, never touch started_at.
+    mockPrisma.vendor_alarms.findUnique.mockResolvedValue({ id: 'va1', resolved_at: null })
+
+    const { pollSungrow } = await import('@/lib/sungrow-poller')
+    await pollSungrow()
+
+    const updateArg = mockPrisma.vendor_alarms.update.mock.calls[0]?.[0]
+    expect(updateArg?.data?.started_at).toBeUndefined()
+    expect(updateArg?.data?.resolved_at).toBeUndefined()
   })
 })
