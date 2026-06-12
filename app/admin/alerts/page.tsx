@@ -37,6 +37,8 @@ const PAGE_SIZE = 50
 // (VALID_PROVIDERS omits csi today). 'all' = no provider filter.
 const PROVIDER_OPTIONS = [...VALID_PROVIDERS, 'csi'] as const
 
+interface OrgOption { id: string; name: string }
+
 export default function AdminAlertsPage() {
   const router = useRouter()
 
@@ -44,9 +46,26 @@ export default function AdminAlertsPage() {
   const [provider, setProvider] = useState<string>('')
   const [severity, setSeverity] = useState<string>('')
   const [resolved, setResolved] = useState<Resolved>('false')
+  const [organization, setOrganization] = useState<string>('')
+  const [orgs, setOrgs] = useState<OrgOption[]>([])
   const [qInput, setQInput] = useState('')
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
+
+  // Org list for the Organization filter (reuses the admin orgs endpoint).
+  useEffect(() => {
+    fetch('/api/admin/organizations?limit=100', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.organizations) return
+        setOrgs(
+          d.organizations
+            .map((o: any) => ({ id: o.id, name: o.name }))
+            .sort((a: OrgOption, b: OrgOption) => a.name.localeCompare(b.name)),
+        )
+      })
+      .catch(() => {})
+  }, [])
 
   const [data, setData] = useState<AlertsFeedResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -64,19 +83,20 @@ export default function AdminAlertsPage() {
   // Any filter change returns to page 1.
   useEffect(() => {
     setPage(1)
-  }, [kind, provider, severity, resolved, q])
+  }, [kind, provider, severity, resolved, organization, q])
 
   const apiUrl = useMemo(() => {
     const params = new URLSearchParams()
     if (kind !== 'all') params.set('kind', kind)
     if (provider) params.set('provider', provider)
     if (severity) params.set('severity', severity)
+    if (organization) params.set('organization', organization)
     params.set('resolved', resolved)
     if (q) params.set('q', q)
     params.set('page', String(page))
     params.set('pageSize', String(PAGE_SIZE))
     return `/api/admin/alerts-feed?${params.toString()}`
-  }, [kind, provider, severity, resolved, q, page])
+  }, [kind, provider, severity, resolved, organization, q, page])
 
   // Keep the latest URL in a ref so the 60s interval always polls current filters.
   const apiUrlRef = useRef(apiUrl)
@@ -180,6 +200,21 @@ export default function AdminAlertsPage() {
             {PROVIDER_OPTIONS.map((p) => (
               <option key={p} value={p} className="capitalize">
                 {p}
+              </option>
+            ))}
+          </select>
+
+          {/* Organization */}
+          <select
+            value={organization}
+            onChange={(e) => setOrganization(e.target.value)}
+            aria-label="Filter by organization"
+            className="text-xs font-semibold text-slate-700 border border-slate-300 rounded-sm px-2 py-1.5 bg-white hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-solar-gold/30 max-w-[180px]"
+          >
+            <option value="">All organizations</option>
+            {orgs.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
               </option>
             ))}
           </select>

@@ -1,15 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-// Unified admin Alerts feed: merges our computed `alerts` (kind=system) with
-// the inverters' own `vendor_alarms` (kind=vendor) into ONE time-sorted,
-// paginated, normalized feed. SUPER_ADMIN only. Filters: kind / provider /
-// severity / resolved / q; both sources bounded + merged in memory.
+// Unified admin Alerts feed: a thin SUPER_ADMIN wrapper over the shared
+// `buildAlertsFeed` builder (lib/alerts-feed.ts). Merges our computed `alerts`
+// (kind=system) with the inverters' own `vendor_alarms` (kind=vendor) into ONE
+// time-sorted, paginated, normalized feed. Filters: kind / provider / severity
+// / resolved / q + organization. Org fields are populated (includeOrg=true).
+//
+// Pure merge/normalize/filter/sort/paginate behaviour is covered exhaustively
+// in lib/__tests__/alerts-feed.test.ts; here we cover the wrapper concerns:
+// auth, param validation, org-scoping, org-field population, and shape.
 
 const mockPrisma = {
   alerts: { findMany: vi.fn() },
   vendor_alarms: { findMany: vi.fn() },
   devices: { findMany: vi.fn() },
   plants: { findMany: vi.fn() },
+  plant_assignments: { findMany: vi.fn() },
 }
 vi.mock('@/lib/prisma', () => ({ prisma: mockPrisma }))
 
@@ -34,8 +40,6 @@ vi.mock('@/lib/api-errors', () => ({
 const NOW = new Date('2026-06-12T12:00:00Z')
 const minsAgo = (m: number) => new Date(NOW.getTime() - m * 60_000)
 
-// ── Fixture rows (raw Prisma shape) ───────────────────────────────────
-// Two system alerts + two vendor alarms across two plants / two devices.
 const SYSTEM_ROWS = [
   { id: 1, device_id: 'd1', plant_id: 'p1', string_number: 3, severity: 'CRITICAL',
     message: 'String PV3 dead', gap_percent: 92.5, created_at: minsAgo(10), resolved_at: null },
@@ -58,6 +62,10 @@ const PLANTS = [
   { id: 'p1', plant_name: 'Gulberg Rooftop' },
   { id: 'p2', plant_name: 'DHA Site' },
 ]
+const ASSIGNMENTS = [
+  { plant_id: 'p1', organization_id: 'org-1', organizations: { name: 'Acme Energy' } },
+  { plant_id: 'p2', organization_id: 'org-2', organizations: { name: 'Beta Power' } },
+]
 
 async function invoke(qs = '') {
   const { GET } = await import('@/app/api/admin/alerts-feed/route')
@@ -77,6 +85,7 @@ beforeEach(() => {
   mockPrisma.vendor_alarms.findMany.mockResolvedValue(VENDOR_ROWS)
   mockPrisma.devices.findMany.mockResolvedValue(DEVICES)
   mockPrisma.plants.findMany.mockResolvedValue(PLANTS)
+  mockPrisma.plant_assignments.findMany.mockResolvedValue(ASSIGNMENTS)
 })
 afterEach(() => {
   vi.useRealTimers()
@@ -102,47 +111,43 @@ describe('GET /api/admin/alerts-feed', () => {
     expect(body.pageSize).toBe(50)
     expect(body.items).toHaveLength(4)
 
-    // Order by started_at DESC: vendor(5m) > system(10m) > vendor(30m) > system(50m)
     expect(body.items.map((i: any) => i.id)).toEqual([
       'vendor:v-bbb', 'system:1', 'vendor:v-aaa', 'system:2',
     ])
 
-    // Every item carries the full normalized shape.
     for (const it of body.items) {
       expect(Object.keys(it).sort()).toEqual([
-        'detail', 'device_id', 'device_name', 'id', 'kind', 'plant_id',
-        'plant_name', 'provider', 'resolved_at', 'severity', 'started_at', 'title',
+        'detail', 'device_id', 'device_name', 'id', 'kind', 'organization_id',
+        'organization_name', 'plant_id', 'plant_name', 'provider', 'resolved_at',
+        'severity', 'started_at', 'string_number', 'title',
       ])
     }
   })
 
-  it('normalizes a system row correctly', async () => {
+  it('normalizes a system row correctly (string_number set, org populated)', async () => {
     const { body } = await invoke()
     const sys = body.items.find((i: any) => i.id === 'system:1')
     expect(sys.kind).toBe('system')
-    expect(sys.provider).toBe('solis') // from the device
-    expect(sys.plant_id).toBe('p1')
+    expect(sys.provider).toBe('solis')
     expect(sys.plant_name).toBe('Gulberg Rooftop')
-    expect(sys.device_id).toBe('d1')
     expect(sys.device_name).toBe('INV-A')
-    expect(sys.severity).toBe('CRITICAL')
+    expect(sys.string_number).toBe(3)
     expect(sys.title).toBe('PV3 · CRITICAL')
     expect(sys.detail).toBe('String PV3 dead')
-    expect(sys.started_at).toBe(SYSTEM_ROWS[0].created_at.toISOString())
-    expect(sys.resolved_at).toBeNull()
+    // includeOrg=true on the admin route → org fields populated.
+    expect(sys.organization_id).toBe('org-1')
+    expect(sys.organization_name).toBe('Acme Energy')
   })
 
-  it('normalizes a vendor row correctly (alarm_code title + advice appended to detail)', async () => {
+  it('normalizes a vendor row correctly (alarm_code title + advice, string_number null, org populated)', async () => {
     const { body } = await invoke()
     const v = body.items.find((i: any) => i.id === 'vendor:v-aaa')
     expect(v.kind).toBe('vendor')
     expect(v.provider).toBe('solis')
-    expect(v.plant_name).toBe('Gulberg Rooftop')
-    expect(v.device_name).toBe('INV-A')
-    expect(v.severity).toBe('CRITICAL')
+    expect(v.string_number).toBeNull()
     expect(v.title).toBe('F23')
     expect(v.detail).toBe('DC arc fault — Inspect wiring')
-    expect(v.started_at).toBe(VENDOR_ROWS[0].started_at.toISOString())
+    expect(v.organization_name).toBe('Acme Energy')
   })
 
   it('vendor row with no alarm_code falls back to "Device alarm" and omits advice', async () => {
@@ -169,15 +174,10 @@ describe('GET /api/admin/alerts-feed', () => {
   })
 
   it('provider filter passes through to vendor_alarms where and constrains system rows by device provider', async () => {
-    // Only growatt: system row d2 (growatt) + vendor row v-bbb (growatt)
     mockPrisma.vendor_alarms.findMany.mockResolvedValue([VENDOR_ROWS[1]])
     const { body } = await invoke('?provider=growatt')
-
-    // vendor_alarms queried with provider in where
     const vendorCall = mockPrisma.vendor_alarms.findMany.mock.calls[0][0]
     expect(vendorCall.where.provider).toBe('growatt')
-
-    // system rows are filtered by their device's provider (growatt → d2 only)
     expect(body.items.map((i: any) => i.id).sort()).toEqual(['system:2', 'vendor:v-bbb'])
     expect(body.items.every((i: any) => i.provider === 'growatt')).toBe(true)
   })
@@ -229,11 +229,8 @@ describe('GET /api/admin/alerts-feed', () => {
   })
 
   it('q matches case-insensitively on plant_name OR device_name', async () => {
-    // "dha" → only plant p2 (DHA Site): system:2 + vendor:v-bbb
     const { body } = await invoke('?q=dha')
     expect(body.items.map((i: any) => i.id).sort()).toEqual(['system:2', 'vendor:v-bbb'])
-
-    // device name match
     const { body: body2 } = await invoke('?q=inv-a')
     expect(body2.items.map((i: any) => i.id).sort()).toEqual(['system:1', 'vendor:v-aaa'])
   })
@@ -244,7 +241,6 @@ describe('GET /api/admin/alerts-feed', () => {
     expect(body.page).toBe(2)
     expect(body.pageSize).toBe(2)
     expect(body.items).toHaveLength(2)
-    // Page 2 of the DESC merge = the two oldest: vendor:v-aaa(30m), system:2(50m)
     expect(body.items.map((i: any) => i.id)).toEqual(['vendor:v-aaa', 'system:2'])
   })
 
@@ -275,5 +271,47 @@ describe('GET /api/admin/alerts-feed', () => {
     mockPrisma.alerts.findMany.mockResolvedValue(big)
     const { body } = await invoke()
     expect(body.capped).toBe(true)
+  })
+
+  // ── NEW: organization param scopes the feed to one org's plants ──────
+  it('without organization param: no plant_id filter (sees ALL orgs)', async () => {
+    await invoke()
+    expect(mockPrisma.alerts.findMany.mock.calls[0][0].where.plant_id).toBeUndefined()
+    expect(mockPrisma.vendor_alarms.findMany.mock.calls[0][0].where.plant_id).toBeUndefined()
+    // plant_assignments IS queried here — by the includeOrg=true org JOIN — but
+    // NOT by an org-scope lookup, so it is never queried by organization_id.
+    for (const call of mockPrisma.plant_assignments.findMany.mock.calls) {
+      expect(call[0]?.where?.organization_id).toBeUndefined()
+    }
+  })
+
+  it('organization=<id> resolves that org\'s plants and scopes BOTH sources', async () => {
+    // org-1 owns only p1 → only p1 rows should appear. The real DB filters by
+    // the `where.plant_id` the builder passes; emulate that here so the merged
+    // result reflects the scope, not just the query args.
+    mockPrisma.plant_assignments.findMany.mockResolvedValue([{ plant_id: 'p1' }])
+    const scopeTo = (rows: any[]) => (args: any) => {
+      const inList: string[] | undefined = args?.where?.plant_id?.in
+      return Promise.resolve(inList ? rows.filter((r) => inList.includes(r.plant_id)) : rows)
+    }
+    mockPrisma.alerts.findMany.mockImplementation(scopeTo(SYSTEM_ROWS))
+    mockPrisma.vendor_alarms.findMany.mockImplementation(scopeTo(VENDOR_ROWS))
+    const { body } = await invoke('?organization=org-1')
+    expect(mockPrisma.plant_assignments.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { organization_id: 'org-1' } }),
+    )
+    expect(mockPrisma.alerts.findMany.mock.calls[0][0].where.plant_id).toEqual({ in: ['p1'] })
+    expect(mockPrisma.vendor_alarms.findMany.mock.calls[0][0].where.plant_id).toEqual({ in: ['p1'] })
+    expect(body.items.every((i: any) => i.plant_id === 'p1')).toBe(true)
+  })
+
+  it('organization with no plants returns an empty feed (never falls open)', async () => {
+    mockPrisma.plant_assignments.findMany.mockResolvedValue([])
+    const { body } = await invoke('?organization=org-empty')
+    expect(body.items).toEqual([])
+    expect(body.total).toBe(0)
+    // [] short-circuits the builder — no source query runs.
+    expect(mockPrisma.alerts.findMany).not.toHaveBeenCalled()
+    expect(mockPrisma.vendor_alarms.findMany).not.toHaveBeenCalled()
   })
 })

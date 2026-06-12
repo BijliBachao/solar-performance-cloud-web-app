@@ -4,12 +4,17 @@
  * AlertsFeed — a presentational, reusable notification feed.
  *
  * Renders ONE merged stream of system alerts (our computed string health) and
- * vendor alarms (the inverter's own faults). Each row:
- *   [round source icon] · [title (bold) + one-line detail] · [relative time]
- * plus a source tag chip (System / Vendor) and a severity colour accent.
+ * vendor alarms (the inverter's own faults) as a clean notifications-screen
+ * list. Each row:
+ *   [severity-tinted round avatar w/ kind glyph] · [bold title + breadcrumb·detail] · [relative time]
  *
  * Pure presentation — no fetching. The owning page fetches + filters and passes
- * `items` in. Both admin and customer surfaces can reuse this.
+ * `items` in. BOTH admin and customer surfaces reuse this ONE component:
+ *   - admin shows the org segment of the breadcrumb (organization_name set)
+ *   - customer omits it (organization_name null)
+ *
+ * Vendor-agnostic: the provider is shown verbatim (capitalized) in the chip —
+ * no provider name is hardcoded, so new vendors slot in with zero changes.
  */
 
 import { cn } from '@/lib/utils'
@@ -18,18 +23,21 @@ import {
   differenceInHours,
   differenceInDays,
 } from 'date-fns'
-import { Cpu, Activity, CheckCircle, XCircle, AlertTriangle, Info } from 'lucide-react'
+import { Cpu, Activity, CheckCircle } from 'lucide-react'
 import { STATUS_STYLES, statusKeyFromSeverity, type StatusKey } from '@/lib/design-tokens'
 
-// One unified row, normalized by /api/admin/alerts-feed.
+// One unified row, normalized by buildAlertsFeed (lib/alerts-feed.ts).
 export interface FeedItem {
   id: string
   kind: 'system' | 'vendor'
   provider: string
+  organization_id: string | null
+  organization_name: string | null
   plant_id: string
   plant_name: string
   device_id: string
   device_name: string
+  string_number: number | null
   severity: string
   title: string
   detail: string
@@ -43,20 +51,8 @@ interface AlertsFeedProps {
   onRowClick?: (item: FeedItem) => void
 }
 
-// Severity → icon (reuses the same icon vocabulary as AlertPanel).
-const SEVERITY_ICON: Record<StatusKey, typeof Info> = {
-  critical: XCircle,
-  warning: AlertTriangle,
-  info: Info,
-  healthy: CheckCircle,
-  offline: Info,
-  'open-circuit': XCircle,
-  'peer-excluded': Info,
-  frozen: Info,
-  idle: Info,
-}
-
-// Left-accent border per severity — the severity colour accent on each row.
+// Left-accent border per severity — the severity colour accent on each row,
+// kept for at-a-glance triage scannability.
 const SEVERITY_BORDER: Record<StatusKey, string> = {
   critical: 'border-l-red-600',
   warning: 'border-l-amber-600',
@@ -69,10 +65,11 @@ const SEVERITY_BORDER: Record<StatusKey, string> = {
   idle: 'border-l-slate-400',
 }
 
-// Source tag chip styling: System (blue) vs Vendor (amber/orange).
-const KIND_CHIP: Record<FeedItem['kind'], { label: string; cls: string; icon: typeof Cpu }> = {
-  system: { label: 'System', cls: 'bg-blue-50 text-blue-700 border-blue-200', icon: Activity },
-  vendor: { label: 'Vendor', cls: 'bg-orange-50 text-orange-700 border-orange-200', icon: Cpu },
+// Kind → glyph + label. System = our computed checks; Vendor = the inverter's
+// own faults. (Colour comes from severity, not kind — kind is just the glyph.)
+const KIND_META: Record<FeedItem['kind'], { label: string; icon: typeof Cpu }> = {
+  system: { label: 'System', icon: Activity },
+  vendor: { label: 'Vendor', icon: Cpu },
 }
 
 function relativeTime(iso: string): string {
@@ -87,29 +84,40 @@ function relativeTime(iso: string): string {
   return `${days}d ago`
 }
 
+/** Provider code → capitalized label for the chip. Generic — no hardcoded
+ *  vendor list, so any future provider string renders sensibly. */
+function providerChipLabel(provider: string): string {
+  if (!provider) return '—'
+  return provider.charAt(0).toUpperCase() + provider.slice(1)
+}
+
 function FeedRow({ item, onRowClick }: { item: FeedItem; onRowClick?: (i: FeedItem) => void }) {
   const key = statusKeyFromSeverity(item.severity)
   const style = STATUS_STYLES[key]
-  const SeverityIcon = SEVERITY_ICON[key]
-  const chip = KIND_CHIP[item.kind]
-  const KindIcon = chip.icon
+  const kind = KIND_META[item.kind]
+  const KindIcon = kind.icon
   const resolved = item.resolved_at !== null
+
+  // Breadcrumb: [org ·] plant › device [› String N] — org segment only when set.
+  const orgPrefix = item.organization_name ? `${item.organization_name} · ` : ''
+  let breadcrumb = `${orgPrefix}${item.plant_name} › ${item.device_name}`
+  if (item.string_number != null) breadcrumb += ` › String ${item.string_number}`
 
   return (
     <button
       type="button"
       onClick={() => onRowClick?.(item)}
       className={cn(
-        'w-full text-left flex items-center gap-3 bg-white border border-slate-200 border-l-[3px] rounded-sm px-3 py-2.5 transition-colors',
+        'w-full text-left flex items-center gap-3 bg-white border-b border-slate-100 border-l-[3px] px-3 py-2.5 transition-colors',
         SEVERITY_BORDER[key],
         'hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-solar-gold/40',
         resolved && 'opacity-55',
       )}
     >
-      {/* Round source icon, tinted by severity */}
+      {/* Round avatar, tinted by severity, with the kind glyph inside */}
       <span
         className={cn(
-          'shrink-0 flex items-center justify-center w-8 h-8 rounded-full',
+          'shrink-0 flex items-center justify-center w-9 h-9 rounded-full',
           style.bg,
           style.fg,
         )}
@@ -118,48 +126,49 @@ function FeedRow({ item, onRowClick }: { item: FeedItem; onRowClick?: (i: FeedIt
         <KindIcon className="w-4 h-4" strokeWidth={2} />
       </span>
 
-      {/* Title + one-line detail */}
+      {/* Title + breadcrumb·detail */}
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 min-w-0">
-          <SeverityIcon className={cn('w-3.5 h-3.5 shrink-0', style.fg)} strokeWidth={2} />
+        {/* Line 1: bold title + right-aligned relative time */}
+        <div className="flex items-baseline gap-2 min-w-0">
           <span className="text-[13px] font-bold text-slate-900 truncate">{item.title}</span>
-          <span
-            className={cn(
-              'shrink-0 inline-flex items-center gap-1 border rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider',
-              chip.cls,
-            )}
-          >
-            {chip.label}
-          </span>
           {resolved && (
             <span className="shrink-0 text-[9px] font-bold uppercase tracking-wider text-slate-400">
               Resolved
             </span>
           )}
+          <span
+            className="ml-auto shrink-0 text-[10px] font-mono tabular-nums text-slate-400"
+            title={new Date(item.started_at).toLocaleString()}
+          >
+            {relativeTime(item.started_at)}
+          </span>
         </div>
-        <p className="text-[11px] text-slate-500 truncate mt-0.5">
-          <span className="font-semibold text-slate-600">{item.plant_name}</span>
-          {item.device_name ? ` · ${item.device_name}` : ''}
-          {item.detail ? ` — ${item.detail}` : ''}
-        </p>
-      </div>
 
-      {/* Relative timestamp */}
-      <span
-        className="shrink-0 text-[10px] font-mono tabular-nums text-slate-400"
-        title={new Date(item.started_at).toLocaleString()}
-      >
-        {relativeTime(item.started_at)}
-      </span>
+        {/* Line 2: breadcrumb — detail, ending with a compact kind·provider chip */}
+        <div className="flex items-center gap-2 min-w-0 mt-0.5">
+          <p className="text-[11px] text-slate-500 truncate min-w-0">
+            <span className="text-slate-600">{breadcrumb}</span>
+            {item.detail ? ` — ${item.detail}` : ''}
+          </p>
+          <span
+            className={cn(
+              'ml-auto shrink-0 inline-flex items-center border rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider',
+              'bg-slate-50 text-slate-600 border-slate-200',
+            )}
+          >
+            {kind.label}·{providerChipLabel(item.provider)}
+          </span>
+        </div>
+      </div>
     </button>
   )
 }
 
 function SkeletonFeed() {
   return (
-    <div className="space-y-1.5 animate-pulse" aria-hidden="true">
+    <div className="animate-pulse divide-y divide-slate-100 border-y border-slate-100" aria-hidden="true">
       {Array.from({ length: 8 }).map((_, i) => (
-        <div key={i} className="h-[52px] bg-slate-100 rounded-sm" />
+        <div key={i} className="h-[58px] bg-slate-50" />
       ))}
     </div>
   )
@@ -181,7 +190,7 @@ export function AlertsFeed({ items, loading, onRowClick }: AlertsFeedProps) {
   }
 
   return (
-    <div className={cn('space-y-1.5 transition-opacity', loading && 'opacity-60')}>
+    <div className={cn('border-y border-slate-100 transition-opacity', loading && 'opacity-60')}>
       {items.map((item) => (
         <FeedRow key={item.id} item={item} onRowClick={onRowClick} />
       ))}
