@@ -17,8 +17,10 @@ import {
   PLANT_HEALTH_HEALTHY,
   PLANT_HEALTH_FAULTY,
   classifyStringPerformance,
+  classifyDataCompleteness,
   perfBandToDonutBucket,
   type PerfBand,
+  type CompletenessBand,
   type StringStatus,
   type AlertSeverity,
   type ConnectivityStatus,
@@ -323,6 +325,69 @@ export function perfBandStyleFromScore(score: number | null | undefined): PerfBa
     insufficientData: false,
   })
   return PERF_BAND_STYLES[band]
+}
+
+// ━━━ V1 DATA-COMPLETENESS BAND STYLES (5 bands, data-QUALITY axis) ━━━━━━━━━━━
+// Reyyan §9: completeness MUST read as a SEPARATE axis from performance — "do
+// not merge performance and data completeness". So this palette is deliberately
+// DISTINCT from PERF_BAND_STYLES (emerald/yellow/orange/red/slate): a cool /
+// neutral family (sky → slate → amber → slate) signals "this is about how much
+// DATA we received", not "how well the string performed". Completeness is never
+// itself a fault — these styles are informational chips only. Band cutpoints
+// live in string-health.ts (COMPLETENESS_* = 95/90/80/60).
+
+export interface CompletenessBandStyle {
+  fg: string // text + icon colour
+  bg: string // soft background wash (chip)
+  border: string // matching border
+  dot: string // dot indicator
+  label: string // display label (exact spec wording)
+}
+
+export const COMPLETENESS_BAND_STYLES: Record<CompletenessBand, CompletenessBandStyle> = {
+  excellent: {
+    fg: 'text-sky-700',
+    bg: 'bg-sky-50',
+    border: 'border-sky-200',
+    dot: 'bg-sky-600',
+    label: 'Excellent',
+  },
+  good: {
+    fg: 'text-sky-600',
+    bg: 'bg-sky-50',
+    border: 'border-sky-100',
+    dot: 'bg-sky-400',
+    label: 'Good',
+  },
+  acceptable: {
+    fg: 'text-slate-600',
+    bg: 'bg-slate-50',
+    border: 'border-slate-200',
+    dot: 'bg-slate-500',
+    label: 'Acceptable',
+  },
+  poor: {
+    fg: 'text-amber-700',
+    bg: 'bg-amber-50',
+    border: 'border-amber-200',
+    dot: 'bg-amber-500',
+    label: 'Poor',
+  },
+  insufficient: {
+    fg: 'text-slate-500',
+    bg: 'bg-slate-100',
+    border: 'border-slate-300',
+    dot: 'bg-slate-400',
+    label: 'Insufficient',
+  },
+}
+
+/** Convenience: a completeness % → its band style. Wraps the central classifier
+ *  so callers never re-derive band→colour from raw numbers. null (legacy /
+ *  no-data day) → null so the caller can render "not available", never a 0%. */
+export function completenessStyleFromPct(pct: number | null | undefined): CompletenessBandStyle | null {
+  const band = classifyDataCompleteness(pct ?? null)
+  return band ? COMPLETENESS_BAND_STYLES[band] : null
 }
 
 // ━━━ HEALTH GRADE STYLES (3-band rollup) ━━━━━━━━━━━━━━━━━━━━━━━━

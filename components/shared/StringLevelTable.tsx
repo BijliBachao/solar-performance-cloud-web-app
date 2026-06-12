@@ -79,6 +79,9 @@ interface StringLevelTableProps {
    *  Admin:     /api/admin/analysis/string-cell
    */
   cellApiPath?: string
+  /** Admin context — forwarded to the drill-down so it can surface §6 raw-%
+   *  sensor-fault visibility. The dashboard (customer) mount leaves this false. */
+  isAdmin?: boolean
 }
 
 interface CellSelection {
@@ -105,6 +108,7 @@ export function StringLevelTable({
   rows,
   loading,
   cellApiPath = '/api/dashboard/analysis/string-cell',
+  isAdmin = false,
 }: StringLevelTableProps) {
   const [selected, setSelected] = useState<CellSelection | null>(null)
 
@@ -142,6 +146,7 @@ export function StringLevelTable({
           stringNumber={selected.stringNumber}
           date={selected.date}
           onClose={() => setSelected(null)}
+          isAdmin={isAdmin}
         />
       )}
 

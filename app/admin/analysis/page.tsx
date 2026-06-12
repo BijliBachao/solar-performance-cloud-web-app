@@ -423,6 +423,7 @@ export default function AnalysisPage() {
           rows={stringData?.rows || []}
           loading={loading}
           cellApiPath="/api/admin/analysis/string-cell"
+          isAdmin
         />
       ) : (
         <>

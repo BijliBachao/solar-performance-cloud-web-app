@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Sparkline } from './Sparkline'
+import { shouldFlagRawSensorFault, PERF_DISPLAY_MAX } from '@/lib/string-health'
+import { completenessStyleFromPct } from '@/lib/design-tokens'
 
 // ── API response shape (matches Task 7A contract) ──────────────────────────
 
@@ -41,8 +43,13 @@ interface StringCellDetailData {
   date: string
   status: CellStatus
   performance: number | null
+  /** Raw, uncapped Performance % (admin/DB side). >100 = possible sensor fault. */
+  raw_performance?: number | null
   repr_current: number | null
   peer_median_current: number | null
+  /** Data Completeness % (0–100): readings received / 96 expected. SEPARATE
+   *  axis from performance (§9) — never itself a fault. null on legacy days. */
+  data_completeness?: number | null
   peers: PeerEntry[]
   hourly: HourlyEntry[]
   availability: AvailabilityInfo | null
@@ -57,6 +64,9 @@ interface StringCellDetailProps {
   stringNumber: number
   date: string
   onClose: () => void
+  /** Admin context (admin /analysis). Unlocks §6 raw-% sensor-fault visibility.
+   *  The customer (dashboard) view leaves this false and stays clean (≤100%). */
+  isAdmin?: boolean
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -83,6 +93,13 @@ function fmtA(v: number | null): string {
   return v !== null && v !== undefined ? v.toFixed(2) : '—'
 }
 
+// Format a completeness % like "90.6%" — keep one decimal when present, but drop
+// a trailing ".0" so a whole-number value reads "90%" not "90.0%".
+function fmtCompletenessPct(v: number): string {
+  const rounded = Math.round(v * 10) / 10
+  return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)}%`
+}
+
 // Find the index of the peer entry closest to the scorer's median value.
 // The scorer averages the two middle values for even-N pools, so we match
 // by proximity rather than fixed array index to avoid contradictions.
@@ -104,6 +121,7 @@ export function StringCellDetail({
   stringNumber,
   date,
   onClose,
+  isAdmin = false,
 }: StringCellDetailProps) {
   const [data, setData] = useState<StringCellDetailData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -287,6 +305,25 @@ export function StringCellDetail({
                       {nullReason(data.status)}
                     </p>
                   )}
+
+                  {/* §6 ADMIN-only raw-% sensor-fault flag. The customer cell shows
+                      MIN(%,100); admins additionally see the uncapped raw % when it
+                      exceeds the display cap — an impossibly-high reading (e.g. a
+                      faulty current sensor at ~300%) flagged for review. Gated to
+                      admin context via the isAdmin prop; customer view stays clean. */}
+                  {shouldFlagRawSensorFault(isAdmin, data.raw_performance) && (
+                    <div className="mt-2.5 flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2">
+                      <span className="mt-px text-[9px] font-bold uppercase tracking-wider text-rose-700 bg-rose-100 border border-rose-200 rounded px-1.5 py-0.5 shrink-0">
+                        Admin
+                      </span>
+                      <p className="text-xs leading-snug text-rose-800">
+                        Raw (uncapped) performance{' '}
+                        <span className="font-mono font-bold">{Math.round(data.raw_performance as number)}%</span>{' '}
+                        exceeds {PERF_DISPLAY_MAX}% — possible sensor fault (e.g. faulty
+                        current sensor), flagged for review. Customer view shows {PERF_DISPLAY_MAX}%.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* 2b. Historical own-trend — only for peer-excluded strings.
@@ -450,6 +487,53 @@ export function StringCellDetail({
                     </p>
                   </div>
                 )}
+
+                {/* 6. Data Completeness — Reyyan §9 + §10. A SEPARATE data-QUALITY
+                    axis: "Show this separately from performance. Do NOT merge
+                    performance and data completeness." Distinct cool/neutral chip
+                    (completenessStyleFromPct) so it never reads as a performance
+                    score. Informational only — completeness is never itself a
+                    fault. null (legacy / no-data day) → muted "not available",
+                    NOT a 0%. */}
+                {(() => {
+                  const compStyle = completenessStyleFromPct(data.data_completeness)
+                  return (
+                    <div className="rounded-md border border-slate-100 bg-white px-4 py-3">
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                          Data Completeness
+                        </h3>
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
+                          Data quality
+                        </span>
+                      </div>
+                      {data.data_completeness != null && compStyle ? (
+                        <div className="flex items-center gap-3">
+                          <span className="text-lg font-bold font-mono text-slate-800">
+                            {fmtCompletenessPct(data.data_completeness)}
+                          </span>
+                          <span
+                            className={cn(
+                              'inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-sm border',
+                              compStyle.fg, compStyle.bg, compStyle.border,
+                            )}
+                          >
+                            {compStyle.label}
+                          </span>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-slate-400 italic">
+                          <span className="font-mono not-italic mr-1">—</span>not available for this day
+                        </p>
+                      )}
+                      <p className="text-[10px] leading-snug text-slate-500 mt-1.5">
+                        Readings received vs the 96 expected across the 8 AM–4 PM window.
+                        This is a measure of <span className="font-semibold">data quality</span>, separate from
+                        performance — it is not itself a fault.
+                      </p>
+                    </div>
+                  )
+                })()}
               </>
             )
           })()}

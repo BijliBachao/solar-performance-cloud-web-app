@@ -529,6 +529,49 @@ export type PerfBand =
   | 'normal' | 'watch' | 'underperforming' | 'serious_fault' | 'dead'
   | 'insufficient_data' | 'unused' | 'peer_excluded'
 
+// ─── V1 Data-Completeness bands (Reyyan §9 + §10 second table) ────────────────
+// Data completeness is a SEPARATE data-QUALITY axis from performance (§9: "do
+// NOT merge performance and data completeness"). It has its own 5 bands and is
+// purely informational — completeness is never itself a fault. Same "upper band
+// owns the edge" convention as the locked performance bands.
+//   Excellent 95–100 / Good 90–95 / Acceptable 80–90 / Poor 60–80 / Insufficient <60
+/** Status band lower bounds for data completeness (the upper band owns each edge). */
+export const COMPLETENESS_EXCELLENT = 95
+export const COMPLETENESS_GOOD = 90
+export const COMPLETENESS_ACCEPTABLE = 80
+export const COMPLETENESS_POOR = 60
+
+export type CompletenessBand = 'excellent' | 'good' | 'acceptable' | 'poor' | 'insufficient'
+
+/**
+ * Classifies a data-completeness % (0–100) into its V1 band. null → null
+ * (legacy / no-data day — caller shows "not available", never 0%). Upper band
+ * owns each edge: 95→excellent, 94.9→good, 90→good, 80→acceptable, 60→poor,
+ * 59.9→insufficient. Informational only — NOT a fault.
+ */
+export function classifyDataCompleteness(pct: number | null): CompletenessBand | null {
+  if (pct == null) return null
+  if (pct >= COMPLETENESS_EXCELLENT) return 'excellent'
+  if (pct >= COMPLETENESS_GOOD) return 'good'
+  if (pct >= COMPLETENESS_ACCEPTABLE) return 'acceptable'
+  if (pct >= COMPLETENESS_POOR) return 'poor'
+  return 'insufficient'
+}
+
+/**
+ * §6 note: the customer cell shows MIN(%, 100). The raw, uncapped Performance %
+ * is stored so an impossibly-high reading (e.g. a faulty current sensor showing
+ * ~300%) can be flagged for review — ADMIN-side only. Returns true only when the
+ * admin drill-down should surface the raw value with a "possible sensor fault"
+ * note: admin context AND a raw % that exceeds the display cap (PERF_DISPLAY_MAX).
+ */
+export function shouldFlagRawSensorFault(
+  isAdmin: boolean,
+  rawPerformance: number | null | undefined,
+): boolean {
+  return Boolean(isAdmin) && rawPerformance != null && rawPerformance > PERF_DISPLAY_MAX
+}
+
 export interface PerfFlags { isUsed: boolean; peerExcluded: boolean; insufficientData: boolean }
 
 /**
