@@ -431,7 +431,13 @@ async function fetchHuaweiAlarms(): Promise<void> {
     const { alarms: activeAlarms, complete } = await huaweiClient.getActiveAlarms(plantCodes)
 
     // Huawei severity (`lev`): 1=Critical, 2=Major, 3=Minor, 4=Warning.
-    const mapSeverity = (sev: number): string => {
+    const mapSeverity = (sev: number | null | undefined): string => {
+      // Fail loud: a missing/malformed level must NOT be silently filed as INFO
+      // (that was the C2 bug). Surface it as CRITICAL so it never hides.
+      if (sev == null || Number.isNaN(sev)) {
+        console.warn('[Huawei] alarm with missing/invalid lev — defaulting to CRITICAL')
+        return 'CRITICAL'
+      }
       if (sev <= 2) return 'CRITICAL'
       if (sev === 3) return 'WARNING'
       return 'INFO'
@@ -463,6 +469,7 @@ async function fetchHuaweiAlarms(): Promise<void> {
             severity,
             message,
             advice,
+            raw_data: alarm as any,
           },
           create: {
             device_id: device.id,

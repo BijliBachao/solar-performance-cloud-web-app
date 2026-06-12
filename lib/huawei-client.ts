@@ -282,7 +282,14 @@ class HuaweiClient {
         }
       }
     }
-    throw lastError!
+    // Token-refresh (305/401) and rate-limit (407/429) branches `continue`
+    // without setting lastError, so it can still be undefined here if every
+    // attempt took one of those paths. Throw a meaningful error rather than
+    // a bare `undefined` (which the pagination loop makes more reachable).
+    throw lastError ?? new SmartPVMSError(
+      `Request to ${endpoint} failed after ${this.maxRetries} retries`,
+      -1,
+    )
   }
 
   async getPlantList(): Promise<Plant[]> {
