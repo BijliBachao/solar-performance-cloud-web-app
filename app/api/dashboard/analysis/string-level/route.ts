@@ -161,6 +161,11 @@ export async function GET(request: NextRequest) {
     const d = new Date(fromDate)
     while (d <= toDate) { dates.push(d.toISOString().split('T')[0]); d.setDate(d.getDate() + 1) }
 
+    // Today's PKT (UTC+5) calendar date. Completeness is averaged over SETTLED
+    // days only (dates strictly before today PKT) — today is still accumulating
+    // readings, so its partial count is not a real coverage figure.
+    const todayPkt = new Date(Date.now() + 5 * 3600 * 1000).toISOString().slice(0, 10)
+
     const scoreMap = new Map<string, number | null>()
     const perfMap = new Map<string, number | null>()
     const availMap = new Map<string, number | null>()
@@ -216,17 +221,24 @@ export async function GET(request: NextRequest) {
         ? Math.round((plantCap / plantStrings) * 100) / 100 : null
 
       const scores: Record<string, number | null> = {}
-      let perfSum = 0, perfCount = 0, availSum = 0, availCount = 0, energySum = 0
-      let complSum = 0, complCount = 0
+      let perfSum = 0, perfCount = 0, energySum = 0
+      // Completeness is COVERAGE over the full settled range (option B): the
+      // denominator is every settled day in the range, and a day with no
+      // completeness value counts as 0% — so a string present 1 of 6 settled
+      // days reads ~17%, not 100%. perf_avg is deliberately NOT changed: a dark
+      // day must not count as 0% performance (Reyyan §9 — no-data ≠ bad-output).
+      let complSum = 0, settledCount = 0
 
       if (type !== 'unused') {
         for (const date of dates) {
           const mk = `${devId}:${strNum}:${date}`
           scores[date] = scoreMap.get(mk) ?? null
-          const p = perfMap.get(mk); const a = availMap.get(mk); const c = complMap.get(mk)
+          const p = perfMap.get(mk)
           if (p !== null && p !== undefined) { perfSum += p; perfCount++ }
-          if (a !== null && a !== undefined) { availSum += a; availCount++ }
-          if (c !== null && c !== undefined) { complSum += c; complCount++ }
+          if (date < todayPkt) {
+            complSum += complMap.get(mk) ?? 0
+            settledCount++
+          }
           const e = energyMap.get(mk)
           if (e !== undefined) energySum += e
         }
@@ -243,9 +255,9 @@ export async function GET(request: NextRequest) {
         group: 'Inv-wide', // v3 compares device-wide by current; honest label (no fake MPPT)
         kw_per_string: kwPerString,
         perf_avg: perfCount > 0 ? Math.round(perfSum / perfCount) : null,
-        avail_avg: availCount > 0 ? Math.round(availSum / availCount) : null,
-        // Data Completeness % (received ÷ 96) — Reyyan §9, its own column, not merged.
-        compl_avg: complCount > 0 ? Math.round(complSum / complCount) : null,
+        // Data Completeness % (received ÷ 96) — Reyyan §9, its own column, not
+        // merged. Coverage over ALL settled days in range (missing day = 0%).
+        compl_avg: settledCount > 0 ? Math.round(complSum / settledCount) : null,
         energy_kwh: energySum > 0 ? Math.round(energySum * 10) / 10 : null,
         scores,
         type,

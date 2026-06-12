@@ -29,8 +29,8 @@ export function ExportButton({ dates, rows, type }: ExportButtonProps) {
       const inactiveRows = rows.filter((r: any) => r.type === 'inactive')
       const unusedRows = rows.filter((r: any) => r.type === 'unused')
 
-      // Header — Plant · Inverter · Group (device-wide, Algorithm v3) · String identity · Perf · Avail · Energy
-      lines.push(['Plant', 'Inverter', 'Group', 'String', 'Type', 'Perf(%)', 'Avail(%)', 'kWh', ...dates].join(','))
+      // Header — Plant · Inverter · Group (device-wide, Algorithm v3) · String identity · Perf · Energy
+      lines.push(['Plant', 'Inverter', 'Group', 'String', 'Type', 'Perf(%)', 'kWh', ...dates].join(','))
       // Active rows
       for (const row of activeRows) {
         const scores = dates.map(d => {
@@ -44,7 +44,6 @@ export function ExportButton({ dates, rows, type }: ExportButtonProps) {
           `PV${row.string_number}`,
           'Active',
           row.perf_avg != null ? `${row.perf_avg}%` : '',
-          row.avail_avg != null ? `${row.avail_avg}%` : '',
           row.energy_kwh != null ? `${row.energy_kwh}` : '',
           ...scores,
         ].join(','))

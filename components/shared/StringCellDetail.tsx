@@ -21,12 +21,6 @@ interface HourlyEntry {
   avg_current: number
 }
 
-interface AvailabilityInfo {
-  producingHours: number
-  sunUpHours: number
-  pct: number | null
-}
-
 // Own-trend block for peer-excluded strings (shaded / different orientation).
 // Informational only — never a fault, never alerted, NOT weather-adjusted (V1).
 interface HistoricalInfo {
@@ -52,7 +46,6 @@ interface StringCellDetailData {
   data_completeness?: number | null
   peers: PeerEntry[]
   hourly: HourlyEntry[]
-  availability: AvailabilityInfo | null
   historical?: HistoricalInfo | null
 }
 
@@ -467,29 +460,7 @@ export function StringCellDetail({
                   </div>
                 )}
 
-                {/* 5. Availability */}
-                {data.availability && (
-                  <div className="rounded-md border border-slate-100 bg-slate-50 px-4 py-3">
-                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
-                      Availability
-                    </h3>
-                    <p className="text-sm text-slate-700">
-                      Produced in{' '}
-                      <span className="font-bold font-mono text-emerald-700">{data.availability.producingHours}</span>
-                      {' '}of{' '}
-                      <span className="font-bold font-mono text-slate-700">{data.availability.sunUpHours}</span>
-                      {' '}window hours (8 AM–4 PM)
-                      {data.availability.pct !== null && (
-                        <>
-                          {' '}={' '}
-                          <span className="font-bold font-mono text-emerald-700">{Math.round(data.availability.pct)}%</span>
-                        </>
-                      )}
-                    </p>
-                  </div>
-                )}
-
-                {/* 6. Data Completeness — Reyyan §9 + §10. A SEPARATE data-QUALITY
+                {/* 5. Data Completeness — Reyyan §9 + §10. A SEPARATE data-QUALITY
                     axis: "Show this separately from performance. Do NOT merge
                     performance and data completeness." Distinct cool/neutral chip
                     (completenessStyleFromPct) so it never reads as a performance

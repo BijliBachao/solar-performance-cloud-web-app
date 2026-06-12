@@ -56,7 +56,6 @@ interface StringRow {
   group: string
   kw_per_string: number | null
   perf_avg: number | null
-  avail_avg: number | null
   /** Avg Data Completeness % (received ÷ 96) over the range — Reyyan §9, own column. */
   compl_avg?: number | null
   energy_kwh: number | null
@@ -100,7 +99,7 @@ function formatDateHeader(dateStr: string): string {
 // 5 V1 bands as 5 text colours via the central map (same classifier as the
 // daily cells): Normal=green, Watch=yellow, Underperforming=orange,
 // Serious Fault=red, Dead=dark/grey, no-data=muted.
-function metricCell(value: number | null, _type: 'perf' | 'avail'): string {
+function metricCell(value: number | null): string {
   if (value === null) return 'text-gray-400'
   return perfBandStyleFromScore(value).fg
 }
@@ -167,9 +166,6 @@ export function StringLevelTable({
             </th>
             <th className="px-2 py-2 text-center text-xs font-semibold text-blue-700 border-r border-gray-200 min-w-[52px] bg-blue-50/50">
               Perf
-            </th>
-            <th className="px-2 py-2 text-center text-xs font-semibold text-violet-700 border-r border-gray-200 min-w-[52px] bg-violet-50/50">
-              Avail
             </th>
             <th className="px-2 py-2 text-center text-xs font-semibold text-sky-700 border-r border-gray-200 min-w-[56px] bg-sky-50/50" title="Data Completeness — readings received ÷ 96 expected (a data-quality measure, kept separate from performance)">
               Data&nbsp;%
@@ -240,11 +236,8 @@ export function StringLevelTable({
                 <td className="sticky left-[204px] z-10 bg-white group-hover:bg-blue-50/50 px-2 py-1.5 text-xs font-medium text-gray-900 border-r border-gray-200 transition-colors">
                   PV{row.string_number}
                 </td>
-                <td className={cn('px-2 py-1.5 text-center text-xs font-mono border-r border-gray-200 bg-blue-50/30', metricCell(row.perf_avg, 'perf'))}>
+                <td className={cn('px-2 py-1.5 text-center text-xs font-mono border-r border-gray-200 bg-blue-50/30', metricCell(row.perf_avg))}>
                   {row.perf_avg !== null ? `${row.perf_avg}%` : '—'}
-                </td>
-                <td className={cn('px-2 py-1.5 text-center text-xs font-mono border-r border-gray-200 bg-violet-50/30', metricCell(row.avail_avg, 'avail'))}>
-                  {row.avail_avg !== null ? `${row.avail_avg}%` : '—'}
                 </td>
                 <td className={cn('px-2 py-1.5 text-center text-xs font-mono border-r border-gray-200 bg-sky-50/30', row.compl_avg != null ? completenessStyleFromPct(row.compl_avg)?.fg ?? 'text-gray-400' : 'text-gray-400')}>
                   {row.compl_avg != null ? `${row.compl_avg}%` : '—'}
