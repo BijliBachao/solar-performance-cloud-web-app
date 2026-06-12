@@ -151,11 +151,12 @@ describe('GET /api/dashboard/alerts-feed (customer, tenant-scoped)', () => {
     expect(body).toHaveProperty('page')
     expect(body).toHaveProperty('pageSize')
     expect(body).toHaveProperty('capped')
+    expect(body).toHaveProperty('counts')
     for (const it of body.items) {
       expect(Object.keys(it).sort()).toEqual([
-        'detail', 'device_id', 'device_name', 'id', 'kind', 'organization_id',
-        'organization_name', 'plant_id', 'plant_name', 'provider', 'resolved_at',
-        'severity', 'started_at', 'string_number', 'title',
+        'alarm_code', 'count', 'detail', 'device_id', 'device_name', 'device_names',
+        'id', 'kind', 'organization_id', 'organization_name', 'plant_id', 'plant_name',
+        'provider', 'resolved_at', 'severity', 'started_at', 'string_number', 'title',
       ])
     }
   })

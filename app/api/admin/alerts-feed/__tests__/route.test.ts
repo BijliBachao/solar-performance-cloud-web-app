@@ -42,13 +42,14 @@ const minsAgo = (m: number) => new Date(NOW.getTime() - m * 60_000)
 
 const SYSTEM_ROWS = [
   { id: 1, device_id: 'd1', plant_id: 'p1', string_number: 3, severity: 'CRITICAL',
-    message: 'String PV3 dead', gap_percent: 92.5, created_at: minsAgo(10), resolved_at: null },
+    message: 'String 3 open circuit suspected — 570V but near-zero current (0.1A)',
+    gap_percent: 92.5, created_at: minsAgo(10), resolved_at: null },
   { id: 2, device_id: 'd2', plant_id: 'p2', string_number: 1, severity: 'WARNING',
     message: 'Underperforming', gap_percent: 22.1, created_at: minsAgo(50), resolved_at: null },
 ]
 const VENDOR_ROWS = [
   { id: 'v-aaa', device_id: 'd1', plant_id: 'p1', provider: 'solis', alarm_code: 'F23',
-    severity: 'CRITICAL', message: 'DC arc fault', advice: 'Inspect wiring',
+    severity: 'CRITICAL', message: 'DC arc fault detected', advice: 'Inspect wiring',
     started_at: minsAgo(30), resolved_at: null },
   { id: 'v-bbb', device_id: 'd2', plant_id: 'p2', provider: 'growatt', alarm_code: null,
     severity: 'INFO', message: 'Grid voltage high', advice: null,
@@ -117,14 +118,19 @@ describe('GET /api/admin/alerts-feed', () => {
 
     for (const it of body.items) {
       expect(Object.keys(it).sort()).toEqual([
-        'detail', 'device_id', 'device_name', 'id', 'kind', 'organization_id',
-        'organization_name', 'plant_id', 'plant_name', 'provider', 'resolved_at',
-        'severity', 'started_at', 'string_number', 'title',
+        'alarm_code', 'count', 'detail', 'device_id', 'device_name', 'device_names',
+        'id', 'kind', 'organization_id', 'organization_name', 'plant_id', 'plant_name',
+        'provider', 'resolved_at', 'severity', 'started_at', 'string_number', 'title',
       ])
     }
   })
 
-  it('normalizes a system row correctly (string_number set, org populated)', async () => {
+  it('surfaces true severity counts over the full ungrouped set', async () => {
+    const { body } = await invoke()
+    expect(body.counts).toEqual({ critical: 2, warning: 1, info: 1 })
+  })
+
+  it('normalizes a system row: plain-language headline title + evidence detail', async () => {
     const { body } = await invoke()
     const sys = body.items.find((i: any) => i.id === 'system:1')
     expect(sys.kind).toBe('system')
@@ -132,29 +138,57 @@ describe('GET /api/admin/alerts-feed', () => {
     expect(sys.plant_name).toBe('Gulberg Rooftop')
     expect(sys.device_name).toBe('INV-A')
     expect(sys.string_number).toBe(3)
-    expect(sys.title).toBe('PV3 · CRITICAL')
-    expect(sys.detail).toBe('String PV3 dead')
+    expect(sys.title).toBe('String 3 open circuit suspected')
+    expect(sys.detail).toBe('570V but near-zero current (0.1A)')
+    expect(sys.alarm_code).toBeNull()
+    expect(sys.count).toBe(1)
     // includeOrg=true on the admin route → org fields populated.
     expect(sys.organization_id).toBe('org-1')
     expect(sys.organization_name).toBe('Acme Energy')
   })
 
-  it('normalizes a vendor row correctly (alarm_code title + advice, string_number null, org populated)', async () => {
+  it('normalizes a vendor row: human message title, advice detail, alarm_code chip', async () => {
     const { body } = await invoke()
     const v = body.items.find((i: any) => i.id === 'vendor:v-aaa')
     expect(v.kind).toBe('vendor')
     expect(v.provider).toBe('solis')
     expect(v.string_number).toBeNull()
-    expect(v.title).toBe('F23')
-    expect(v.detail).toBe('DC arc fault — Inspect wiring')
+    expect(v.title).toBe('DC arc fault detected')
+    expect(v.detail).toBe('Inspect wiring')
+    expect(v.alarm_code).toBe('F23')
     expect(v.organization_name).toBe('Acme Energy')
   })
 
-  it('vendor row with no alarm_code falls back to "Device alarm" and omits advice', async () => {
+  it('vendor row with no alarm_code → alarm_code null; no advice → detail empty', async () => {
     const { body } = await invoke()
     const v = body.items.find((i: any) => i.id === 'vendor:v-bbb')
-    expect(v.title).toBe('Device alarm')
-    expect(v.detail).toBe('Grid voltage high')
+    expect(v.title).toBe('Grid voltage high')
+    expect(v.detail).toBe('')
+    expect(v.alarm_code).toBeNull()
+  })
+
+  it('collapses duplicate vendor faults on one plant into a single ×N row', async () => {
+    const sgRows = Array.from({ length: 7 }, (_, i) => ({
+      id: `sg-${i + 1}`, device_id: `qd${i + 1}`, plant_id: 'pq', provider: 'sungrow',
+      alarm_code: '4', severity: 'CRITICAL', message: 'Device fault detected (status 4)',
+      advice: 'Check inverter', started_at: minsAgo(i + 1), resolved_at: null,
+    }))
+    mockPrisma.alerts.findMany.mockResolvedValue([])
+    mockPrisma.vendor_alarms.findMany.mockResolvedValue(sgRows)
+    mockPrisma.devices.findMany.mockResolvedValue(
+      Array.from({ length: 7 }, (_, i) => ({ id: `qd${i + 1}`, device_name: `Qadir Inverter${i + 1}`, provider: 'sungrow' })),
+    )
+    mockPrisma.plants.findMany.mockResolvedValue([{ id: 'pq', plant_name: 'Qadir Site' }])
+    mockPrisma.plant_assignments.findMany.mockResolvedValue([
+      { plant_id: 'pq', organization_id: 'org-1', organizations: { name: 'Acme Energy' } },
+    ])
+    const { body } = await invoke()
+    expect(body.total).toBe(1)
+    expect(body.items[0].count).toBe(7)
+    expect(body.items[0].title).toBe('Device fault detected (status 4)')
+    expect(body.items[0].device_names).toHaveLength(7)
+    // True severity totals stay ungrouped → 7 critical.
+    expect(body.counts).toEqual({ critical: 7, warning: 0, info: 0 })
   })
 
   it('kind=system returns only system rows and never queries vendor_alarms', async () => {

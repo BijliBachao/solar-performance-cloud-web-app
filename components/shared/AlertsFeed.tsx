@@ -4,19 +4,23 @@
  * AlertsFeed — a presentational, reusable notification feed.
  *
  * Renders ONE merged stream of system alerts (our computed string health) and
- * vendor alarms (the inverter's own faults) as a clean notifications-screen
- * list. Each row:
- *   [severity-tinted round avatar w/ kind glyph] · [bold title + breadcrumb·detail] · [relative time]
+ * vendor alarms (the inverter's own faults) as a clean, generously-spaced
+ * notifications list. THE RULE: every row is completely understandable in plain
+ * language while reading — WHAT happened (a human sentence, never a bare code),
+ * WHERE (org / plant / inverter), HOW SEVERE, WHICH BRAND (provider logo), and
+ * WHEN. Each row:
+ *   [brand-logo avatar w/ severity ring] · [human title + breadcrumb + chips + evidence] · [time]
  *
  * Pure presentation — no fetching. The owning page fetches + filters and passes
  * `items` in. BOTH admin and customer surfaces reuse this ONE component:
  *   - admin shows the org segment of the breadcrumb (organization_name set)
  *   - customer omits it (organization_name null)
  *
- * Vendor-agnostic: the provider is shown verbatim (capitalized) in the chip —
- * no provider name is hardcoded, so new vendors slot in with zero changes.
+ * Vendor-agnostic: the provider logo is `/logos/{provider}.jpg` for the 5 known
+ * brands; an unknown provider (or a load error) falls back to a lucide glyph.
  */
 
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
   differenceInMinutes,
@@ -41,6 +45,9 @@ export interface FeedItem {
   severity: string
   title: string
   detail: string
+  alarm_code: string | null
+  count: number
+  device_names: string[]
   started_at: string
   resolved_at: string | null
 }
@@ -50,6 +57,11 @@ interface AlertsFeedProps {
   loading?: boolean
   onRowClick?: (item: FeedItem) => void
 }
+
+// The 5 brands that ship a logo in /public/logos. A provider outside this set
+// (or a logo that fails to load) falls back to a lucide glyph — no brand name
+// is hardcoded into copy, so a future vendor renders sensibly either way.
+const LOGO_PROVIDERS = new Set(['growatt', 'solis', 'huawei', 'sungrow', 'csi'])
 
 // Left-accent border per severity — the severity colour accent on each row,
 // kept for at-a-glance triage scannability.
@@ -65,11 +77,25 @@ const SEVERITY_BORDER: Record<StatusKey, string> = {
   idle: 'border-l-slate-400',
 }
 
-// Kind → glyph + label. System = our computed checks; Vendor = the inverter's
-// own faults. (Colour comes from severity, not kind — kind is just the glyph.)
-const KIND_META: Record<FeedItem['kind'], { label: string; icon: typeof Cpu }> = {
-  system: { label: 'System', icon: Activity },
-  vendor: { label: 'Vendor', icon: Cpu },
+// Severity-coloured ring on the avatar — same token family as the dot, applied
+// as a ring so the brand logo stays legible inside.
+const SEVERITY_RING: Record<StatusKey, string> = {
+  critical: 'ring-red-500',
+  warning: 'ring-amber-500',
+  info: 'ring-slate-400',
+  healthy: 'ring-emerald-500',
+  offline: 'ring-slate-400',
+  'open-circuit': 'ring-rose-500',
+  'peer-excluded': 'ring-indigo-500',
+  frozen: 'ring-orange-500',
+  idle: 'ring-slate-300',
+}
+
+// Kind → label + fallback glyph (used only when there is no brand logo).
+// System = our computed checks; Vendor = the inverter's own faults.
+const KIND_META: Record<FeedItem['kind'], { label: string; icon: typeof Cpu; chip: string }> = {
+  system: { label: 'System', icon: Activity, chip: 'bg-blue-50 text-blue-700 border-blue-200' },
+  vendor: { label: 'Vendor', icon: Cpu, chip: 'bg-amber-50 text-amber-700 border-amber-200' },
 }
 
 function relativeTime(iso: string): string {
@@ -84,53 +110,84 @@ function relativeTime(iso: string): string {
   return `${days}d ago`
 }
 
-/** Provider code → capitalized label for the chip. Generic — no hardcoded
- *  vendor list, so any future provider string renders sensibly. */
-function providerChipLabel(provider: string): string {
-  if (!provider) return '—'
-  return provider.charAt(0).toUpperCase() + provider.slice(1)
+/** Brand-logo avatar (white rounded box, severity ring) with a lucide glyph
+ *  fallback for unknown providers or a failed image load. The logo JPGs carry
+ *  their own backgrounds, so they sit in a white box with object-contain. */
+function FeedAvatar({ item, ringClass }: { item: FeedItem; ringClass: string }) {
+  const [imgError, setImgError] = useState(false)
+  const provider = item.provider.toLowerCase()
+  const showLogo = LOGO_PROVIDERS.has(provider) && !imgError
+  const FallbackIcon = KIND_META[item.kind].icon
+
+  return (
+    <span
+      className={cn(
+        'shrink-0 flex items-center justify-center w-9 h-9 rounded-full overflow-hidden',
+        'bg-white border border-slate-200 ring-2 ring-offset-1 ring-offset-white',
+        ringClass,
+      )}
+      aria-hidden="true"
+    >
+      {showLogo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`/logos/${provider}.jpg`}
+          alt=""
+          className="w-full h-full object-contain p-0.5"
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <FallbackIcon className="w-4 h-4 text-slate-500" strokeWidth={2} />
+      )}
+    </span>
+  )
+}
+
+function Chip({ className, children }: { className: string; children: React.ReactNode }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 border rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap',
+        className,
+      )}
+    >
+      {children}
+    </span>
+  )
 }
 
 function FeedRow({ item, onRowClick }: { item: FeedItem; onRowClick?: (i: FeedItem) => void }) {
   const key = statusKeyFromSeverity(item.severity)
   const style = STATUS_STYLES[key]
-  const kind = KIND_META[item.kind]
-  const KindIcon = kind.icon
+  const kindMeta = KIND_META[item.kind]
   const resolved = item.resolved_at !== null
+  const grouped = item.count > 1
 
-  // Breadcrumb: [org ·] plant › device [› String N] — org segment only when set.
+  // Breadcrumb WHERE: [org · ] plant › device-or-N-inverters [› String N].
   const orgPrefix = item.organization_name ? `${item.organization_name} · ` : ''
-  let breadcrumb = `${orgPrefix}${item.plant_name} › ${item.device_name}`
-  if (item.string_number != null) breadcrumb += ` › String ${item.string_number}`
+  const devicePart = grouped ? `${item.count} inverters` : item.device_name
+  let breadcrumb = `${orgPrefix}${item.plant_name} › ${devicePart}`
+  if (item.kind === 'system' && item.string_number != null) {
+    breadcrumb += ` › String ${item.string_number}`
+  }
 
   return (
     <button
       type="button"
       onClick={() => onRowClick?.(item)}
       className={cn(
-        'w-full text-left flex items-center gap-3 bg-white border-b border-slate-100 border-l-[3px] px-3 py-2.5 transition-colors',
+        'w-full text-left flex items-start gap-3 bg-white border-b border-slate-100 border-l-[3px] px-3.5 py-3 transition-colors',
         SEVERITY_BORDER[key],
         'hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-solar-gold/40',
-        resolved && 'opacity-55',
+        resolved && 'opacity-60',
       )}
     >
-      {/* Round avatar, tinted by severity, with the kind glyph inside */}
-      <span
-        className={cn(
-          'shrink-0 flex items-center justify-center w-9 h-9 rounded-full',
-          style.bg,
-          style.fg,
-        )}
-        aria-hidden="true"
-      >
-        <KindIcon className="w-4 h-4" strokeWidth={2} />
-      </span>
+      <FeedAvatar item={item} ringClass={SEVERITY_RING[key]} />
 
-      {/* Title + breadcrumb·detail */}
       <div className="min-w-0 flex-1">
-        {/* Line 1: bold title + right-aligned relative time */}
+        {/* Line 1: bold human title + right-aligned relative time */}
         <div className="flex items-baseline gap-2 min-w-0">
-          <span className="text-[13px] font-bold text-slate-900 truncate">{item.title}</span>
+          <span className="text-[13px] font-bold text-slate-900 line-clamp-1">{item.title}</span>
           {resolved && (
             <span className="shrink-0 text-[9px] font-bold uppercase tracking-wider text-slate-400">
               Resolved
@@ -144,21 +201,35 @@ function FeedRow({ item, onRowClick }: { item: FeedItem; onRowClick?: (i: FeedIt
           </span>
         </div>
 
-        {/* Line 2: breadcrumb — detail, ending with a compact kind·provider chip */}
-        <div className="flex items-center gap-2 min-w-0 mt-0.5">
-          <p className="text-[11px] text-slate-500 truncate min-w-0">
-            <span className="text-slate-600">{breadcrumb}</span>
-            {item.detail ? ` — ${item.detail}` : ''}
-          </p>
-          <span
-            className={cn(
-              'ml-auto shrink-0 inline-flex items-center border rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider',
-              'bg-slate-50 text-slate-600 border-slate-200',
-            )}
-          >
-            {kind.label}·{providerChipLabel(item.provider)}
-          </span>
+        {/* Line 2: WHERE breadcrumb (muted, clipped at a line boundary) */}
+        <p
+          className="text-[11px] text-slate-500 line-clamp-1 mt-0.5"
+          title={grouped ? item.device_names.join(', ') : undefined}
+        >
+          {breadcrumb}
+        </p>
+
+        {/* Chips: kind · severity · ×count · code — all plain-language */}
+        <div className="flex items-center flex-wrap gap-1.5 mt-1.5">
+          <Chip className={kindMeta.chip}>{kindMeta.label}</Chip>
+          <Chip className={cn(style.bg, style.fg, style.border)}>
+            <span className={cn('w-1.5 h-1.5 rounded-full', style.dot)} />
+            {style.label}
+          </Chip>
+          {grouped && (
+            <Chip className="bg-slate-100 text-slate-700 border-slate-300">×{item.count}</Chip>
+          )}
+          {item.alarm_code && (
+            <Chip className="bg-slate-50 text-slate-500 border-slate-200 normal-case tracking-normal font-mono">
+              code {item.alarm_code}
+            </Chip>
+          )}
         </div>
+
+        {/* Line 3 (optional): supplementary evidence/advice, clipped cleanly */}
+        {item.detail && (
+          <p className="text-[10.5px] text-slate-400 line-clamp-1 mt-1.5">{item.detail}</p>
+        )}
       </div>
     </button>
   )
@@ -168,7 +239,7 @@ function SkeletonFeed() {
   return (
     <div className="animate-pulse divide-y divide-slate-100 border-y border-slate-100" aria-hidden="true">
       {Array.from({ length: 8 }).map((_, i) => (
-        <div key={i} className="h-[58px] bg-slate-50" />
+        <div key={i} className="h-[78px] bg-slate-50" />
       ))}
     </div>
   )

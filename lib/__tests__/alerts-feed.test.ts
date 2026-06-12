@@ -20,14 +20,17 @@ const minsAgo = (m: number) => new Date(NOW.getTime() - m * 60_000)
 
 // ── Fixture rows (raw Prisma shape) ───────────────────────────────────
 const SYSTEM_ROWS = [
+  // Message written as "<headline> — <evidence>" (em-dash) → title/detail split.
   { id: 1, device_id: 'd1', plant_id: 'p1', string_number: 3, severity: 'CRITICAL',
-    message: 'String PV3 dead', gap_percent: 92.5, created_at: minsAgo(10), resolved_at: null },
+    message: 'String 3 open circuit suspected — 570V but near-zero current (0.1A)',
+    gap_percent: 92.5, created_at: minsAgo(10), resolved_at: null },
+  // No em-dash → whole message is the title, detail empty.
   { id: 2, device_id: 'd2', plant_id: 'p2', string_number: 1, severity: 'WARNING',
     message: 'Underperforming', gap_percent: 22.1, created_at: minsAgo(50), resolved_at: null },
 ]
 const VENDOR_ROWS = [
   { id: 'v-aaa', device_id: 'd1', plant_id: 'p1', provider: 'solis', alarm_code: 'F23',
-    severity: 'CRITICAL', message: 'DC arc fault', advice: 'Inspect wiring',
+    severity: 'CRITICAL', message: 'DC arc fault detected', advice: 'Inspect wiring',
     started_at: minsAgo(30), resolved_at: null },
   { id: 'v-bbb', device_id: 'd2', plant_id: 'p2', provider: 'growatt', alarm_code: null,
     severity: 'INFO', message: 'Grid voltage high', advice: null,
@@ -81,14 +84,14 @@ describe('buildAlertsFeed — merge / normalize / sort', () => {
 
     for (const it of res.items) {
       expect(Object.keys(it).sort()).toEqual([
-        'detail', 'device_id', 'device_name', 'id', 'kind', 'organization_id',
-        'organization_name', 'plant_id', 'plant_name', 'provider', 'resolved_at',
-        'severity', 'started_at', 'string_number', 'title',
+        'alarm_code', 'count', 'detail', 'device_id', 'device_name', 'device_names',
+        'id', 'kind', 'organization_id', 'organization_name', 'plant_id', 'plant_name',
+        'provider', 'resolved_at', 'severity', 'started_at', 'string_number', 'title',
       ])
     }
   })
 
-  it('normalizes a system row (string_number set, provider from device)', async () => {
+  it('normalizes a system row: title = headline before " — ", detail = the rest', async () => {
     const res = await build({ allowedPlantIds: null })
     const sys = res.items.find((i) => i.id === 'system:1')!
     expect(sys.kind).toBe('system')
@@ -97,26 +100,100 @@ describe('buildAlertsFeed — merge / normalize / sort', () => {
     expect(sys.device_name).toBe('INV-A')
     expect(sys.string_number).toBe(3)
     expect(sys.severity).toBe('CRITICAL')
-    expect(sys.title).toBe('PV3 · CRITICAL')
-    expect(sys.detail).toBe('String PV3 dead')
+    // Plain-language headline (never a code); evidence moves to detail.
+    expect(sys.title).toBe('String 3 open circuit suspected')
+    expect(sys.detail).toBe('570V but near-zero current (0.1A)')
+    expect(sys.alarm_code).toBeNull()
+    expect(sys.count).toBe(1)
+    expect(sys.device_names).toEqual(['INV-A'])
     expect(sys.resolved_at).toBeNull()
   })
 
-  it('normalizes a vendor row (alarm_code title + advice appended, string_number null)', async () => {
+  it('system row with no " — " keeps the whole message as title, detail empty', async () => {
+    const res = await build({ allowedPlantIds: null })
+    const sys = res.items.find((i) => i.id === 'system:2')!
+    expect(sys.title).toBe('Underperforming')
+    expect(sys.detail).toBe('')
+  })
+
+  it('normalizes a vendor row: title = human message, detail = advice, alarm_code chip', async () => {
     const res = await build({ allowedPlantIds: null })
     const v = res.items.find((i) => i.id === 'vendor:v-aaa')!
     expect(v.kind).toBe('vendor')
     expect(v.provider).toBe('solis')
     expect(v.string_number).toBeNull()
-    expect(v.title).toBe('F23')
-    expect(v.detail).toBe('DC arc fault — Inspect wiring')
+    // The human message is the headline; the raw code lives in alarm_code only.
+    expect(v.title).toBe('DC arc fault detected')
+    expect(v.detail).toBe('Inspect wiring')
+    expect(v.alarm_code).toBe('F23')
+    expect(v.count).toBe(1)
+    expect(v.device_names).toEqual(['INV-A'])
   })
 
-  it('vendor row with no alarm_code falls back to "Device alarm" and omits advice', async () => {
+  it('vendor row with no alarm_code → alarm_code null; no advice → detail empty', async () => {
     const res = await build({ allowedPlantIds: null })
     const v = res.items.find((i) => i.id === 'vendor:v-bbb')!
-    expect(v.title).toBe('Device alarm')
-    expect(v.detail).toBe('Grid voltage high')
+    expect(v.title).toBe('Grid voltage high')
+    expect(v.detail).toBe('')
+    expect(v.alarm_code).toBeNull()
+  })
+
+  it('returns true severity counts over the full ungrouped set', async () => {
+    const res = await build({ allowedPlantIds: null })
+    // 2 critical (system:1, vendor:v-aaa), 1 warning (system:2), 1 info (vendor:v-bbb).
+    expect(res.counts).toEqual({ critical: 2, warning: 1, info: 1 })
+  })
+})
+
+describe('buildAlertsFeed — grouping (collapse duplicates)', () => {
+  // 7 identical Sungrow faults on ONE plant, distinct devices → fold into ONE
+  // ×7 row; counts still report 7 critical (true ungrouped totals).
+  const sgRows = Array.from({ length: 7 }, (_, i) => ({
+    id: `sg-${i + 1}`, device_id: `qd${i + 1}`, plant_id: 'pq', provider: 'sungrow',
+    alarm_code: '4', severity: 'CRITICAL', message: 'Device fault detected (status 4)',
+    advice: 'Check inverter', started_at: minsAgo(i + 1), resolved_at: null,
+  }))
+  const sgDevices = Array.from({ length: 7 }, (_, i) => ({
+    id: `qd${i + 1}`, device_name: `Qadir Inverter${i + 1}`, provider: 'sungrow',
+  }))
+
+  it('collapses rows sharing (kind, provider, plant, severity, title) into one ×N row', async () => {
+    mockPrisma.alerts.findMany.mockResolvedValue([])
+    mockPrisma.vendor_alarms.findMany.mockResolvedValue(sgRows)
+    mockPrisma.devices.findMany.mockResolvedValue(sgDevices)
+    mockPrisma.plants.findMany.mockResolvedValue([{ id: 'pq', plant_name: 'Qadir Site' }])
+
+    const res = await build({ allowedPlantIds: null })
+    expect(res.total).toBe(1) // grouped row count
+    expect(res.items).toHaveLength(1)
+    const row = res.items[0]
+    expect(row.count).toBe(7)
+    expect(row.title).toBe('Device fault detected (status 4)')
+    expect(row.alarm_code).toBe('4')
+    // Representative = most-recent (minsAgo(1) = qd1); device_names sorted distinct.
+    expect(row.id).toBe('vendor:sg-1')
+    expect(row.device_names).toEqual([
+      'Qadir Inverter1', 'Qadir Inverter2', 'Qadir Inverter3', 'Qadir Inverter4',
+      'Qadir Inverter5', 'Qadir Inverter6', 'Qadir Inverter7',
+    ])
+    // True severity totals are over the UNGROUPED set → 7 critical.
+    expect(res.counts).toEqual({ critical: 7, warning: 0, info: 0 })
+  })
+
+  it('does NOT collapse distinct system alerts on different strings (different titles)', async () => {
+    const sysRows = [
+      { id: 10, device_id: 'd1', plant_id: 'p1', string_number: 3, severity: 'CRITICAL',
+        message: 'String 3 open circuit suspected — evidence', gap_percent: 0,
+        created_at: minsAgo(5), resolved_at: null },
+      { id: 11, device_id: 'd1', plant_id: 'p1', string_number: 6, severity: 'CRITICAL',
+        message: 'String 6 open circuit suspected — evidence', gap_percent: 0,
+        created_at: minsAgo(6), resolved_at: null },
+    ]
+    mockPrisma.alerts.findMany.mockResolvedValue(sysRows)
+    mockPrisma.vendor_alarms.findMany.mockResolvedValue([])
+    const res = await build({ allowedPlantIds: null })
+    expect(res.total).toBe(2)
+    expect(res.items.map((i) => i.count)).toEqual([1, 1])
   })
 })
 

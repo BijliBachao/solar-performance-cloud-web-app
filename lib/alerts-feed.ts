@@ -32,7 +32,7 @@ const MAX_PAGE_SIZE = 100
 export type FeedKind = 'system' | 'vendor'
 
 export interface FeedItem {
-  id: string // 'system:<int>' | 'vendor:<uuid>'
+  id: string // 'system:<int>' | 'vendor:<uuid>' (the representative row of a group)
   kind: FeedKind
   provider: string
   /** null when not joined (customer view, includeOrg=false). */
@@ -45,20 +45,38 @@ export interface FeedItem {
   /** system rows carry it; vendor rows are always null. */
   string_number: number | null
   severity: string
+  /** A plain-language headline — NEVER a bare code. See buildAlertsFeed. */
   title: string
+  /** Short, single-line supplementary evidence/advice ('' when none). */
   detail: string
+  /** Vendor alarm code (for the small `code N` chip); null for system rows. */
+  alarm_code: string | null
+  /** How many raw alerts this row collapses (1 when not grouped). */
+  count: number
+  /** Distinct device names in the group, sorted (length 1 when not grouped). */
+  device_names: string[]
   started_at: string
   resolved_at: string | null
 }
 
+export interface SeverityCounts {
+  critical: number
+  warning: number
+  info: number
+}
+
 export interface AlertsFeedResult {
   items: FeedItem[]
+  /** Number of GROUPED rows in the full filtered set (post-collapse). */
   total: number
   page: number
   pageSize: number
   /** True when either source hit SOURCE_CAP — `total` then undercounts and
    *  the oldest rows are unreachable by paging. UI should surface this. */
   capped: boolean
+  /** True severity totals over the FULL filtered, UNGROUPED set — so 7 grouped
+   *  Sungrow faults still count as 7 critical even though shown as one row. */
+  counts: SeverityCounts
 }
 
 export interface BuildAlertsFeedOptions {
@@ -99,7 +117,14 @@ export async function buildAlertsFeed(
   // Empty allow-list ⇒ this caller can see nothing. Return fast without ever
   // touching the DB — and never fall open to an unscoped query.
   if (Array.isArray(allowedPlantIds) && allowedPlantIds.length === 0) {
-    return { items: [], total: 0, page, pageSize, capped: false }
+    return {
+      items: [],
+      total: 0,
+      page,
+      pageSize,
+      capped: false,
+      counts: { critical: 0, warning: 0, info: 0 },
+    }
   }
 
   // Plant-scope fragment, spread into BOTH source WHEREs. null ⇒ no constraint.
@@ -202,9 +227,24 @@ export async function buildAlertsFeed(
   }
 
   // ── Normalize each source into the unified FeedItem shape ───────────
+  // THE RULE: `title` is always a plain-language headline a non-technical
+  // person can read — never a bare numeric code. Codes live in `alarm_code`
+  // (rendered as a small chip). `detail` is short, single-line supplementary
+  // evidence/advice. Every row collapses-friendly: count=1, device_names=[one].
+
+  // System messages are written as "<headline> — <evidence>" (em-dash). Split
+  // on the FIRST " — ": headline → title, the rest → detail (else whole/empty).
+  const splitSystemMessage = (message: string): { title: string; detail: string } => {
+    const idx = message.indexOf(' — ')
+    if (idx === -1) return { title: message, detail: '' }
+    return { title: message.slice(0, idx), detail: message.slice(idx + 3) }
+  }
+
   const systemItems: FeedItem[] = systemRows.map((r) => {
     const dev = deviceMap.get(r.device_id)
     const org = includeOrg ? orgByPlant.get(r.plant_id) ?? null : null
+    const { title, detail } = splitSystemMessage(r.message)
+    const device_name = dev?.device_name || r.device_id
     return {
       id: `system:${r.id}`,
       kind: 'system',
@@ -214,11 +254,14 @@ export async function buildAlertsFeed(
       plant_id: r.plant_id,
       plant_name: plantNameMap.get(r.plant_id) || r.plant_id,
       device_id: r.device_id,
-      device_name: dev?.device_name || r.device_id,
+      device_name,
       string_number: r.string_number,
       severity: r.severity,
-      title: `PV${r.string_number} · ${r.severity}`,
-      detail: r.message,
+      title,
+      detail,
+      alarm_code: null,
+      count: 1,
+      device_names: [device_name],
       started_at: r.created_at.toISOString(),
       resolved_at: r.resolved_at ? r.resolved_at.toISOString() : null,
     }
@@ -227,7 +270,7 @@ export async function buildAlertsFeed(
   const vendorItems: FeedItem[] = vendorRows.map((r) => {
     const dev = deviceMap.get(r.device_id)
     const org = includeOrg ? orgByPlant.get(r.plant_id) ?? null : null
-    const detail = r.advice ? `${r.message} — ${r.advice}` : r.message
+    const device_name = dev?.device_name || r.device_id
     return {
       id: `vendor:${r.id}`,
       kind: 'vendor',
@@ -237,11 +280,15 @@ export async function buildAlertsFeed(
       plant_id: r.plant_id,
       plant_name: plantNameMap.get(r.plant_id) || r.plant_id,
       device_id: r.device_id,
-      device_name: dev?.device_name || r.device_id,
+      device_name,
       string_number: null,
       severity: r.severity,
-      title: r.alarm_code ? `${r.alarm_code}` : 'Device alarm',
-      detail,
+      // The human message IS the headline ("Device fault detected (status 4)").
+      title: r.message,
+      detail: r.advice ?? '',
+      alarm_code: r.alarm_code ?? null,
+      count: 1,
+      device_names: [device_name],
       started_at: r.started_at.toISOString(),
       resolved_at: r.resolved_at ? r.resolved_at.toISOString() : null,
     }
@@ -265,16 +312,49 @@ export async function buildAlertsFeed(
     )
   }
 
-  // ── Sort by started_at DESC, then paginate ──────────────────────────
+  // ── True severity totals over the FULL filtered, UNGROUPED set ───────
+  // Computed BEFORE collapsing, so a group of 7 critical faults contributes 7
+  // — the grouped row count would understate the real picture.
+  const counts: SeverityCounts = { critical: 0, warning: 0, info: 0 }
+  for (const it of merged) {
+    const s = it.severity.toUpperCase()
+    if (s === 'CRITICAL') counts.critical++
+    else if (s === 'WARNING') counts.warning++
+    else if (s === 'INFO') counts.info++
+  }
+
+  // ── Sort by started_at DESC, then collapse duplicates ───────────────
   merged.sort((a, b) => b.started_at.localeCompare(a.started_at))
 
-  const total = merged.length
+  // Collapse rows sharing (kind, provider, plant_id, severity, title) into ONE
+  // representative — the most-recent (first after the DESC sort). `count` =
+  // group size; `device_names` = the distinct device names in the group,
+  // sorted. Distinct alerts on different strings differ by title → stay apart;
+  // 7 identical Sungrow faults on one plant fold into a single ×7 row.
+  const groups = new Map<string, FeedItem>()
+  for (const it of merged) {
+    const gk = `${it.kind} ${it.provider} ${it.plant_id} ${it.severity} ${it.title}`
+    const rep = groups.get(gk)
+    if (!rep) {
+      // First (most-recent) row becomes the representative; clone so we can
+      // mutate count/device_names without touching the source array.
+      groups.set(gk, { ...it, device_names: [...it.device_names] })
+    } else {
+      rep.count++
+      if (!rep.device_names.includes(it.device_name)) rep.device_names.push(it.device_name)
+    }
+  }
+  const grouped = [...groups.values()]
+  for (const g of grouped) g.device_names.sort((a, b) => a.localeCompare(b))
+
+  // ── Paginate the grouped feed ────────────────────────────────────────
+  const total = grouped.length
   const start = (page - 1) * pageSize
-  const items = merged.slice(start, start + pageSize)
+  const items = grouped.slice(start, start + pageSize)
 
   // Either source hitting the per-source cap means `total` undercounts and
   // the oldest rows are unreachable by paging — flag it so the UI can say so.
   const capped = systemRows.length >= SOURCE_CAP || vendorRows.length >= SOURCE_CAP
 
-  return { items, total, page, pageSize, capped }
+  return { items, total, page, pageSize, capped, counts }
 }

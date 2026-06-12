@@ -17,6 +17,7 @@ import { RefreshCw, Search, Bell } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PageWrapper } from '@/components/layout/PageWrapper'
 import { AlertsFeed, type FeedItem } from '@/components/shared/AlertsFeed'
+import { AlertsSummaryStrip, type SeverityCounts } from '@/components/shared/AlertsSummaryStrip'
 import { VALID_SEVERITIES, VALID_PROVIDERS } from '@/lib/api-validation'
 
 interface AlertsFeedResponse {
@@ -25,6 +26,7 @@ interface AlertsFeedResponse {
   page: number
   pageSize: number
   capped?: boolean
+  counts?: SeverityCounts
 }
 
 type Kind = 'all' | 'system' | 'vendor'
@@ -283,6 +285,13 @@ export default function AdminAlertsPage() {
         {data?.capped && (
           <div className="rounded-sm border border-amber-200 border-l-[3px] border-l-amber-500 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-800">
             Showing the most recent matches — narrow the filters (provider, severity, search) to see older alerts.
+          </div>
+        )}
+
+        {/* Summary strip — true severity totals at a glance */}
+        {data?.counts && (
+          <div className="flex items-center justify-between gap-3 px-1">
+            <AlertsSummaryStrip counts={data.counts} />
           </div>
         )}
 
