@@ -10,49 +10,75 @@
 
 @layer base {
   :root {
-    /* ━━ Brand: Solar Gold ━━ */
-    --solar-gold: #f59e0b;
-    --solar-gold-50: #fffbeb;
-    --solar-gold-100: #fef3c7;
-    --solar-gold-400: #fbbf24;
-    --solar-gold-500: #f59e0b;
-    --solar-gold-600: #d97706;
-    --solar-gold-700: #b45309;
-    --solar-gold-900: #78350f;
+    /* ━━ SEMANTIC TOKENS — single source of truth (change here → everywhere) ━━ */
+    /* brand / cta */
+    --color-primary: #533afd;
+    --color-primary-hover: #4434d4;
+    --color-primary-press: #2e2b8c;
+    --color-primary-soft: #665efd;
+    --color-primary-subtle: #ece9ff;
+    --color-on-primary: #ffffff;
+    /* text */
+    --color-ink: #0d253d;
+    --color-ink-secondary: #273951;
+    --color-ink-mute: #64748d;
+    /* surface */
+    --color-canvas: #ffffff;
+    --color-canvas-soft: #f6f9fc;
+    --color-cream: #f5e9d4;
+    --color-hairline: #e3e8ee;
+    --color-hairline-input: #a8c3de;
+    /* charts (cool / indigo-anchored categorical) */
+    --chart-1: #533afd; --chart-2: #0ea5e9; --chart-3: #14b8a6; --chart-4: #8b5cf6;
+    --chart-5: #ec4899; --chart-6: #f59e0b; --chart-7: #64748d; --chart-8: #22c55e;
+    /* radius */
+    --radius-input: 8px;
+    --radius-card: 12px;
+    --radius-pill: 9999px;
 
-    /* Legacy alias (code using --spc-green keeps working) */
-    --spc-green: #f59e0b;
-    --spc-green-light: #fbbf24;
-    --spc-green-dark: #d97706;
-    --spc-green-tint: #fef3c7;
+    /* ━━ Brand ramp (legacy names → now indigo via semantic tokens) ━━ */
+    --solar-gold: var(--color-primary);
+    --solar-gold-50: var(--color-primary-subtle);
+    --solar-gold-100: var(--color-primary-subtle);
+    --solar-gold-400: var(--color-primary-soft);
+    --solar-gold-500: var(--color-primary);
+    --solar-gold-600: var(--color-primary-hover);
+    --solar-gold-700: var(--color-primary-press);
+    --solar-gold-900: #1c1e54;
+
+    /* Legacy alias (code using --spc-green keeps working → indigo) */
+    --spc-green: var(--color-primary);
+    --spc-green-light: var(--color-primary-soft);
+    --spc-green-dark: var(--color-primary-hover);
+    --spc-green-tint: var(--color-primary-subtle);
 
     /* ━━ Surfaces ━━ */
-    --bg-page: #ffffff;              /* PURE WHITE canvas — Vodafone discipline */
-    --bg-card: #ffffff;
-    --bg-subtle: #f8fafc;            /* slate-50 — alt rows only */
+    --bg-page: var(--color-canvas);              /* white canvas */
+    --bg-card: var(--color-canvas);
+    --bg-subtle: var(--color-canvas-soft);       /* alt rows / page wash */
     --bg-hover: #f1f5f9;              /* slate-100 — row/item hover */
-    --bg-sidebar: #ffffff;            /* white sidebar */
-    --bg-sidebar-hover: #f8fafc;
+    --bg-sidebar: var(--color-canvas);            /* white sidebar */
+    --bg-sidebar-hover: var(--color-canvas-soft);
     --bg-institutional: #0f172a;     /* slate-900 — footer/auth only */
     --bg-institutional-alt: #1e293b; /* slate-800 */
 
     /* ━━ Text ━━ */
-    --text-primary: #0f172a;   /* slate-900 — headings */
-    --text-heading: #0f172a;
-    --text-body: #475569;      /* slate-600 */
-    --text-label: #334155;     /* slate-700 */
-    --text-muted: #94a3b8;     /* slate-400 */
+    --text-primary: var(--color-ink);   /* navy ink — headings (never pure black) */
+    --text-heading: var(--color-ink);
+    --text-body: var(--color-ink-secondary);
+    --text-label: var(--color-ink-secondary);
+    --text-muted: var(--color-ink-mute);
     --text-disabled: #cbd5e1;  /* slate-300 */
     --text-on-dark: #f8fafc;
     --text-on-dark-muted: #94a3b8;
-    --text-link: #d97706;      /* solar-gold-600 */
-    --text-link-hover: #b45309;
+    --text-link: var(--color-primary);
+    --text-link-hover: var(--color-primary-hover);
 
     /* ━━ Borders ━━ */
-    --border-default: #e2e8f0;  /* slate-200 */
+    --border-default: var(--color-hairline);
     --border-subtle: #f1f5f9;   /* slate-100 */
     --border-strong: #cbd5e1;   /* slate-300 */
-    --border-focus: #f59e0b;    /* solar-gold */
+    --border-focus: var(--color-primary);
     --border-dark: #334155;     /* slate-700 — on dark surfaces */
 
     /* ━━ Status (semantic) ━━ */
@@ -87,11 +113,11 @@
     --status-info-border: #bfdbfe;
 
     /* ━━ Shadows ━━ */
-    --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.02);
-    --shadow-hover: 0 4px 12px rgba(15, 23, 42, 0.08);
-    --shadow-modal: 0 20px 40px rgba(15, 23, 42, 0.15);
-    --shadow-featured: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 30px rgba(15, 23, 42, 0.08);
-    --shadow-focus-ring: 0 0 0 3px rgba(245, 158, 11, 0.25);
+    --shadow-card: 0 1px 3px rgba(0, 55, 112, 0.08);
+    --shadow-hover: 0 8px 24px rgba(0, 55, 112, 0.08), 0 2px 6px rgba(0, 55, 112, 0.04);
+    --shadow-modal: 0 20px 40px rgba(0, 55, 112, 0.16);
+    --shadow-featured: 0 1px 2px rgba(0, 55, 112, 0.04), 0 10px 30px rgba(0, 55, 112, 0.08);
+    --shadow-focus-ring: 0 0 0 3px rgba(83, 58, 253, 0.18);
 
     /* ━━ shadcn/ui compatibility ━━ */
     --background: 0 0% 100%;
