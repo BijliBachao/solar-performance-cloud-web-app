@@ -64,7 +64,7 @@ export default function LandingHero({ signedIn }: { signedIn: boolean }) {
       <div className="loader" ref={loaderRef} role="status" aria-label="Loading Solar Performance Cloud">
         <div className="lw">
           <div className="sunwrap">
-            <svg className="ring" viewBox="0 0 120 120" aria-hidden="true">
+            <svg className="sunring" viewBox="0 0 120 120" aria-hidden="true">
               <defs>
                 <linearGradient id="spc-rg" x1="0" y1="0" x2="1" y2="1">
                   <stop offset="0%" stopColor="#f7d9a8" />
@@ -164,9 +164,9 @@ export default function LandingHero({ signedIn }: { signedIn: boolean }) {
         @keyframes dawn{0%{filter:brightness(.9) saturate(.88)}100%{filter:brightness(1.07) saturate(1.02)}}
         .lw{display:flex;flex-direction:column;align-items:center;gap:22px}
         .sunwrap{position:relative;width:118px;height:118px;display:grid;place-items:center}
-        .ring{position:absolute;inset:0;transform:rotate(-90deg)}
-        .ring .track{fill:none;stroke:rgba(28,30,84,.07);stroke-width:3}
-        .ring .prog{fill:none;stroke:url(#spc-rg);stroke-width:3;stroke-linecap:round;
+        .sunring{position:absolute;inset:0;transform:rotate(-90deg)}
+        .sunring .track{fill:none;stroke:rgba(28,30,84,.07);stroke-width:3}
+        .sunring .prog{fill:none;stroke:url(#spc-rg);stroke-width:3;stroke-linecap:round;
           stroke-dasharray:327;stroke-dashoffset:327;animation:sweep 1.2s cubic-bezier(.4,0,.2,1) .15s forwards}
         @keyframes sweep{to{stroke-dashoffset:0}}
         .orb{width:46px;height:46px;border-radius:50%;background:radial-gradient(circle at 50% 42%,#fff,var(--cream) 42%,#f7d9a8 70%);
@@ -180,7 +180,7 @@ export default function LandingHero({ signedIn }: { signedIn: boolean }) {
         .loader.is-gone .orb{animation:none;transform:scale(2.7);
           box-shadow:0 0 150px 80px rgba(255,249,235,.96),0 0 80px 40px rgba(247,217,168,.85);
           transition:transform .8s ease, box-shadow .8s ease}
-        .loader.is-gone .ring,.loader.is-gone .ln{opacity:0;transition:opacity .4s ease}
+        .loader.is-gone .sunring,.loader.is-gone .ln{opacity:0;transition:opacity .4s ease}
 
         /* scene */
         .scene{position:absolute;inset:0;background:linear-gradient(180deg,#fbfcff 0%,#fdfaf3 70%,#fbf3e4 100%)}

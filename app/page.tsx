@@ -49,11 +49,20 @@ export default function LandingPage() {
     // Continue to landing page
   } else if (!isLoaded || redirecting) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-warm-cream">
-        <div className="flex items-center gap-3">
-          <div className="w-5 h-5 border-2 border-bb-green-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm font-semibold text-warm-muted">
-            {!isLoaded ? 'Initializing...' : 'Redirecting to dashboard...'}
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#fdfbf7' }}>
+        <div className="flex flex-col items-center gap-4">
+          <span
+            className="animate-pulse"
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: '50%',
+              background: 'radial-gradient(circle at 50% 42%, #fff, #f5e9d4 44%, #f7d9a8 72%)',
+              boxShadow: '0 0 40px 12px rgba(247,217,168,.85), 0 0 18px 4px rgba(102,94,253,.18)',
+            }}
+          />
+          <span className="text-[11px] uppercase tracking-[0.24em] text-ink-mute">
+            {!isLoaded ? 'Solar Performance Cloud' : 'Taking you to your dashboard'}
           </span>
         </div>
       </div>
