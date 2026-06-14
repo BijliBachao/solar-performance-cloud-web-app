@@ -32,10 +32,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (!authorized) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
+      <div className="min-h-screen flex items-center justify-center bg-canvas">
         <div className="flex items-center gap-3">
-          <div className="w-5 h-5 border-2 border-solar-gold border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm font-semibold text-slate-500">Loading...</span>
+          <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm font-medium text-ink-mute">Loading...</span>
         </div>
       </div>
     )
@@ -44,7 +44,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const fullName = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || undefined
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-canvas-soft">
       <Sidebar
         role="admin"
         userFullName={fullName}
