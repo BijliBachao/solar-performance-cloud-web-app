@@ -110,9 +110,9 @@ function relativeTime(iso: string): string {
   return `${days}d ago`
 }
 
-/** Brand-logo avatar (white rounded box, severity ring) with a lucide glyph
+/** Brand-logo avatar (rounded brand tile, severity ring) with a lucide glyph
  *  fallback for unknown providers or a failed image load. The logo JPGs carry
- *  their own backgrounds, so they sit in a white box with object-contain. */
+ *  their own backgrounds, so they fill a rounded tile with object-cover. */
 function FeedAvatar({ item, ringClass }: { item: FeedItem; ringClass: string }) {
   const [imgError, setImgError] = useState(false)
   const provider = item.provider.toLowerCase()
@@ -122,8 +122,8 @@ function FeedAvatar({ item, ringClass }: { item: FeedItem; ringClass: string }) 
   return (
     <span
       className={cn(
-        'shrink-0 flex items-center justify-center w-9 h-9 rounded-full overflow-hidden',
-        'bg-white border border-slate-200 ring-2 ring-offset-1 ring-offset-white',
+        'shrink-0 flex items-center justify-center w-9 h-9 rounded-lg overflow-hidden',
+        'bg-canvas border border-hairline ring-2 ring-offset-1 ring-offset-white',
         ringClass,
       )}
       aria-hidden="true"
@@ -133,11 +133,11 @@ function FeedAvatar({ item, ringClass }: { item: FeedItem; ringClass: string }) 
         <img
           src={`/logos/${provider}.jpg`}
           alt=""
-          className="w-full h-full object-contain p-0.5"
+          className="w-full h-full object-cover"
           onError={() => setImgError(true)}
         />
       ) : (
-        <FallbackIcon className="w-4 h-4 text-slate-500" strokeWidth={2} />
+        <FallbackIcon className="w-4 h-4 text-ink-mute" strokeWidth={1.8} />
       )}
     </span>
   )
@@ -147,7 +147,7 @@ function Chip({ className, children }: { className: string; children: React.Reac
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 border rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap',
+        'inline-flex items-center gap-1 border rounded-sm px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider whitespace-nowrap',
         className,
       )}
     >
@@ -176,9 +176,9 @@ function FeedRow({ item, onRowClick }: { item: FeedItem; onRowClick?: (i: FeedIt
       type="button"
       onClick={() => onRowClick?.(item)}
       className={cn(
-        'w-full text-left flex items-start gap-3 bg-white border-b border-slate-100 border-l-[3px] px-3.5 py-3 transition-colors',
+        'w-full text-left flex items-start gap-3 bg-white border-b border-hairline border-l-[3px] px-3.5 py-3 transition-colors',
         SEVERITY_BORDER[key],
-        'hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-solar-gold/40',
+        'hover:bg-canvas-soft focus:outline-none focus-visible:shadow-focus',
         resolved && 'opacity-60',
       )}
     >
@@ -187,14 +187,14 @@ function FeedRow({ item, onRowClick }: { item: FeedItem; onRowClick?: (i: FeedIt
       <div className="min-w-0 flex-1">
         {/* Line 1: bold human title + right-aligned relative time */}
         <div className="flex items-baseline gap-2 min-w-0">
-          <span className="text-[13px] font-bold text-slate-900 line-clamp-1">{item.title}</span>
+          <span className="text-[13px] font-medium text-ink line-clamp-1">{item.title}</span>
           {resolved && (
-            <span className="shrink-0 text-[9px] font-bold uppercase tracking-wider text-slate-400">
+            <span className="shrink-0 text-[9px] font-medium uppercase tracking-wider text-ink-mute">
               Resolved
             </span>
           )}
           <span
-            className="ml-auto shrink-0 text-[10px] font-mono tabular-nums text-slate-400"
+            className="ml-auto shrink-0 text-[10px] tabular-nums tabular-nums text-ink-mute"
             title={new Date(item.started_at).toLocaleString()}
           >
             {relativeTime(item.started_at)}
@@ -203,7 +203,7 @@ function FeedRow({ item, onRowClick }: { item: FeedItem; onRowClick?: (i: FeedIt
 
         {/* Line 2: WHERE breadcrumb (muted, clipped at a line boundary) */}
         <p
-          className="text-[11px] text-slate-500 line-clamp-1 mt-0.5"
+          className="text-[11px] text-ink-mute line-clamp-1 mt-0.5"
           title={grouped ? item.device_names.join(', ') : undefined}
         >
           {breadcrumb}
@@ -217,10 +217,10 @@ function FeedRow({ item, onRowClick }: { item: FeedItem; onRowClick?: (i: FeedIt
             {style.label}
           </Chip>
           {grouped && (
-            <Chip className="bg-slate-100 text-slate-700 border-slate-300">×{item.count}</Chip>
+            <Chip className="bg-slate-100 text-ink-secondary border-hairline">×{item.count}</Chip>
           )}
           {item.alarm_code && (
-            <Chip className="bg-slate-50 text-slate-500 border-slate-200 normal-case tracking-normal font-mono">
+            <Chip className="bg-canvas-soft text-ink-mute border-hairline normal-case tracking-normal tabular-nums">
               code {item.alarm_code}
             </Chip>
           )}
@@ -228,7 +228,7 @@ function FeedRow({ item, onRowClick }: { item: FeedItem; onRowClick?: (i: FeedIt
 
         {/* Line 3 (optional): supplementary evidence/advice, clipped cleanly */}
         {item.detail && (
-          <p className="text-[10.5px] text-slate-400 line-clamp-1 mt-1.5">{item.detail}</p>
+          <p className="text-[10.5px] text-ink-mute line-clamp-1 mt-1.5">{item.detail}</p>
         )}
       </div>
     </button>
@@ -237,9 +237,9 @@ function FeedRow({ item, onRowClick }: { item: FeedItem; onRowClick?: (i: FeedIt
 
 function SkeletonFeed() {
   return (
-    <div className="animate-pulse divide-y divide-slate-100 border-y border-slate-100" aria-hidden="true">
+    <div className="animate-pulse divide-y divide-slate-100 border-y border-hairline" aria-hidden="true">
       {Array.from({ length: 8 }).map((_, i) => (
-        <div key={i} className="h-[78px] bg-slate-50" />
+        <div key={i} className="h-[78px] bg-canvas-soft" />
       ))}
     </div>
   )
@@ -254,14 +254,14 @@ export function AlertsFeed({ items, loading, onRowClick }: AlertsFeedProps) {
     return (
       <div className="text-center py-12 bg-emerald-50/40 rounded-sm border border-emerald-100">
         <CheckCircle className="h-6 w-6 mx-auto mb-2 text-emerald-500" strokeWidth={2} />
-        <p className="text-sm font-bold text-emerald-700">No notifications</p>
-        <p className="text-xs text-slate-500 mt-1">Nothing matches the current filters.</p>
+        <p className="text-sm font-medium text-emerald-700">No notifications</p>
+        <p className="text-xs text-ink-mute mt-1">Nothing matches the current filters.</p>
       </div>
     )
   }
 
   return (
-    <div className={cn('border-y border-slate-100 transition-opacity', loading && 'opacity-60')}>
+    <div className={cn('border-y border-hairline transition-opacity', loading && 'opacity-60')}>
       {items.map((item) => (
         <FeedRow key={item.id} item={item} onRowClick={onRowClick} />
       ))}
