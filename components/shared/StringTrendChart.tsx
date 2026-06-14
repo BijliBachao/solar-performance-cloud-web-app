@@ -14,6 +14,7 @@ import {
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { ACTIVE_CURRENT_THRESHOLD } from '@/lib/string-health'
+import { CHART_SERIES } from '@/lib/design-tokens'
 
 interface TrendDataPoint {
   timestamp: string
@@ -38,30 +39,11 @@ interface StringTrendChartProps {
  *   - Day-boundary vertical rule + date label where HH:mm resets across midnight.
  */
 
-const TREND_LINE_COLORS = [
-  '#2563eb', // blue-600
-  '#ea580c', // orange-600
-  '#dc2626', // red-600
-  '#7c3aed', // violet-600
-  '#0891b2', // cyan-600
-  '#be185d', // pink-700
-  '#65a30d', // lime-600
-  '#d97706', // amber-600
-  '#4f46e5', // indigo-600
-  '#0d9488', // teal-600
-  '#e11d48', // rose-600
-  '#a855f7', // purple-500
-  '#0284c7', // sky-600
-  '#b45309', // amber-700
-  '#059669', // emerald-600
-  '#6d28d9', // violet-700
-  '#f43f5e', // rose-500
-  '#047857', // emerald-700
-  '#1d4ed8', // blue-700
-  '#b91c1c', // red-700
-]
+// Decorative per-string line palette — sourced from the centralized
+// CHART_SERIES (var(--chart-N)); index cycles through the 8 chart vars.
+const TREND_LINE_COLORS = CHART_SERIES
 
-const AVG_COLOR = '#F59E0B' // solar-gold-500
+const AVG_COLOR = 'var(--chart-1)' // brand indigo — the hero average line
 
 export function StringTrendChart({ data }: StringTrendChartProps) {
   const [focus, setFocus] = useState<number | null>(null)
@@ -195,10 +177,10 @@ export function StringTrendChart({ data }: StringTrendChartProps) {
         <button
           onClick={() => setFocus(null)}
           className={cn(
-            'shrink-0 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-sm border transition-colors',
+            'shrink-0 inline-flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider px-2 py-1 rounded-pill border transition-colors',
             focus === null
-              ? 'bg-solar-gold/10 text-solar-gold-700 border-solar-gold/40'
-              : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50',
+              ? 'bg-primary-subtle text-primary border-primary/40'
+              : 'bg-canvas text-ink-mute border-hairline hover:bg-canvas-soft',
           )}
         >
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: AVG_COLOR }} />
@@ -217,10 +199,10 @@ export function StringTrendChart({ data }: StringTrendChartProps) {
                   onClick={() => handleToggle(num)}
                   title={`PV${num} · uptime ${uptime}% of window`}
                   className={cn(
-                    'shrink-0 inline-flex items-center gap-1 text-[10px] font-mono font-bold px-1.5 py-1 rounded-sm border transition-colors',
+                    'shrink-0 inline-flex items-center gap-1 text-[10px] tabular-nums font-medium px-1.5 py-1 rounded-pill border transition-colors',
                     active
                       ? 'bg-slate-900 text-white border-slate-900'
-                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+                      : 'bg-canvas text-ink-secondary border-hairline hover:bg-canvas-soft',
                   )}
                 >
                   <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
@@ -239,7 +221,7 @@ export function StringTrendChart({ data }: StringTrendChartProps) {
             {silentNumbers.length > 0 && (
               <span
                 title={`Strings below the ${ACTIVE_CURRENT_THRESHOLD} A active threshold in this window — not plotted`}
-                className="shrink-0 inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-1.5 py-1 rounded-sm bg-slate-50 text-slate-500 border border-slate-200"
+                className="shrink-0 inline-flex items-center gap-1 text-[10px] tabular-nums font-medium px-1.5 py-1 rounded-pill bg-canvas-soft text-ink-mute border border-hairline"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
                 {silentNumbers.length} silent
@@ -346,7 +328,7 @@ export function StringTrendChart({ data }: StringTrendChartProps) {
       </div>
 
       {/* Footer hint */}
-      <p className="text-[10px] text-slate-400 mt-2">
+      <p className="text-[10px] text-ink-mute mt-2">
         {focus === null
           ? `Click a PV chip to isolate its line. Chip uptime shows % of ${chartData.length} points with current above ${ACTIVE_CURRENT_THRESHOLD} A (IEC 61724-1 data availability).`
           : `Highlighting PV${focus} — click again to reset.`}

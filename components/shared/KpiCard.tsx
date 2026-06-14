@@ -24,7 +24,7 @@ const ACCENT_BAR: Record<string, string> = {
   amber: 'bg-amber-500',
   red: 'bg-red-500',
   gray: 'bg-slate-300',
-  gold: 'bg-solar-gold',
+  gold: 'bg-primary',
   blue: 'bg-blue-500',
 }
 
@@ -33,7 +33,7 @@ const SPARKLINE_COLOR: Record<string, string> = {
   amber: '#F59E0B',
   red: '#EF4444',
   gray: '#94A3B8',
-  gold: '#F59E0B',
+  gold: 'var(--chart-1)',
   blue: '#0EA5E9',
 }
 
@@ -42,7 +42,7 @@ const ICON_CHIP: Record<string, string> = {
   amber: 'bg-amber-50 text-amber-600',
   red: 'bg-red-50 text-red-600',
   gray: 'bg-slate-100 text-slate-500',
-  gold: 'bg-solar-gold-50 text-solar-gold-600',
+  gold: 'bg-primary-subtle text-primary',
   blue: 'bg-blue-50 text-blue-600',
 }
 
@@ -51,7 +51,7 @@ const HOVER_BORDER: Record<string, string> = {
   amber: 'hover:border-amber-300',
   red: 'hover:border-red-300',
   gray: 'hover:border-slate-300',
-  gold: 'hover:border-solar-gold-300',
+  gold: 'hover:border-primary',
   blue: 'hover:border-blue-300',
 }
 
@@ -80,7 +80,7 @@ export function KpiCard({
     <div
       onClick={onClick}
       className={cn(
-        'relative bg-white rounded-md border border-slate-200 overflow-hidden transition-all',
+        'relative bg-canvas rounded-card border border-hairline overflow-hidden transition-all',
         onClick && cn('cursor-pointer hover:shadow-card', HOVER_BORDER[accent]),
         className,
       )}
@@ -90,13 +90,13 @@ export function KpiCard({
 
       <div className="p-4">
         <div className="flex items-start justify-between mb-3">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+          <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
             {title}
           </span>
           {Icon && (
             <div
               className={cn(
-                'flex items-center justify-center w-8 h-8 rounded-md',
+                'flex items-center justify-center w-8 h-8 rounded-input',
                 ICON_CHIP[accent],
               )}
             >
@@ -106,13 +106,13 @@ export function KpiCard({
         </div>
 
         <div className="flex items-baseline gap-2 mb-1">
-          <p className="text-[28px] font-mono font-bold leading-none text-slate-900">
+          <p className="text-[28px] tabular-nums font-light leading-none text-ink">
             {value}
           </p>
           {hasDelta && (
             <span
               className={cn(
-                'flex items-center gap-0.5 text-[11px] font-bold font-mono',
+                'flex items-center gap-0.5 text-[11px] font-medium tabular-nums',
                 isPositive ? 'text-emerald-700' : 'text-red-700',
               )}
               title={deltaContext || undefined}
@@ -129,11 +129,11 @@ export function KpiCard({
         </div>
 
         {subtitle && (
-          <p className="text-[11px] font-medium text-slate-500 mb-2 truncate">{subtitle}</p>
+          <p className="text-[11px] font-medium text-ink-mute mb-2 truncate">{subtitle}</p>
         )}
 
         {hasDelta && deltaContext && (
-          <p className="text-[10px] font-medium text-slate-400 mb-1 truncate">{deltaContext}</p>
+          <p className="text-[10px] font-medium text-ink-mute mb-1 truncate">{deltaContext}</p>
         )}
 
         {hasSparkline && (

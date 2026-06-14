@@ -26,13 +26,13 @@ interface ClickablePerformanceCellProps {
 function ClickablePerformanceCell({ score, onClick }: ClickablePerformanceCellProps) {
   const display = score !== null && score !== undefined ? `${Math.round(score)}%` : '—'
   return (
-    <td className="px-0 py-0 text-center text-xs font-mono whitespace-nowrap border-r border-gray-100">
+    <td className="px-0 py-0 text-center text-xs tabular-nums whitespace-nowrap border-r border-hairline">
       <button
         type="button"
         onClick={onClick}
         title="Click to see how this score was computed"
         className={cn(
-          'w-full h-full px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-[2px] focus:ring-inset focus:ring-blue-400',
+          'w-full h-full px-2 py-1.5 text-xs tabular-nums focus:outline-none focus:shadow-focus focus:relative',
           'hover:brightness-95 transition-[filter] cursor-pointer',
           getCellStyle(score),
         )}
@@ -128,7 +128,7 @@ export function StringLevelTable({
 
   if (rows.length === 0) {
     return (
-      <div className="text-center text-gray-500 py-12">
+      <div className="text-center text-ink-mute py-12">
         No string data available for the selected period.
       </div>
     )
@@ -154,32 +154,32 @@ export function StringLevelTable({
         />
       )}
 
-    <div className="overflow-x-auto border border-gray-200 rounded-lg">
+    <div className="overflow-x-auto border border-hairline rounded-card">
       <table className="w-full text-sm">
         <thead>
-          <tr className="bg-gray-50 border-b border-gray-200">
-            <th className="sticky left-0 z-20 bg-gray-50 px-3 py-2 text-left text-xs font-semibold text-gray-600 border-r border-gray-200 min-w-[140px]">
+          <tr className="bg-canvas-soft border-b border-hairline">
+            <th className="sticky left-0 z-20 bg-canvas-soft px-3 py-2 text-left text-xs font-medium text-ink-secondary border-r border-hairline min-w-[140px]">
               Inverter
             </th>
-            <th className="sticky left-[140px] z-20 bg-gray-50 px-2 py-2 text-left text-xs font-semibold text-gray-600 border-r border-gray-200 min-w-[64px]">
+            <th className="sticky left-[140px] z-20 bg-canvas-soft px-2 py-2 text-left text-xs font-medium text-ink-secondary border-r border-hairline min-w-[64px]">
               Group
             </th>
-            <th className="sticky left-[204px] z-20 bg-gray-50 px-2 py-2 text-left text-xs font-semibold text-gray-600 border-r border-gray-200 min-w-[60px]">
+            <th className="sticky left-[204px] z-20 bg-canvas-soft px-2 py-2 text-left text-xs font-medium text-ink-secondary border-r border-hairline min-w-[60px]">
               String
             </th>
-            <th className="px-2 py-2 text-center text-xs font-semibold text-blue-700 border-r border-gray-200 min-w-[52px] bg-blue-50/50">
+            <th className="px-2 py-2 text-center text-xs font-medium text-blue-700 border-r border-hairline min-w-[52px] bg-blue-50/50">
               Perf
             </th>
-            <th className="px-2 py-2 text-center text-xs font-semibold text-sky-700 border-r border-gray-200 min-w-[56px] bg-sky-50/50" title="Data Completeness — readings received ÷ 96 expected (a data-quality measure, kept separate from performance)">
+            <th className="px-2 py-2 text-center text-xs font-medium text-sky-700 border-r border-hairline min-w-[56px] bg-sky-50/50" title="Data Completeness — readings received ÷ 96 expected (a data-quality measure, kept separate from performance)">
               Data&nbsp;%
             </th>
-            <th className="px-2 py-2 text-center text-xs font-semibold text-emerald-700 border-r border-gray-200 min-w-[60px] bg-emerald-50/50">
+            <th className="px-2 py-2 text-center text-xs font-medium text-emerald-700 border-r border-hairline min-w-[60px] bg-emerald-50/50">
               kWh
             </th>
             {dates.map((date) => (
               <th
                 key={date}
-                className="px-2 py-2 text-center text-xs font-semibold text-gray-600 border-r border-gray-100 min-w-[64px] whitespace-nowrap"
+                className="px-2 py-2 text-center text-xs font-medium text-ink-secondary border-r border-hairline min-w-[64px] whitespace-nowrap"
               >
                 {formatDateHeader(date)}
               </th>
@@ -198,23 +198,23 @@ export function StringLevelTable({
                 key={`${row.device_id}-${row.string_number}`}
                 className={cn(
                   'group hover:bg-blue-50/50 transition-colors',
-                  showDivider && 'border-t-2 border-gray-300'
+                  showDivider && 'border-t-2 border-hairline'
                 )}
               >
-                <td className="sticky left-0 z-10 bg-white group-hover:bg-blue-50/50 px-3 py-1.5 text-xs text-gray-700 border-r border-gray-200 whitespace-nowrap transition-colors">
-                  <div className="font-medium text-gray-900 flex items-center gap-1.5">
+                <td className="sticky left-0 z-10 bg-canvas group-hover:bg-blue-50/50 px-3 py-1.5 text-xs text-ink-secondary border-r border-hairline whitespace-nowrap transition-colors">
+                  <div className="font-medium text-ink flex items-center gap-1.5">
                     {row.device_name}
                     {isFirstOfDevice && row.provider && (
                       <span
                         title={row.model ? `${providerLabel(row.provider)} · ${row.model}` : providerLabel(row.provider)}
-                        className="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[9px] font-semibold text-slate-600"
+                        className="inline-flex items-center rounded border border-hairline bg-canvas-soft px-1 py-0.5 text-[9px] font-medium text-ink-secondary"
                       >
                         {providerLabel(row.provider)}
                       </span>
                     )}
                   </div>
                   {row.string_number === 1 && (
-                    <div className="text-[10px] text-gray-400">{row.plant_name}</div>
+                    <div className="text-[10px] text-ink-mute">{row.plant_name}</div>
                   )}
                   {row.peer_excluded && (
                     <div className="mt-0.5">
@@ -233,19 +233,19 @@ export function StringLevelTable({
                     </div>
                   )}
                 </td>
-                <td className="sticky left-[140px] z-10 bg-white group-hover:bg-blue-50/50 px-2 py-1.5 text-xs text-gray-600 border-r border-gray-200 transition-colors">
+                <td className="sticky left-[140px] z-10 bg-canvas group-hover:bg-blue-50/50 px-2 py-1.5 text-xs text-ink-secondary border-r border-hairline transition-colors">
                   {row.group}
                 </td>
-                <td className="sticky left-[204px] z-10 bg-white group-hover:bg-blue-50/50 px-2 py-1.5 text-xs font-medium text-gray-900 border-r border-gray-200 transition-colors">
+                <td className="sticky left-[204px] z-10 bg-canvas group-hover:bg-blue-50/50 px-2 py-1.5 text-xs font-medium text-ink border-r border-hairline transition-colors">
                   PV{row.string_number}
                 </td>
-                <td className={cn('px-2 py-1.5 text-center text-xs font-mono border-r border-gray-200', metricCell(row.perf_avg))}>
+                <td className={cn('px-2 py-1.5 text-center text-xs tabular-nums border-r border-hairline', metricCell(row.perf_avg))}>
                   {row.perf_avg !== null ? `${row.perf_avg}%` : '—'}
                 </td>
-                <td className={cn('px-2 py-1.5 text-center text-xs font-mono border-r border-gray-200 bg-sky-50/30', row.compl_avg != null ? completenessStyleFromPct(row.compl_avg)?.fg ?? 'text-gray-400' : 'text-gray-400')}>
+                <td className={cn('px-2 py-1.5 text-center text-xs tabular-nums border-r border-hairline bg-sky-50/30', row.compl_avg != null ? completenessStyleFromPct(row.compl_avg)?.fg ?? 'text-ink-mute' : 'text-ink-mute')}>
                   {row.compl_avg != null ? `${row.compl_avg}%` : '—'}
                 </td>
-                <td className="px-2 py-1.5 text-center text-xs font-mono font-semibold border-r border-gray-200 bg-emerald-50/30 text-emerald-700">
+                <td className="px-2 py-1.5 text-center text-xs tabular-nums font-medium border-r border-hairline bg-emerald-50/30 text-emerald-700">
                   {row.energy_kwh !== null ? row.energy_kwh.toFixed(1) : '—'}
                 </td>
                 {dates.map((date) => (
@@ -281,22 +281,22 @@ export function StringLevelTable({
                   key={`inactive-${row.device_id}-${row.string_number}`}
                   className="bg-amber-50/30"
                 >
-                  <td className="sticky left-0 z-10 bg-amber-50/50 px-3 py-1 text-xs text-amber-700 border-r border-gray-200 whitespace-nowrap">
+                  <td className="sticky left-0 z-10 bg-amber-50/50 px-3 py-1 text-xs text-amber-700 border-r border-hairline whitespace-nowrap">
                     {row.device_name}
                   </td>
-                  <td className="sticky left-[140px] z-10 bg-amber-50/50 px-2 py-1 text-xs text-amber-600 border-r border-gray-200">
+                  <td className="sticky left-[140px] z-10 bg-amber-50/50 px-2 py-1 text-xs text-amber-600 border-r border-hairline">
                     {row.group}
                   </td>
-                  <td className="sticky left-[204px] z-10 bg-amber-50/50 px-2 py-1 text-xs font-medium text-amber-700 border-r border-gray-200">
+                  <td className="sticky left-[204px] z-10 bg-amber-50/50 px-2 py-1 text-xs font-medium text-amber-700 border-r border-hairline">
                     PV{row.string_number}
                   </td>
-                  <td className="px-2 py-1 text-center text-xs text-amber-400 border-r border-gray-200 bg-amber-50/30">—</td>
-                  <td className="px-2 py-1 text-center text-xs text-amber-400 border-r border-gray-200 bg-amber-50/30">—</td>
-                  <td className="px-2 py-1 text-center text-xs text-amber-400 border-r border-gray-200 bg-amber-50/30">—</td>
+                  <td className="px-2 py-1 text-center text-xs text-amber-400 border-r border-hairline bg-amber-50/30">—</td>
+                  <td className="px-2 py-1 text-center text-xs text-amber-400 border-r border-hairline bg-amber-50/30">—</td>
+                  <td className="px-2 py-1 text-center text-xs text-amber-400 border-r border-hairline bg-amber-50/30">—</td>
                   {dates.map((date) => (
                     <td
                       key={date}
-                      className="px-2 py-1 text-center text-xs text-amber-400 border-r border-gray-100 bg-amber-50/30"
+                      className="px-2 py-1 text-center text-xs text-amber-400 border-r border-hairline bg-amber-50/30"
                     >
                       —
                     </td>
@@ -312,7 +312,7 @@ export function StringLevelTable({
               <tr>
                 <td
                   colSpan={6 + dates.length}
-                  className="bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-500 border-t-2 border-gray-300"
+                  className="bg-gray-100 px-3 py-2 text-xs font-medium text-gray-500 border-t-2 border-hairline"
                 >
                   Unused / Spare Ports ({unusedRows.length})
                 </td>
@@ -322,22 +322,22 @@ export function StringLevelTable({
                   key={`unused-${row.device_id}-${row.string_number}`}
                   className="bg-gray-50/50"
                 >
-                  <td className="sticky left-0 z-10 bg-gray-50 px-3 py-1 text-xs text-gray-400 border-r border-gray-200 whitespace-nowrap">
+                  <td className="sticky left-0 z-10 bg-gray-50 px-3 py-1 text-xs text-gray-400 border-r border-hairline whitespace-nowrap">
                     {row.device_name}
                   </td>
-                  <td className="sticky left-[140px] z-10 bg-gray-50 px-2 py-1 text-xs text-gray-400 border-r border-gray-200">
+                  <td className="sticky left-[140px] z-10 bg-gray-50 px-2 py-1 text-xs text-gray-400 border-r border-hairline">
                     {row.group}
                   </td>
-                  <td className="sticky left-[204px] z-10 bg-gray-50 px-2 py-1 text-xs text-gray-400 border-r border-gray-200">
+                  <td className="sticky left-[204px] z-10 bg-gray-50 px-2 py-1 text-xs text-gray-400 border-r border-hairline">
                     PV{row.string_number}
                   </td>
-                  <td className="px-2 py-1 text-center text-xs text-gray-300 border-r border-gray-200 bg-gray-50/50">—</td>
-                  <td className="px-2 py-1 text-center text-xs text-gray-300 border-r border-gray-200 bg-gray-50/50">—</td>
-                  <td className="px-2 py-1 text-center text-xs text-gray-300 border-r border-gray-200 bg-gray-50/50">—</td>
+                  <td className="px-2 py-1 text-center text-xs text-gray-300 border-r border-hairline bg-gray-50/50">—</td>
+                  <td className="px-2 py-1 text-center text-xs text-gray-300 border-r border-hairline bg-gray-50/50">—</td>
+                  <td className="px-2 py-1 text-center text-xs text-gray-300 border-r border-hairline bg-gray-50/50">—</td>
                   {dates.map((date) => (
                     <td
                       key={date}
-                      className="px-2 py-1 text-center text-xs text-gray-300 border-r border-gray-100 bg-gray-50/50"
+                      className="px-2 py-1 text-center text-xs text-gray-300 border-r border-hairline bg-gray-50/50"
                     >
                       —
                     </td>

@@ -42,11 +42,11 @@ function relativeTime(iso: string | null | undefined): string {
 
 /** Freshness color for plant-level last_data_at: normal <15m, amber 15m–2h, red >2h. */
 function freshnessColor(iso: string | null | undefined): string {
-  if (!iso) return 'text-slate-400'
+  if (!iso) return 'text-ink-mute'
   const date = new Date(iso)
-  if (isNaN(date.getTime())) return 'text-slate-400'
+  if (isNaN(date.getTime())) return 'text-ink-mute'
   const diffMin = (Date.now() - date.getTime()) / 60000
-  if (diffMin < 15) return 'text-slate-700'
+  if (diffMin < 15) return 'text-ink-secondary'
   if (diffMin < 120) return 'text-amber-700'
   return 'text-red-700'
 }
@@ -308,8 +308,8 @@ export function PlantDetailView({
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-5 h-5 border-2 border-solar-gold border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs font-semibold text-slate-400 mt-2">Loading plant data...</p>
+          <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs font-medium text-ink-mute mt-2">Loading plant data...</p>
         </div>
       </div>
     )
@@ -339,7 +339,7 @@ export function PlantDetailView({
   // ─── Render ────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-canvas-soft">
       <PlantHeader
         plantName={plant.plant_name}
         healthState={plant.health_state}
@@ -373,17 +373,17 @@ export function PlantDetailView({
           alarm colors only apply while the sun is up. */}
       <div className="px-4 sm:px-6 max-w-[1440px] mx-auto">
         {plant.op_status === 'idle' ? (
-          <div className="text-[11px] text-slate-500">
+          <div className="text-[11px] text-ink-mute">
             Idle · night — last data{' '}
-            <span className="font-mono font-semibold text-slate-600">
+            <span className="tabular-nums font-medium text-ink-secondary">
               {relativeTime(plant.last_data_at)}
             </span>{' '}
-            <span className="text-slate-400">(normal: production resumes after sunrise)</span>
+            <span className="text-ink-mute">(normal: production resumes after sunrise)</span>
           </div>
         ) : (
-          <div className="text-[11px] text-slate-500">
+          <div className="text-[11px] text-ink-mute">
             Data last received{' '}
-            <span className={cn('font-mono font-semibold', freshnessColor(plant.last_data_at))}>
+            <span className={cn('tabular-nums font-medium', freshnessColor(plant.last_data_at))}>
               {relativeTime(plant.last_data_at)}
             </span>
           </div>
@@ -473,10 +473,10 @@ export function PlantDetailView({
 
             {/* Empty state if no inverters */}
             {plant.devices.length === 0 && (
-              <div className="bg-white rounded-sm border border-slate-200 p-8 text-center">
+              <div className="bg-canvas rounded-card border border-hairline p-8 text-center">
                 <Activity className="w-8 h-8 text-slate-300 mx-auto mb-3" strokeWidth={2} />
-                <p className="text-sm font-bold text-slate-600">No inverters found</p>
-                <p className="text-[11px] text-slate-400 mt-1">
+                <p className="text-sm font-medium text-ink-secondary">No inverters found</p>
+                <p className="text-[11px] text-ink-mute mt-1">
                   Devices will appear once the poller syncs from your inverter provider.
                 </p>
               </div>
@@ -485,8 +485,8 @@ export function PlantDetailView({
 
           {/* Alert History Tab */}
           <TabsContent value="history">
-            <div className="bg-white rounded-sm border border-slate-200 p-5">
-              <h2 className="text-base font-bold text-slate-900 mb-4">Alert History</h2>
+            <div className="bg-canvas rounded-card border border-hairline p-5">
+              <h2 className="text-base font-medium text-ink mb-4">Alert History</h2>
               <AlertHistoryLog
                 plantId={plantCode}
                 showResolveButton={showResolveAlerts}

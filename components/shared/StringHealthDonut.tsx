@@ -149,13 +149,13 @@ export function StringHealthDonut({ plantCode, initialMode }: StringHealthDonutP
       <CardShell title="String Health" mode={mode} onModeChange={handleModeChange}>
         <div className="flex flex-col items-center justify-center py-10 text-center">
           <AlertTriangle className="w-8 h-8 text-red-500 mb-3" strokeWidth={2} />
-          <p className="text-sm font-bold text-slate-900 mb-1">Unable to load string health</p>
-          <p className="text-xs text-slate-500 mb-4 max-w-xs">{error.message}</p>
+          <p className="text-sm font-medium text-ink mb-1">Unable to load string health</p>
+          <p className="text-xs text-ink-mute mb-4 max-w-xs">{error.message}</p>
           {!isAuthErr && (
             <button
               type="button"
               onClick={() => mutate()}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded-sm text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-hairline rounded-input text-xs font-medium text-ink-secondary hover:bg-canvas-soft"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Retry
             </button>
@@ -185,13 +185,13 @@ export function StringHealthDonut({ plantCode, initialMode }: StringHealthDonutP
     return (
       <CardShell title="String Health" mode={mode} onModeChange={handleModeChange} subtitle={data.timeBasis.label}>
         <div className="flex flex-col items-center justify-center py-10 text-center">
-          <div className="w-20 h-20 rounded-full border-4 border-dashed border-slate-200 flex items-center justify-center mb-3">
+          <div className="w-20 h-20 rounded-full border-4 border-dashed border-hairline flex items-center justify-center mb-3">
             <span className="text-2xl text-slate-300">∅</span>
           </div>
-          <p className="text-sm font-bold text-slate-700 mb-1">
+          <p className="text-sm font-medium text-ink-secondary mb-1">
             {noDataWarning ? 'No data for this window' : 'No wired strings yet'}
           </p>
-          <p className="text-xs text-slate-500 max-w-xs">
+          <p className="text-xs text-ink-mute max-w-xs">
             {noDataWarning?.message ?? 'Data will appear once the poller syncs from your inverter provider.'}
           </p>
           {mode === 'today' && noDataWarning && (
@@ -234,22 +234,22 @@ export function StringHealthDonut({ plantCode, initialMode }: StringHealthDonutP
       />
 
       {/* Footnotes — informational only */}
-      <div className="mt-4 pt-3 border-t border-slate-100 space-y-1">
+      <div className="mt-4 pt-3 border-t border-hairline space-y-1">
         {/* V1 rollup legend: the 3 arcs summarise the 5 per-string cell bands
             shown on /analysis, so the donut and the cells always reconcile. */}
-        <p className="text-[10px] text-slate-400">
+        <p className="text-[10px] text-ink-mute">
           Healthy = Normal · Abnormal = Watch + Underperforming (+ no-data) · Critical = Serious Fault + Dead
         </p>
         {(data.excluded.unused + data.excluded.nonStandard) > 0 && (
-          <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
-            <Info className="w-3 h-3 text-slate-400" strokeWidth={2} />
+          <p className="text-[11px] text-ink-mute flex items-center gap-1.5">
+            <Info className="w-3 h-3 text-ink-mute" strokeWidth={2} />
             {data.excluded.unused + data.excluded.nonStandard} string
             {data.excluded.unused + data.excluded.nonStandard === 1 ? '' : 's'} excluded
             {data.excluded.unused > 0 && (
-              <span className="text-slate-400">· {data.excluded.unused} unused</span>
+              <span className="text-ink-mute">· {data.excluded.unused} unused</span>
             )}
             {data.excluded.nonStandard > 0 && (
-              <span className="text-slate-400">· {data.excluded.nonStandard} non-standard</span>
+              <span className="text-ink-mute">· {data.excluded.nonStandard} non-standard</span>
             )}
           </p>
         )}
@@ -282,15 +282,15 @@ function CardShell({
   children: React.ReactNode
 }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-sm p-4 sm:p-5 shadow-card">
+    <div className="bg-canvas border border-hairline rounded-card p-4 sm:p-5 shadow-card">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0 flex items-baseline gap-2 flex-wrap">
-          <span className="w-1.5 h-1.5 bg-solar-gold-500 rounded-full" />
-          <h3 className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
+          <span className="w-1.5 h-1.5 bg-primary rounded-full" />
+          <h3 className="text-[11px] font-medium uppercase tracking-widest text-ink-mute">
             {title}
           </h3>
           {subtitle && (
-            <span className="text-[11px] text-slate-400 font-mono truncate">· {subtitle}</span>
+            <span className="text-[11px] text-ink-mute tabular-nums truncate">· {subtitle}</span>
           )}
           {staleBadge && (
             <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-sm">
@@ -314,7 +314,7 @@ function ModeToggle({ mode, onChange }: { mode: DonutMode; onChange: (m: DonutMo
     <div
       role="tablist"
       aria-label="Time basis"
-      className="inline-flex items-center bg-slate-100 rounded-sm p-0.5 text-[11px] font-semibold flex-shrink-0"
+      className="inline-flex items-center bg-canvas-soft rounded-input p-0.5 text-[11px] font-medium flex-shrink-0"
     >
       {opts.map((o) => {
         const active = o.value === mode
@@ -327,10 +327,10 @@ function ModeToggle({ mode, onChange }: { mode: DonutMode; onChange: (m: DonutMo
             title={o.tooltip}
             onClick={() => onChange(o.value)}
             className={cn(
-              'px-2.5 py-1 rounded-sm transition-colors',
+              'px-2.5 py-1 rounded-input transition-colors',
               active
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700',
+                ? 'bg-canvas text-ink shadow-sm'
+                : 'text-ink-mute hover:text-ink-secondary',
             )}
           >
             {o.label}

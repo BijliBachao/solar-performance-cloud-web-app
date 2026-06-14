@@ -64,7 +64,7 @@ function formatAgo(d: string | null) {
 // Plant-level health % via the central V1 grade (gradeFromScore) so the header
 // colour matches the per-string cells, the donut, and the NOC cutpoints.
 function healthColor(pct: number | null | undefined): string {
-  if (pct === null || pct === undefined) return 'text-slate-400'
+  if (pct === null || pct === undefined) return 'text-ink-mute'
   switch (gradeFromScore(pct)) {
     case 'healthy': return 'text-emerald-700'
     case 'warning': return 'text-amber-700'
@@ -112,16 +112,16 @@ export function PlantHeader({
   return (
     <div className="px-4 sm:px-6 pt-5 pb-4 max-w-[1440px] mx-auto">
       {/* Featured card — 3px gradient top + shadow-featured (DESIGN.md §12.4) */}
-      <div className="relative bg-white rounded-lg border border-slate-200 overflow-hidden shadow-featured">
-        {/* 3px gradient top accent — solar-gold 400 → 500 → 600 */}
-        <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-solar-gold-400 via-solar-gold-500 to-solar-gold-600" />
+      <div className="relative bg-canvas rounded-card border border-hairline overflow-hidden shadow-featured">
+        {/* 3px gradient top accent — indigo brand ramp */}
+        <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-primary-soft via-primary to-primary-press" />
 
         <div className="p-5 sm:p-6 pt-5">
           {/* ── Row 1: Back button + refresh controls ────────────── */}
           <div className="flex items-center justify-between gap-3 mb-5">
             <button
               onClick={() => router.push(backPath)}
-              className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-500 hover:text-slate-900 transition-colors"
+              className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-ink-mute hover:text-ink transition-colors"
               aria-label={backLabel}
             >
               <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
@@ -132,16 +132,16 @@ export function PlantHeader({
               <button
                 onClick={onToggleAutoRefresh}
                 className={cn(
-                  'flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-sm border transition-colors',
+                  'flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider px-2.5 py-1 rounded-pill border transition-colors',
                   autoRefresh
-                    ? 'bg-solar-gold/10 text-solar-gold-700 border-solar-gold/30'
-                    : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50',
+                    ? 'bg-primary-subtle text-primary border-primary/30'
+                    : 'bg-canvas text-ink-mute border-hairline hover:bg-canvas-soft',
                 )}
               >
                 <span
                   className={cn(
                     'w-1.5 h-1.5 rounded-full',
-                    autoRefresh ? 'bg-solar-gold animate-pulse' : 'bg-slate-400',
+                    autoRefresh ? 'bg-primary animate-pulse' : 'bg-slate-400',
                   )}
                 />
                 {autoRefresh ? 'Live' : 'Paused'}
@@ -149,7 +149,7 @@ export function PlantHeader({
               <button
                 onClick={onRefresh}
                 disabled={isRefreshing}
-                className="text-slate-400 hover:text-slate-900 p-1 transition-colors disabled:opacity-50"
+                className="text-ink-mute hover:text-ink p-1 transition-colors disabled:opacity-50"
                 aria-label="Refresh"
               >
                 <RefreshCw
@@ -165,8 +165,8 @@ export function PlantHeader({
             {/* LEFT — label + LIVE pill + big value + plant name + pills */}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 mb-2">
-                <Sun className="h-3.5 w-3.5 text-solar-gold-600" strokeWidth={2} />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                <Sun className="h-3.5 w-3.5 text-primary" strokeWidth={2} />
+                <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
                   Plant Power
                 </span>
                 {/* THE status chip — Status Unification: one word from the
@@ -210,25 +210,25 @@ export function PlantHeader({
               <div className="flex items-baseline gap-2 mb-2">
                 {liveStatus === 'PRODUCING' ? (
                   <>
-                    <span className="text-5xl font-mono font-bold tracking-tight text-slate-900 leading-none">
+                    <span className="text-5xl font-light tabular-nums tracking-tight text-ink leading-none">
                       {currentPowerKw.toFixed(1)}
                     </span>
-                    <span className="text-xl font-mono font-semibold text-slate-500">kW</span>
+                    <span className="text-xl font-medium tabular-nums text-ink-mute">kW</span>
                   </>
                 ) : liveStatus === 'IDLE' ? (
                   // Status Unification: one vocabulary — 'Idle', never 'Standby'.
-                  <span className="text-3xl font-mono font-semibold text-slate-400 leading-none">
+                  <span className="text-3xl font-light tabular-nums text-ink-mute leading-none">
                     Idle
                   </span>
                 ) : (
-                  <span className="text-3xl font-mono font-semibold text-slate-400 leading-none">
+                  <span className="text-3xl font-light tabular-nums text-ink-mute leading-none">
                     —
                   </span>
                 )}
               </div>
 
               {/* Plant name */}
-              <h1 className="text-lg sm:text-xl font-bold text-slate-900 truncate mb-2">
+              <h1 className="text-lg sm:text-xl font-light text-ink truncate mb-2">
                 {plantName}
               </h1>
 
@@ -261,9 +261,9 @@ export function PlantHeader({
                     {providerMeta.label}
                   </span>
                 )}
-                <span className="text-[11px] text-slate-500">
+                <span className="text-[11px] text-ink-mute">
                   ·
-                  <span className="font-mono font-bold text-slate-900 ml-1.5">{deviceCount}</span>
+                  <span className="tabular-nums font-medium text-ink ml-1.5">{deviceCount}</span>
                   <span className="ml-1">inverter{deviceCount !== 1 ? 's' : ''}</span>
                 </span>
               </div>
@@ -274,10 +274,10 @@ export function PlantHeader({
               <Sparkline
                 data={sparkline24h}
                 variant="area"
-                color="#F59E0B"
+                color="var(--chart-1)"
                 height={72}
               />
-              <div className="flex justify-between text-[9px] font-mono font-semibold text-slate-400 mt-1 px-1">
+              <div className="flex justify-between text-[9px] tabular-nums font-medium text-ink-mute mt-1 px-1">
                 <span>24h ago</span>
                 <span>NOW</span>
               </div>
@@ -285,33 +285,33 @@ export function PlantHeader({
           </div>
 
           {/* ── Row 3: KPI strip (5 cells, grid-px Stripe-style) ────── */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-px bg-slate-200 border border-slate-200 rounded-md overflow-hidden">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-px bg-hairline border border-hairline rounded-card overflow-hidden">
             {/* Capacity */}
-            <div className="bg-white px-3 py-2.5">
-              <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">
+            <div className="bg-canvas px-3 py-2.5">
+              <div className="text-[9px] font-medium uppercase tracking-widest text-ink-mute mb-0.5">
                 Capacity
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-lg font-mono font-bold text-slate-900 leading-none">
+                <span className="text-lg tabular-nums font-medium text-ink leading-none">
                   {capacityKw ? Number(capacityKw).toFixed(1) : '—'}
                 </span>
                 {capacityKw && (
-                  <span className="text-[10px] font-mono font-semibold text-slate-500">kW</span>
+                  <span className="text-[10px] tabular-nums font-medium text-ink-mute">kW</span>
                 )}
               </div>
             </div>
 
             {/* Today */}
-            <div className="bg-white px-3 py-2.5">
-              <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">
+            <div className="bg-canvas px-3 py-2.5">
+              <div className="text-[9px] font-medium uppercase tracking-widest text-ink-mute mb-0.5">
                 Today
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-lg font-mono font-bold text-slate-900 leading-none">
+                <span className="text-lg tabular-nums font-medium text-ink leading-none">
                   {todayEnergyKwh > 0 ? formatEnergy(todayEnergyKwh).split(' ')[0] : '—'}
                 </span>
                 {todayEnergyKwh > 0 && (
-                  <span className="text-[10px] font-mono font-semibold text-slate-500">
+                  <span className="text-[10px] tabular-nums font-medium text-ink-mute">
                     {formatEnergy(todayEnergyKwh).split(' ')[1]}
                   </span>
                 )}
@@ -319,72 +319,72 @@ export function PlantHeader({
             </div>
 
             {/* Utilization */}
-            <div className="bg-white px-3 py-2.5">
-              <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">
+            <div className="bg-canvas px-3 py-2.5">
+              <div className="text-[9px] font-medium uppercase tracking-widest text-ink-mute mb-0.5">
                 Utilization
               </div>
               {utilizationPct !== null && utilizationPct !== undefined ? (
                 <div className="flex items-baseline gap-1">
-                  <span className="text-lg font-mono font-bold text-slate-900 leading-none">
+                  <span className="text-lg tabular-nums font-medium text-ink leading-none">
                     {utilizationPct}
                   </span>
-                  <span className="text-[10px] font-mono font-semibold text-slate-500">%</span>
+                  <span className="text-[10px] tabular-nums font-medium text-ink-mute">%</span>
                 </div>
               ) : (
-                <span className="text-lg font-mono font-semibold text-slate-400 leading-none">—</span>
+                <span className="text-lg tabular-nums font-medium text-ink-mute leading-none">—</span>
               )}
             </div>
 
             {/* Healthy strings — reporting + producing normally vs total. (Renamed
                 from "Availability": that metric isn't in the V1 contract — §12.) */}
             <div
-              className="bg-white px-3 py-2.5"
+              className="bg-canvas px-3 py-2.5"
               title="Healthy strings: reporting and producing normally vs total expected"
             >
-              <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">
+              <div className="text-[9px] font-medium uppercase tracking-widest text-ink-mute mb-0.5">
                 Healthy Strings
               </div>
               {healthPct !== null && healthPct !== undefined ? (
                 <div className="flex items-baseline gap-1">
-                  <span className={cn('text-lg font-mono font-bold leading-none', healthColor(healthPct))}>
+                  <span className={cn('text-lg tabular-nums font-medium leading-none', healthColor(healthPct))}>
                     {stringSummary.ok}
                   </span>
-                  <span className="text-[10px] font-mono font-semibold text-slate-500">
+                  <span className="text-[10px] tabular-nums font-medium text-ink-mute">
                     / {totalStringCount}
                   </span>
-                  <span className="text-[10px] font-mono font-semibold text-slate-400 ml-1">
+                  <span className="text-[10px] tabular-nums font-medium text-ink-mute ml-1">
                     ({healthPct}%)
                   </span>
                 </div>
               ) : (
-                <span className="text-lg font-mono font-semibold text-slate-400 leading-none">—</span>
+                <span className="text-lg tabular-nums font-medium text-ink-mute leading-none">—</span>
               )}
             </div>
 
             {/* Alerts */}
-            <div className="bg-white px-3 py-2.5">
-              <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">
+            <div className="bg-canvas px-3 py-2.5">
+              <div className="text-[9px] font-medium uppercase tracking-widest text-ink-mute mb-0.5">
                 Alerts
               </div>
               <div className="flex items-baseline gap-1">
                 <span
                   className={cn(
-                    'text-lg font-mono font-bold leading-none',
+                    'text-lg tabular-nums font-medium leading-none',
                     alertCount > 0 ? 'text-red-700' : 'text-emerald-700',
                   )}
                 >
                   {alertCount}
                 </span>
                 {alertCount === 0 && (
-                  <span className="text-[10px] font-semibold text-slate-400 ml-1">all clear</span>
+                  <span className="text-[10px] font-medium text-ink-mute ml-1">all clear</span>
                 )}
               </div>
             </div>
           </div>
 
           {/* ── Row 4: Footer — last updated ──────────────────────── */}
-          <div className="mt-4 text-[11px] text-slate-500">
-            Last updated <span className="font-mono font-semibold text-slate-700">{lastAgo}</span>
+          <div className="mt-4 text-[11px] text-ink-mute">
+            Last updated <span className="tabular-nums font-medium text-ink-secondary">{lastAgo}</span>
           </div>
         </div>
       </div>

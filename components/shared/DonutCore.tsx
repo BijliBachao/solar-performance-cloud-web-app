@@ -138,7 +138,7 @@ function DonutTooltip({ active, payload }: { active?: boolean; payload?: Array<{
 
   return (
     <div
-      className="rounded-md border border-slate-200 px-3 py-2 text-xs pointer-events-none"
+      className="rounded-card border border-hairline px-3 py-2 text-xs pointer-events-none"
       style={{
         backgroundColor: '#FFFFFF',
         boxShadow: '0 10px 24px -8px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.08)',
@@ -146,20 +146,20 @@ function DonutTooltip({ active, payload }: { active?: boolean; payload?: Array<{
     >
       <div className="flex items-center gap-2 mb-0.5">
         <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
-        <span className="font-bold text-slate-900">{p.label}</span>
+        <span className="font-medium text-ink">{p.label}</span>
       </div>
-      <div className="text-slate-600 font-mono tabular-nums">
+      <div className="text-ink-secondary tabular-nums">
         {p.value.toLocaleString()}{' '}
-        <span className="text-slate-400">
+        <span className="text-ink-mute">
           {p.value === 1 ? (p.unit?.singular ?? 'string') : (p.unit?.plural ?? 'strings')}
         </span>{' '}
         · {pct}%
       </div>
       {detail && (
-        <div className="text-[10px] text-slate-500 mt-0.5 font-mono">{detail}</div>
+        <div className="text-[10px] text-ink-mute mt-0.5 tabular-nums">{detail}</div>
       )}
       {rollup && (
-        <div className="text-[10px] text-slate-400 mt-1 border-t border-slate-100 pt-1">{rollup}</div>
+        <div className="text-[10px] text-ink-mute mt-1 border-t border-hairline pt-1">{rollup}</div>
       )}
     </div>
   )
@@ -303,14 +303,14 @@ export function DonutCore({
         {centerMetric && (
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
             <span className={cn(
-              'font-bold font-mono tabular-nums text-slate-900 leading-none',
+              'font-light tabular-nums text-ink leading-none',
               size === 'lg' && 'text-[36px]',
               size === 'md' && 'text-[28px]',
               size === 'sm' && 'text-[22px]',
             )}>
               {centerMetric.value}
             </span>
-            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">
+            <span className="text-[9px] font-medium uppercase tracking-widest text-ink-mute mt-1">
               {centerMetric.label}
             </span>
             {centerSubline && (
@@ -354,7 +354,7 @@ function Legend({
   onClickBucket?: (b: DonutBucket) => void
 }) {
   return (
-    <ul className="flex flex-col divide-y divide-slate-100 min-w-[200px]">
+    <ul className="flex flex-col divide-y divide-hairline min-w-[200px]">
       {segments.map((s) => {
         const pct = total > 0 ? (s.value / total) * 100 : 0
         const isHovered = hoverKey === s.key
@@ -388,13 +388,13 @@ function Legend({
                 style={{ backgroundColor: s.color }}
                 aria-hidden="true"
               />
-              <span className="flex-1 text-[13px] font-medium text-slate-700 truncate">
+              <span className="flex-1 text-[13px] font-medium text-ink-secondary truncate">
                 {s.label}
               </span>
-              <span className="text-[13px] font-mono tabular-nums font-semibold text-slate-900 text-right min-w-[44px]">
+              <span className="text-[13px] tabular-nums font-medium text-ink text-right min-w-[44px]">
                 {s.value.toLocaleString()}
               </span>
-              <span className="text-[11px] font-mono tabular-nums text-slate-500 text-right min-w-[44px]">
+              <span className="text-[11px] tabular-nums text-ink-mute text-right min-w-[44px]">
                 {pct < 0.1 && s.value > 0 ? '<0.1%' : `${pct.toFixed(1)}%`}
               </span>
             </button>
@@ -416,12 +416,12 @@ function EmptyRing({
 }) {
   return (
     <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
-      <div className="absolute inset-0 rounded-full border-4 border-dashed border-slate-200 flex items-center justify-center">
+      <div className="absolute inset-0 rounded-full border-4 border-dashed border-hairline flex items-center justify-center">
         <div className="flex flex-col items-center text-center">
           {centerMetric ? (
             <>
               <span className="text-2xl text-slate-300 leading-none">{centerMetric.value}</span>
-              <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">
+              <span className="text-[9px] font-medium uppercase tracking-widest text-ink-mute mt-1">
                 {centerMetric.label}
               </span>
             </>
@@ -429,7 +429,7 @@ function EmptyRing({
             <span className="text-3xl text-slate-300">∅</span>
           )}
           {centerSubline && (
-            <span className="text-[11px] font-mono tabular-nums text-slate-500 mt-1.5">{centerSubline}</span>
+            <span className="text-[11px] tabular-nums text-ink-mute mt-1.5">{centerSubline}</span>
           )}
         </div>
       </div>

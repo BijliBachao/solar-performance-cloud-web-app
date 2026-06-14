@@ -24,7 +24,7 @@ import {
   TrendingUp, TrendingDown, CalendarDays,
   ChevronDown, ChevronRight, Cpu, AlertTriangle, Table2, Stethoscope,
 } from 'lucide-react'
-import { STATUS_STYLES, providerBadge, statusKeyFromConnectivity } from '@/lib/design-tokens'
+import { STATUS_STYLES, providerBadge, statusKeyFromConnectivity, CHART_SERIES } from '@/lib/design-tokens'
 
 // Compact relative time: "Just now", "2 min ago", "3 h ago", "6 d ago".
 function relativeTime(iso: string | null | undefined): string {
@@ -126,30 +126,31 @@ type TrendPeriod = '24h' | '7d' | '30d'
 
 // ─── Per-inverter accent palette ────────────────────────────────
 // Used to distinguish multiple inverters on the same plant (top border
-// accent + icon chip). All colors are light Tailwind tints compatible with
-// the slate/white theme. Brand green is reserved for status, not used here.
+// accent + icon chip). The decorative top-border accent now comes from the
+// centralized CHART_SERIES palette (var(--chart-N)); the icon-chip tints stay
+// as light Tailwind tints. Brand colour is reserved for status, not used here.
 
 const INVERTER_COLORS = [
-  { accent: '#3b82f6', iconBg: 'bg-blue-100',    iconText: 'text-blue-600' },
-  { accent: '#8b5cf6', iconBg: 'bg-violet-100',  iconText: 'text-violet-600' },
-  { accent: '#10b981', iconBg: 'bg-emerald-100', iconText: 'text-emerald-600' },
-  { accent: '#f59e0b', iconBg: 'bg-amber-100',   iconText: 'text-amber-600' },
-  { accent: '#ec4899', iconBg: 'bg-pink-100',    iconText: 'text-pink-600' },
-  { accent: '#06b6d4', iconBg: 'bg-cyan-100',    iconText: 'text-cyan-600' },
-  { accent: '#f97316', iconBg: 'bg-orange-100',  iconText: 'text-orange-600' },
-  { accent: '#6366f1', iconBg: 'bg-indigo-100',  iconText: 'text-indigo-600' },
-  { accent: '#14b8a6', iconBg: 'bg-teal-100',    iconText: 'text-teal-600' },
-  { accent: '#e11d48', iconBg: 'bg-rose-100',    iconText: 'text-rose-600' },
-  { accent: '#0ea5e9', iconBg: 'bg-sky-100',     iconText: 'text-sky-600' },
-  { accent: '#a855f7', iconBg: 'bg-purple-100',  iconText: 'text-purple-600' },
-  { accent: '#84cc16', iconBg: 'bg-lime-100',    iconText: 'text-lime-600' },
-  { accent: '#ef4444', iconBg: 'bg-red-100',     iconText: 'text-red-600' },
-  { accent: '#22d3ee', iconBg: 'bg-cyan-100',    iconText: 'text-cyan-600' },
-  { accent: '#d946ef', iconBg: 'bg-fuchsia-100', iconText: 'text-fuchsia-600' },
-  { accent: '#16a34a', iconBg: 'bg-green-100',   iconText: 'text-green-600' },
-  { accent: '#ca8a04', iconBg: 'bg-yellow-100',  iconText: 'text-yellow-600' },
-  { accent: '#7c3aed', iconBg: 'bg-violet-100',  iconText: 'text-violet-600' },
-  { accent: '#0891b2', iconBg: 'bg-cyan-100',    iconText: 'text-cyan-600' },
+  { accent: CHART_SERIES[0],  iconBg: 'bg-blue-100',    iconText: 'text-blue-600' },
+  { accent: CHART_SERIES[1],  iconBg: 'bg-violet-100',  iconText: 'text-violet-600' },
+  { accent: CHART_SERIES[2],  iconBg: 'bg-emerald-100', iconText: 'text-emerald-600' },
+  { accent: CHART_SERIES[3],  iconBg: 'bg-amber-100',   iconText: 'text-amber-600' },
+  { accent: CHART_SERIES[4],  iconBg: 'bg-pink-100',    iconText: 'text-pink-600' },
+  { accent: CHART_SERIES[5],  iconBg: 'bg-cyan-100',    iconText: 'text-cyan-600' },
+  { accent: CHART_SERIES[6],  iconBg: 'bg-orange-100',  iconText: 'text-orange-600' },
+  { accent: CHART_SERIES[7],  iconBg: 'bg-indigo-100',  iconText: 'text-indigo-600' },
+  { accent: CHART_SERIES[0],  iconBg: 'bg-teal-100',    iconText: 'text-teal-600' },
+  { accent: CHART_SERIES[1],  iconBg: 'bg-rose-100',    iconText: 'text-rose-600' },
+  { accent: CHART_SERIES[2],  iconBg: 'bg-sky-100',     iconText: 'text-sky-600' },
+  { accent: CHART_SERIES[3],  iconBg: 'bg-purple-100',  iconText: 'text-purple-600' },
+  { accent: CHART_SERIES[4],  iconBg: 'bg-lime-100',    iconText: 'text-lime-600' },
+  { accent: CHART_SERIES[5],  iconBg: 'bg-red-100',     iconText: 'text-red-600' },
+  { accent: CHART_SERIES[6],  iconBg: 'bg-cyan-100',    iconText: 'text-cyan-600' },
+  { accent: CHART_SERIES[7],  iconBg: 'bg-fuchsia-100', iconText: 'text-fuchsia-600' },
+  { accent: CHART_SERIES[0],  iconBg: 'bg-green-100',   iconText: 'text-green-600' },
+  { accent: CHART_SERIES[1],  iconBg: 'bg-yellow-100',  iconText: 'text-yellow-600' },
+  { accent: CHART_SERIES[2],  iconBg: 'bg-violet-100',  iconText: 'text-violet-600' },
+  { accent: CHART_SERIES[3],  iconBg: 'bg-cyan-100',    iconText: 'text-cyan-600' },
 ]
 
 // ─── Collapsible Section ────────────────────────────────────────
@@ -169,18 +170,18 @@ function CollapsibleSection({
 }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="border-t border-slate-200">
+    <div className="border-t border-hairline">
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center gap-2 w-full py-3 text-left group"
       >
         {open ? (
-          <ChevronDown className="w-3.5 h-3.5 text-slate-400" strokeWidth={2} />
+          <ChevronDown className="w-3.5 h-3.5 text-ink-mute" strokeWidth={2} />
         ) : (
-          <ChevronRight className="w-3.5 h-3.5 text-slate-400" strokeWidth={2} />
+          <ChevronRight className="w-3.5 h-3.5 text-ink-mute" strokeWidth={2} />
         )}
-        <Icon className="w-3.5 h-3.5 text-slate-400" strokeWidth={2} />
-        <span className="text-xs font-bold uppercase tracking-wider text-slate-600 group-hover:text-slate-900 transition-colors">
+        <Icon className="w-3.5 h-3.5 text-ink-mute" strokeWidth={2} />
+        <span className="text-xs font-medium uppercase tracking-wider text-ink-secondary group-hover:text-ink transition-colors">
           {title}
         </span>
         {badge}
@@ -194,7 +195,7 @@ function CollapsibleSection({
 
 function SectionLabel({ children, icon: Icon }: { children: React.ReactNode; icon?: any }) {
   return (
-    <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+    <h4 className="text-[11px] font-medium uppercase tracking-wider text-ink-mute flex items-center gap-1.5">
       {Icon && <Icon className="w-3.5 h-3.5" strokeWidth={2} />}
       {children}
     </h4>
@@ -405,7 +406,7 @@ export function InverterDetailSection({
 
   return (
     <div
-      className="bg-white rounded-md border border-slate-200 overflow-hidden shadow-card"
+      className="bg-canvas rounded-card border border-hairline overflow-hidden shadow-card"
       style={{ borderTopWidth: 3, borderTopColor: color.accent }}
     >
       {/* ── Inverter Mini-Hero Header (4 zones) ────────────────── */}
@@ -414,12 +415,12 @@ export function InverterDetailSection({
         {/* ZONE 1 — Identity row */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <div className={cn('w-9 h-9 rounded-md flex items-center justify-center shrink-0', color.iconBg)}>
+            <div className={cn('w-9 h-9 rounded-input flex items-center justify-center shrink-0', color.iconBg)}>
               <Cpu className={cn('w-4 h-4', color.iconText)} strokeWidth={2} />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-sm font-bold text-slate-900 font-mono truncate">
+                <h3 className="text-sm font-medium text-ink tabular-nums truncate">
                   {device.device_name || device.id}
                 </h3>
                 {/* THE status chip — driven by the unified connectivity
@@ -461,7 +462,7 @@ export function InverterDetailSection({
                   </span>
                 )}
               </div>
-              <p className="text-[10px] text-slate-500 flex items-center gap-1.5 flex-wrap mt-0.5">
+              <p className="text-[10px] text-ink-mute flex items-center gap-1.5 flex-wrap mt-0.5">
                 <span>{device.model || 'Inverter'}</span>
                 {providerMeta && (
                   <span
@@ -481,9 +482,9 @@ export function InverterDetailSection({
                   <>
                     <span className="text-slate-300">·</span>
                     <span>
-                      <span className="font-mono font-semibold text-slate-700">{producingStrings.length}</span>
+                      <span className="tabular-nums font-medium text-ink-secondary">{producingStrings.length}</span>
                       <span> of </span>
-                      <span className="font-mono font-semibold text-slate-700">{totalStrings}</span>
+                      <span className="tabular-nums font-medium text-ink-secondary">{totalStrings}</span>
                       <span> strings producing</span>
                     </span>
                   </>
@@ -494,11 +495,11 @@ export function InverterDetailSection({
                   last-data timestamp. Wording depends on connectivity + whether
                   the provider exposes a vendor "last data" timestamp. */}
               {connectivity && (
-                <p className="text-[10px] text-slate-400 mt-0.5">
+                <p className="text-[10px] text-ink-mute mt-0.5">
                   {connectivity === 'frozen' ? (
                     <span className={STATUS_STYLES.frozen.fg}>
                       feed stalled — last data{' '}
-                      <span className="font-mono font-semibold">
+                      <span className="tabular-nums font-medium">
                         {relativeTime(device.effective_fresh_at)}
                       </span>
                     </span>
@@ -508,7 +509,7 @@ export function InverterDetailSection({
                     // label them so zeros aren't read as a live fault.
                     <>
                       idle · night — readings below are from{' '}
-                      <span className="font-mono font-semibold text-slate-500">
+                      <span className="tabular-nums font-medium text-ink-mute">
                         {relativeTime(device.effective_fresh_at)}
                       </span>
                       <span className="text-slate-300"> (normal overnight)</span>
@@ -516,14 +517,14 @@ export function InverterDetailSection({
                   ) : device.vendor_last_data_at != null ? (
                     <>
                       vendor last data{' '}
-                      <span className="font-mono font-semibold text-slate-500">
+                      <span className="tabular-nums font-medium text-ink-mute">
                         {relativeTime(device.vendor_last_data_at)}
                       </span>
                     </>
                   ) : (
                     <>
                       last reading change{' '}
-                      <span className="font-mono font-semibold text-slate-500">
+                      <span className="tabular-nums font-medium text-ink-mute">
                         {relativeTime(device.effective_fresh_at)}
                       </span>
                     </>
@@ -572,9 +573,9 @@ export function InverterDetailSection({
             Night-aware: totalPower is summed from the LAST STORED readings —
             at night those are dusk leftovers (e.g. 669 W, 8 h old), not live
             production. Show "—" while idle instead of stale watts. */}
-        <div className="flex items-center gap-2 flex-wrap text-[13px] font-mono font-semibold text-slate-900">
+        <div className="flex items-center gap-2 flex-wrap text-[13px] tabular-nums font-medium text-ink">
           {connectivity === 'idle' ? (
-            <span className="text-slate-400">— <span className="text-[11px] font-semibold">W</span></span>
+            <span className="text-ink-mute">— <span className="text-[11px] font-medium">W</span></span>
           ) : (
             <span>{formatPower(totalPower)}</span>
           )}
@@ -582,24 +583,24 @@ export function InverterDetailSection({
           {nativeKwhToday != null && nativeKwhToday > 0 ? (
             <span>
               {nativeKwhToday.toFixed(1)}
-              <span className="text-[11px] font-semibold text-slate-500 ml-0.5">kWh today</span>
+              <span className="text-[11px] font-medium text-ink-mute ml-0.5">kWh today</span>
             </span>
           ) : strings.some(s => s.energy_kwh != null) ? (
             <span>
               {strings.reduce((sum, s) => sum + (s.energy_kwh || 0), 0).toFixed(1)}
-              <span className="text-[11px] font-semibold text-slate-500 ml-0.5">kWh today</span>
+              <span className="text-[11px] font-medium text-ink-mute ml-0.5">kWh today</span>
             </span>
           ) : (
-            <span className="text-slate-400">— kWh today</span>
+            <span className="text-ink-mute">— kWh today</span>
           )}
           <span className="text-slate-300">·</span>
           {avgCurrent > 0 && connectivity !== 'idle' ? (
             <span>
               {avgCurrent.toFixed(2)}
-              <span className="text-[11px] font-semibold text-slate-500 ml-0.5">A avg</span>
+              <span className="text-[11px] font-medium text-ink-mute ml-0.5">A avg</span>
             </span>
           ) : (
-            <span className="text-slate-400">— A avg</span>
+            <span className="text-ink-mute">— A avg</span>
           )}
         </div>
 
@@ -608,15 +609,15 @@ export function InverterDetailSection({
         {totalStrings > 0 && connectivity !== 'idle' && (
           <div>
             <div className="flex items-center justify-between text-[10px] mb-1.5">
-              <span className="font-bold uppercase tracking-widest text-slate-400">String Health</span>
+              <span className="font-medium uppercase tracking-widest text-ink-mute">String Health</span>
               <span
-                className="font-mono font-semibold text-slate-700"
+                className="tabular-nums font-medium text-ink-secondary"
                 title="IEC 61724-1 availability proxy: strings in NORMAL status vs total"
               >
                 {healthPct}% available
               </span>
             </div>
-            <div className="flex gap-0.5 h-1.5 rounded-full overflow-hidden bg-slate-100">
+            <div className="flex gap-0.5 h-1.5 rounded-full overflow-hidden bg-canvas-soft">
               {summary.normal > 0 && (
                 <div
                   className={cn(STATUS_STYLES.healthy.dot, 'transition-all')}
@@ -648,30 +649,30 @@ export function InverterDetailSection({
                 />
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-[10px] text-slate-600">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-[10px] text-ink-secondary">
               <span className="flex items-center gap-1">
                 <span className={cn('w-1.5 h-1.5 rounded-full', STATUS_STYLES.healthy.dot)} />
-                <span className="font-mono font-semibold">{summary.normal}</span>
+                <span className="tabular-nums font-medium">{summary.normal}</span>
                 <span>Normal</span>
               </span>
               <span className="flex items-center gap-1">
                 <span className={cn('w-1.5 h-1.5 rounded-full', STATUS_STYLES.warning.dot)} />
-                <span className="font-mono font-semibold">{summary.warning}</span>
+                <span className="tabular-nums font-medium">{summary.warning}</span>
                 <span>Warning</span>
               </span>
               <span className="flex items-center gap-1">
                 <span className={cn('w-1.5 h-1.5 rounded-full', STATUS_STYLES.critical.dot)} />
-                <span className="font-mono font-semibold">{summary.critical}</span>
+                <span className="tabular-nums font-medium">{summary.critical}</span>
                 <span>Critical</span>
               </span>
               <span className="flex items-center gap-1">
                 <span className={cn('w-1.5 h-1.5 rounded-full', STATUS_STYLES['open-circuit'].dot)} />
-                <span className="font-mono font-semibold">{summary.openCircuit}</span>
+                <span className="tabular-nums font-medium">{summary.openCircuit}</span>
                 <span>Open</span>
               </span>
               <span className="flex items-center gap-1">
                 <span className={cn('w-1.5 h-1.5 rounded-full', STATUS_STYLES.offline.dot)} />
-                <span className="font-mono font-semibold">{summary.disconnected}</span>
+                <span className="tabular-nums font-medium">{summary.disconnected}</span>
                 <span>Offline</span>
               </span>
             </div>
@@ -688,16 +689,16 @@ export function InverterDetailSection({
               : 50
           return (
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
+              <div className="text-[10px] font-medium uppercase tracking-widest text-ink-mute mb-1.5">
                 24h Power
               </div>
 
               {/* Chart with overlay dashed line + arrow at peak */}
               <div className="relative -mx-1">
-                <Sparkline data={sparklineKwValues} variant="area" color="#F59E0B" height={56} />
+                <Sparkline data={sparklineKwValues} variant="area" color="var(--chart-1)" height={56} />
                 {/* Dashed vertical line at peak X */}
                 <div
-                  className="absolute top-0 bottom-0 border-l border-dashed border-solar-gold-400/70 pointer-events-none"
+                  className="absolute top-0 bottom-0 border-l border-dashed border-primary/70 pointer-events-none"
                   style={{ left: `calc(${peakXPct}% + 4px)` }}
                 />
               </div>
@@ -705,17 +706,17 @@ export function InverterDetailSection({
               {/* Peak caption row — positioned directly under the peak X */}
               <div className="relative h-5 mt-0.5">
                 <div
-                  className="absolute text-[10px] font-mono whitespace-nowrap -translate-x-1/2 flex items-center gap-1"
+                  className="absolute text-[10px] tabular-nums whitespace-nowrap -translate-x-1/2 flex items-center gap-1"
                   style={{ left: `calc(${peakXPct}% + 4px)` }}
                 >
-                  <span className="text-solar-gold-600">▲</span>
-                  <span className="text-slate-500">
+                  <span className="text-primary">▲</span>
+                  <span className="text-ink-mute">
                     Peak{' '}
-                    <span className="font-semibold text-slate-900">{formatPower(peakW)}</span>
+                    <span className="font-medium text-ink">{formatPower(peakW)}</span>
                     {peakHourLabel && (
                       <>
                         {' at '}
-                        <span className="font-semibold text-slate-900">{peakHourLabel}</span>
+                        <span className="font-medium text-ink">{peakHourLabel}</span>
                       </>
                     )}
                   </span>
@@ -723,14 +724,14 @@ export function InverterDetailSection({
               </div>
 
               {/* Bottom axis: 24h ago · now delta · NOW */}
-              <div className="flex justify-between items-center text-[9px] font-mono text-slate-400 mt-2 px-1">
+              <div className="flex justify-between items-center text-[9px] tabular-nums text-ink-mute mt-2 px-1">
                 <span>24h ago</span>
                 {nowVsPeakPct !== null && (
-                  <span className="flex items-center gap-1 text-slate-500">
+                  <span className="flex items-center gap-1 text-ink-mute">
                     Now
                     <span
                       className={cn(
-                        'font-bold inline-flex items-center gap-0.5',
+                        'font-medium inline-flex items-center gap-0.5',
                         nowVsPeakPct >= 0 ? 'text-emerald-700' : 'text-red-700',
                       )}
                     >
@@ -755,7 +756,7 @@ export function InverterDetailSection({
       <div className="px-4 sm:px-5 pb-4 space-y-0">
         {/* ── String Health Matrix ──────────────────────────────── */}
         {strings.length > 0 && (
-          <div className="py-4 border-t border-slate-200">
+          <div className="py-4 border-t border-hairline">
             <div className="mb-3">
               <SectionLabel>String Health Map</SectionLabel>
             </div>
@@ -765,27 +766,27 @@ export function InverterDetailSection({
 
         {/* ── String Comparison Table (primary data view) ────── */}
         {strings.length > 0 && (
-          <div className="py-4 border-t border-slate-200">
+          <div className="py-4 border-t border-hairline">
             <div className="flex items-center justify-between mb-3">
               <SectionLabel icon={Table2}>String Comparison</SectionLabel>
               {avgCurrent > 0 && connectivity !== 'idle' && (
-                <span className="text-[10px] text-slate-400 font-mono">
+                <span className="text-[10px] text-ink-mute tabular-nums">
                   Avg: {avgCurrent.toFixed(2)}A
                 </span>
               )}
             </div>
             {/* Status Legend — compact view, expand for full explanations */}
-            <details className="mb-3 rounded-sm border border-slate-200 bg-slate-50 group">
+            <details className="mb-3 rounded-input border border-hairline bg-canvas-soft group">
               <summary className="px-2.5 py-2 cursor-pointer list-none flex items-center justify-between hover:bg-slate-100/60 transition-colors">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-ink-mute">
                   Status Guide (IEC 62446)
                 </p>
-                <span className="text-[10px] text-slate-400 group-open:hidden">▾ click to expand</span>
-                <span className="text-[10px] text-slate-400 hidden group-open:inline">▴ collapse</span>
+                <span className="text-[10px] text-ink-mute group-open:hidden">▾ click to expand</span>
+                <span className="text-[10px] text-ink-mute hidden group-open:inline">▴ collapse</span>
               </summary>
               <div className="px-2.5 pb-2.5 pt-1">
                 {/* Compact one-liner row — always the first view inside the expand */}
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-600 mb-3">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-ink-secondary mb-3">
                   {([
                     { key: 'healthy', short: STATUS_STYLES.healthy.shortDesc },
                     { key: 'warning', short: STATUS_STYLES.warning.shortDesc },
@@ -803,17 +804,17 @@ export function InverterDetailSection({
                   })}
                 </div>
                 {/* Full explanations — collapsible detail per status */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2 border-t border-slate-200">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2 border-t border-hairline">
                   {(['healthy', 'warning', 'critical', 'open-circuit', 'offline'] as const).map((key) => {
                     const style = STATUS_STYLES[key]
                     return (
-                      <div key={key} className={cn('rounded-sm border p-2', style.border, style.bg)}>
+                      <div key={key} className={cn('rounded-input border p-2', style.border, style.bg)}>
                         <div className="flex items-center gap-1.5 mb-1">
                           <span className={cn('w-2 h-2 rounded-full', style.dot)} />
-                          <span className={cn('text-[11px] font-bold uppercase tracking-wider', style.fg)}>{style.label}</span>
+                          <span className={cn('text-[11px] font-medium uppercase tracking-wider', style.fg)}>{style.label}</span>
                         </div>
-                        <p className="text-[11px] text-slate-700 leading-snug mb-1">{style.fullDesc}</p>
-                        <p className="text-[10px] text-slate-500 leading-snug"><strong className="text-slate-600">What to check:</strong> {style.whatToCheck}</p>
+                        <p className="text-[11px] text-ink-secondary leading-snug mb-1">{style.fullDesc}</p>
+                        <p className="text-[10px] text-ink-mute leading-snug"><strong className="text-ink-secondary">What to check:</strong> {style.whatToCheck}</p>
                       </div>
                     )
                   })}
@@ -828,7 +829,7 @@ export function InverterDetailSection({
 
         {/* ── Performance vs Average Chart ─────────────────────── */}
         {strings.length > 0 && (
-          <div className="py-4 border-t border-slate-200">
+          <div className="py-4 border-t border-hairline">
             <div className="flex items-center justify-between mb-2">
               <SectionLabel>String Current Comparison</SectionLabel>
             </div>
@@ -838,7 +839,7 @@ export function InverterDetailSection({
 
         {/* ── Active Alerts ────────────────────────────────────── */}
         {alerts.length > 0 && (
-          <div className="py-4 border-t border-slate-200">
+          <div className="py-4 border-t border-hairline">
             <div className="flex items-center gap-2 mb-3">
               <SectionLabel>Active Alerts</SectionLabel>
               <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
@@ -853,7 +854,7 @@ export function InverterDetailSection({
         )}
 
         {/* ── String Trend Chart ───────────────────────────────── */}
-        <div className="py-4 border-t border-slate-200">
+        <div className="py-4 border-t border-hairline">
           <div className="flex items-center justify-between mb-3">
             <SectionLabel>String Current Trend</SectionLabel>
             <Select value={trendPeriod} onValueChange={(v) => setTrendPeriod(v as TrendPeriod)}>
@@ -871,9 +872,9 @@ export function InverterDetailSection({
           {trendData.length > 0 ? (
             <StringTrendChart data={trendData} />
           ) : (
-            <div className="text-center py-10 text-slate-400">
+            <div className="text-center py-10 text-ink-mute">
               <TrendingUp className="w-5 h-5 mx-auto mb-1.5 text-slate-300" strokeWidth={2} />
-              <p className="text-xs font-semibold">No trend data for this period</p>
+              <p className="text-xs font-medium">No trend data for this period</p>
             </div>
           )}
         </div>
@@ -918,7 +919,7 @@ export function InverterDetailSection({
                 <p className="text-xs font-semibold">Not enough historical data yet</p>
                 <button
                   onClick={fetchMonthly}
-                  className="text-[11px] font-bold text-solar-gold-600 hover:text-solar-gold-700 mt-2 uppercase tracking-wider transition-colors"
+                  className="text-[11px] font-medium text-primary hover:text-primary-press mt-2 uppercase tracking-wider transition-colors"
                 >
                   Load report
                 </button>

@@ -71,12 +71,12 @@ export function PlantTypeControl({ plantCode }: { plantCode: string }) {
   }
 
   if (loading) {
-    return <div className="h-7 w-44 bg-slate-100 rounded-sm animate-pulse" />
+    return <div className="h-7 w-44 bg-canvas-soft rounded-input animate-pulse" />
   }
 
   return (
     <div className="flex items-center gap-2">
-      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+      <label className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
         Plant Type
       </label>
       <select
@@ -85,8 +85,8 @@ export function PlantTypeControl({ plantCode }: { plantCode: string }) {
         onChange={(ev) => handleChange(ev.target.value as PlantType)}
         aria-label="Plant type"
         className={cn(
-          'h-7 px-2 text-[12px] border border-slate-200 rounded-sm bg-white text-slate-900',
-          'focus:outline-none focus:border-solar-gold focus:ring-2 focus:ring-solar-gold/20',
+          'h-7 px-2 text-[12px] border border-hairline-input rounded-input bg-canvas text-ink',
+          'focus:outline-none focus:border-primary focus:shadow-focus',
           'disabled:opacity-50',
         )}
       >
@@ -94,11 +94,11 @@ export function PlantTypeControl({ plantCode }: { plantCode: string }) {
           <option key={t} value={t}>{PLANT_TYPE_LABELS[t]}</option>
         ))}
       </select>
-      {saving && <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" strokeWidth={2} />}
+      {saving && <Loader2 className="w-3.5 h-3.5 animate-spin text-ink-mute" strokeWidth={2} />}
       {savedTick && <Check className="w-3.5 h-3.5 text-emerald-600" strokeWidth={2.5} />}
       {error && <span className="text-[10px] font-semibold text-red-600">{error}</span>}
       <span
-        className="inline-flex items-center text-slate-400"
+        className="inline-flex items-center text-ink-mute"
         title="V1 performance scoring is identical for Single Location. Multi-Location is a marker for V1.1 branch/multi-location rollups and does not change scoring today."
       >
         <Info className="w-3.5 h-3.5" strokeWidth={2} />
