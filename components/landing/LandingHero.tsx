@@ -110,8 +110,6 @@ export default function LandingHero({ signedIn }: { signedIn: boolean }) {
           <path className="line" d="M0 300 C 320 300, 520 96, 720 88 C 920 96, 1120 300, 1440 300" />
         </svg>
 
-        <div className="grain" aria-hidden="true" />
-
         <main className="content">
           <div className="brand r2 d1">
             <span className="mark" aria-hidden="true">
@@ -217,9 +215,6 @@ export default function LandingHero({ signedIn }: { signedIn: boolean }) {
           stroke-dasharray:2200;stroke-dashoffset:2200;animation:draw 2.1s 1.4s cubic-bezier(.4,0,.2,1) forwards}
         @keyframes draw{to{stroke-dashoffset:0}}
         @keyframes areafade{to{opacity:1}}
-
-        .grain{position:absolute;inset:0;z-index:10;pointer-events:none;opacity:.035;mix-blend-mode:multiply;
-          background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
 
         .content{position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}
         .r2{opacity:0;transform:translateY(14px);animation:up .8s cubic-bezier(.16,1,.3,1) forwards}
