@@ -303,15 +303,15 @@ export function NocConsole() {
   if (error) {
     const isAuthErr = (error as any)?.status === 401 || (error as any)?.status === 403
     return (
-      <div className="bg-white border border-slate-200 rounded-sm p-8 text-center">
+      <div className="bg-canvas border border-hairline rounded-sm p-8 text-center">
         <AlertTriangle className="w-8 h-8 text-red-500 mx-auto mb-3" strokeWidth={2} />
-        <p className="text-sm font-bold text-slate-900 mb-1">Unable to load NOC data</p>
-        <p className="text-xs text-slate-500 mb-4 max-w-md mx-auto">{(error as Error).message}</p>
+        <p className="text-sm font-medium text-ink mb-1">Unable to load NOC data</p>
+        <p className="text-xs text-ink-mute mb-4 max-w-md mx-auto">{(error as Error).message}</p>
         {!isAuthErr && (
           <button
             type="button"
             onClick={() => mutate()}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded-sm text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-hairline rounded-sm text-xs font-semibold text-ink-secondary hover:bg-slate-50"
           >
             <RefreshCw className="w-3.5 h-3.5" /> Retry
           </button>
@@ -396,14 +396,14 @@ export function NocConsole() {
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,420px)_1fr] gap-4">
         {/* Donut pane (left, sticky on lg+) — the client-validated centerpiece */}
         <div className="lg:sticky lg:top-4 self-start space-y-4">
-          <div className="bg-white border border-slate-200 rounded-sm p-5 shadow-card">
+          <div className="bg-canvas border border-hairline rounded-sm p-5 shadow-card">
             {firstLoad ? (
               <SkeletonDonut />
             ) : data ? (
               <FleetDonut data={data} mode={data.mode} selectedBuckets={filters.buckets} onBucketClick={toggleBucket} />
             ) : null}
           </div>
-          <div className="bg-white border border-slate-200 rounded-sm p-5 shadow-card">
+          <div className="bg-canvas border border-hairline rounded-sm p-5 shadow-card">
             {firstLoad || !data ? (
               <SkeletonDonut />
             ) : data.mode === 'prev-day' || !data.connectivity ? (
@@ -419,7 +419,7 @@ export function NocConsole() {
         </div>
 
         {/* Table pane (right) */}
-        <div className="bg-white border border-slate-200 rounded-sm shadow-card overflow-hidden">
+        <div className="bg-canvas border border-hairline rounded-sm shadow-card overflow-hidden">
           <FilterChips
             filters={filters} setFilters={setFilters} setQInput={setQInput} onClearAll={clearFacets}
             total={inverterMode ? inverterRows.length : data?.rows.total ?? 0}
@@ -500,10 +500,10 @@ function NocHeader({
   return (
     <div className="flex items-center justify-between flex-wrap gap-3 px-1">
       <div className="flex items-center gap-3">
-        <Activity className="w-5 h-5 text-emerald-600" strokeWidth={2} />
+        <Activity className="w-5 h-5 text-primary" strokeWidth={1.8} />
         <div>
-          <h1 className="text-lg font-bold text-slate-900 leading-tight">NOC — Site Triage</h1>
-          <p className="text-[11px] text-slate-500 font-mono">
+          <h1 className="text-xl font-light tracking-tight text-ink leading-tight">NOC — Site Triage</h1>
+          <p className="text-[11px] text-ink-mute tabular-nums">
             {timeBasisLabel ?? 'Loading…'}
           </p>
         </div>
@@ -511,14 +511,14 @@ function NocHeader({
       </div>
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="w-3.5 h-3.5 text-ink-mute absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="search"
             value={qInput}
             onChange={(e) => onQChange(e.target.value)}
             placeholder="Plant / inverter…"
             aria-label="Search plants and inverters"
-            className="text-xs text-slate-800 border border-slate-300 rounded-sm pl-8 pr-2 py-1.5 bg-white w-[190px] placeholder:text-slate-400 hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+            className="text-xs text-ink border border-hairline-input rounded-input pl-8 pr-2 py-1.5 bg-canvas w-[190px] placeholder:text-ink-mute focus:outline-none focus:border-primary focus:shadow-focus"
           />
         </div>
         <OrgFilter org={org} orgs={orgs} onChange={onOrgChange} />
@@ -527,7 +527,7 @@ function NocHeader({
           type="button"
           onClick={onRefresh}
           disabled={isRefreshing}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded-sm text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 border border-hairline rounded-pill text-xs font-medium text-ink-secondary hover:bg-canvas-soft disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <RefreshCw className={cn('w-3.5 h-3.5', isRefreshing && 'animate-spin')} />
           Refresh
@@ -546,7 +546,7 @@ function ModeToggle({ mode, onChange }: { mode: NocMode; onChange: (m: NocMode) 
     { value: 'prev-day', label: 'Yesterday · settled', title: 'Final scores for the full previous day (PKT). Settled report — connectivity hidden (live-only signal).' },
   ]
   return (
-    <div role="group" aria-label="Time basis" className="inline-flex border border-slate-300 rounded-sm overflow-hidden">
+    <div role="group" aria-label="Time basis" className="inline-flex items-center gap-0.5 border border-hairline rounded-pill bg-canvas p-[3px]">
       {opts.map((o) => (
         <button
           key={o.value}
@@ -555,10 +555,10 @@ function ModeToggle({ mode, onChange }: { mode: NocMode; onChange: (m: NocMode) 
           aria-pressed={mode === o.value}
           onClick={() => onChange(o.value)}
           className={cn(
-            'px-2.5 py-1.5 text-[11px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/40',
+            'px-3.5 py-1.5 text-[11px] rounded-pill transition-colors focus:outline-none focus-visible:shadow-focus',
             mode === o.value
-              ? 'bg-slate-900 text-white'
-              : 'bg-white text-slate-600 hover:bg-slate-50',
+              ? 'bg-primary text-on-primary font-medium'
+              : 'text-ink-secondary font-normal hover:bg-canvas-soft',
           )}
         >
           {o.label}
@@ -583,7 +583,7 @@ function UpdatedAgo({ dataAt, isRefreshing, autoRefresh }: { dataAt: number | nu
   }
   return (
     <span
-      className="inline-flex items-center gap-1.5 text-[11px] font-mono tabular-nums text-slate-500"
+      className="inline-flex items-center gap-1.5 text-[11px] tabular-nums tabular-nums text-ink-mute"
       title={autoRefresh ? 'Auto-refreshes every 60s' : 'Settled view — refresh manually if needed'}
     >
       <span className={cn('w-1.5 h-1.5 rounded-full', isRefreshing ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300')} aria-hidden="true" />
@@ -605,7 +605,7 @@ function OrgFilter({
     <select
       value={org ?? '__all__'}
       onChange={(e) => onChange(e.target.value)}
-      className="text-xs font-semibold text-slate-700 border border-slate-300 rounded-sm px-2 py-1.5 bg-white hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[160px]"
+      className="text-xs font-semibold text-ink-secondary border border-hairline rounded-sm px-2 py-1.5 bg-canvas hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[160px]"
       aria-label="Filter by organization"
     >
       <option value="__all__">All Organizations</option>
@@ -668,8 +668,14 @@ function KpiStrip({
   const toneCls: Record<string, string> = {
     red: 'text-red-700',
     orange: 'text-orange-700',
-    slate: 'text-slate-700',
+    slate: 'text-ink',
     emerald: 'text-emerald-700',
+  }
+  const dotCls: Record<string, string> = {
+    red: 'bg-red-500',
+    orange: 'bg-amber-500',
+    slate: 'bg-slate-300',
+    emerald: 'bg-emerald-500',
   }
 
   return (
@@ -683,16 +689,17 @@ function KpiStrip({
             onClick={c.onClick}
             aria-pressed={c.onClick ? c.active : undefined}
             className={cn(
-              'bg-white border rounded-sm px-3 py-2.5 text-left shadow-card transition-colors',
-              c.active ? 'border-slate-900 ring-1 ring-slate-900/10' : 'border-slate-200',
-              c.onClick && 'hover:border-slate-400 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40',
+              'bg-canvas border rounded-card px-4 py-3.5 text-left shadow-card transition-all',
+              c.active ? 'border-primary shadow-focus' : 'border-hairline',
+              c.onClick && 'cursor-pointer hover:-translate-y-px hover:shadow-hover focus:outline-none focus-visible:shadow-focus',
             )}
           >
-            <div className={cn('text-xl font-bold font-mono tabular-nums leading-none', toneCls[c.tone])}>
-              {c.value}
-            </div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mt-1">
+            <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wider text-ink-mute">
+              <span className={cn('w-[7px] h-[7px] rounded-full flex-none', dotCls[c.tone])} />
               {c.label}
+            </div>
+            <div className={cn('text-[28px] font-light tabular-nums leading-none mt-2', toneCls[c.tone])}>
+              {c.value}
             </div>
           </Tag>
         )
@@ -731,7 +738,7 @@ function FilterChips({
     chips.push({
       key: `b:${b}`,
       label: `Health: ${BUCKET_LABEL[b]}`,
-      cls: 'bg-slate-100 border-slate-300 text-slate-800',
+      cls: 'bg-slate-100 border-hairline text-slate-800',
       onRemove: () => setFilters((f) => ({ ...f, page: 1, buckets: f.buckets.filter((x) => x !== b) })),
     })
   }
@@ -748,18 +755,18 @@ function FilterChips({
     chips.push({
       key: 'q',
       label: `“${filters.q.trim()}”`,
-      cls: 'bg-slate-100 border-slate-300 text-slate-800',
+      cls: 'bg-slate-100 border-hairline text-slate-800',
       onRemove: () => { setQInput(''); setFilters((f) => ({ ...f, q: '', page: 1 })) },
     })
   }
 
   return (
-    <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-3 flex-wrap">
+    <div className="px-4 py-3 border-b border-hairline flex items-center justify-between gap-3 flex-wrap">
       <div className="flex items-center gap-2 min-w-0 flex-wrap">
-        <h2 className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
+        <h2 className="text-[11px] font-medium uppercase tracking-widest text-ink-mute">
           {unitLabel}
         </h2>
-        <span className="text-[11px] font-mono tabular-nums text-slate-400">
+        <span className="text-[11px] tabular-nums tabular-nums text-ink-mute">
           ({isLoading ? '…' : total.toLocaleString()})
         </span>
         {chips.map((c) => (
@@ -783,7 +790,7 @@ function FilterChips({
         <button
           type="button"
           onClick={onClearAll}
-          className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 px-2 py-0.5"
+          className="text-[11px] font-semibold text-ink-secondary hover:text-ink px-2 py-0.5"
           title="Clear all filters (Esc)"
         >
           Clear all ×
@@ -812,13 +819,13 @@ function FleetDonut({
     <div className="flex flex-col items-center gap-4">
       <div className="self-start flex items-center justify-between gap-2 mb-1 w-full">
         <div className="flex items-center gap-2">
-          <Activity className="w-4 h-4 text-slate-400" strokeWidth={2} />
-          <h2 className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
+          <Activity className="w-4 h-4 text-ink-mute" strokeWidth={2} />
+          <h2 className="text-[11px] font-medium uppercase tracking-widest text-ink-mute">
             String Health
           </h2>
         </div>
         <span
-          className="text-[10px] font-semibold text-slate-400"
+          className="text-[10px] font-semibold text-ink-mute"
           title={mode === 'today'
             ? 'Today’s scores recompute every ~5 minutes and settle as the day’s production accumulates.'
             : 'Final scores for the full previous day (PKT) — these do not change.'}
@@ -843,12 +850,12 @@ function FleetDonut({
       />
       {/* V1 rollup legend: the 3 arcs summarise the 5 per-string cell bands on
           /analysis, so the console and the cells always reconcile. */}
-      <p className="text-[10px] text-slate-400 text-center">
+      <p className="text-[10px] text-ink-mute text-center">
         Healthy = Normal · Abnormal = Watch + Underperforming (+ no-data) · Critical = Serious Fault + Dead
       </p>
       {(data.excluded.unused + data.excluded.nonStandard) > 0 && (
-        <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
-          <Info className="w-3 h-3 text-slate-400" strokeWidth={2} />
+        <p className="text-[11px] text-ink-mute flex items-center gap-1.5">
+          <Info className="w-3 h-3 text-ink-mute" strokeWidth={2} />
           {data.excluded.unused + data.excluded.nonStandard} string
           {data.excluded.unused + data.excluded.nonStandard === 1 ? '' : 's'} excluded from view
         </p>
@@ -891,10 +898,10 @@ function FrozenFeedBanner({
   const plants = [...new Set(frozen.map((d) => d.plantName))]
   const shown = plants.slice(0, 3).join(', ') + (plants.length > 3 ? ` +${plants.length - 3} more` : '')
   return (
-    <div className="bg-amber-50 border border-amber-300 rounded-sm px-4 py-2.5 flex items-center gap-3 flex-wrap">
-      <Snowflake className="w-4 h-4 text-amber-600 flex-shrink-0" strokeWidth={2} />
-      <p className="text-xs text-amber-900 flex-1 min-w-[240px]">
-        <span className="font-bold">{frozen.length} inverter feed{frozen.length === 1 ? '' : 's'} frozen</span>
+    <div className="bg-amber-50 border border-amber-200 border-l-[3px] border-l-amber-500 rounded-card px-4 py-3.5 flex items-start gap-3 flex-wrap">
+      <Snowflake className="w-[18px] h-[18px] text-amber-600 flex-shrink-0 mt-0.5" strokeWidth={1.8} />
+      <p className="text-[13px] leading-relaxed text-amber-900 flex-1 min-w-[240px]">
+        <span className="font-medium">{frozen.length} inverter feed{frozen.length === 1 ? '' : 's'} frozen</span>
         {' — '}the vendor is repeating old data ({shown}
         {oldest ? `; last real data ${sinceLabel(oldest)} ago` : ''}).
         Replayed readings are excluded from scores and energy until fresh data arrives.
@@ -902,7 +909,7 @@ function FrozenFeedBanner({
       <button
         type="button"
         onClick={onInspect}
-        className="text-xs font-semibold text-amber-900 border border-amber-400 rounded-sm px-2.5 py-1 hover:bg-amber-100"
+        className="self-center whitespace-nowrap text-[12.5px] font-medium text-amber-900 border border-amber-500 rounded-pill px-3.5 py-1.5 hover:bg-amber-100"
       >
         Inspect frozen feeds
       </button>
@@ -918,19 +925,19 @@ function ConnectivityLiveOnlyNote({ onSwitchToToday }: { onSwitchToToday: () => 
     <div className="flex flex-col items-center gap-3 py-6 text-center">
       <div className="self-start flex items-center gap-2 mb-1">
         <Wifi className="w-4 h-4 text-slate-300" strokeWidth={2} />
-        <h2 className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+        <h2 className="text-[11px] font-medium uppercase tracking-widest text-ink-mute">
           Inverter Connectivity
         </h2>
       </div>
       <Wifi className="w-8 h-8 text-slate-300" strokeWidth={1.5} />
-      <p className="text-xs text-slate-500 max-w-[260px]">
+      <p className="text-xs text-ink-mute max-w-[260px]">
         Connectivity is a <span className="font-semibold">live</span> signal — there is no
         “yesterday” snapshot, so it is not shown on the settled view.
       </p>
       <button
         type="button"
         onClick={onSwitchToToday}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded-sm text-xs font-semibold text-slate-700 hover:bg-slate-50"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-hairline rounded-sm text-xs font-semibold text-ink-secondary hover:bg-slate-50"
       >
         Switch to Today · live
       </button>
@@ -960,8 +967,8 @@ function ConnectivityDonut({
   return (
     <div className="flex flex-col items-center gap-4">
       <div className="self-start flex items-center gap-2 mb-1">
-        <Wifi className="w-4 h-4 text-slate-400" strokeWidth={2} />
-        <h2 className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
+        <Wifi className="w-4 h-4 text-ink-mute" strokeWidth={2} />
+        <h2 className="text-[11px] font-medium uppercase tracking-widest text-ink-mute">
           Inverter Connectivity
         </h2>
       </div>
@@ -984,7 +991,7 @@ function ConnectivityDonut({
         ariaLabel={`Inverter connectivity: ${live} live, ${frozen} frozen, ${offline} offline (${total} reporting), ${idle} idle`}
       />
       {idle > 0 && (
-        <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
+        <p className="text-[11px] text-ink-mute flex items-center gap-1.5">
           <span
             className={cn('w-2 h-2 rounded-full', STATUS_STYLES[statusKeyFromConnectivity('idle')].dot)}
             aria-hidden="true"
@@ -1005,14 +1012,14 @@ function InvertersTable({ devices }: { devices: ConnectivityDevice[] }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs">
-        <thead className="bg-slate-50 border-b border-slate-200">
+        <thead className="bg-slate-50 border-b border-hairline">
           <tr>
-            <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[10px] text-slate-500">Plant</th>
-            <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[10px] text-slate-500">Inverter</th>
-            <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[10px] text-slate-500">Provider</th>
-            <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[10px] text-slate-500">Status</th>
-            <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[10px] text-slate-500">Last real data</th>
-            <th className="px-3 py-2 text-right font-bold uppercase tracking-wider text-[10px] text-slate-500"></th>
+            <th className="px-3 py-2 text-left font-medium uppercase tracking-wider text-[10px] text-ink-mute">Plant</th>
+            <th className="px-3 py-2 text-left font-medium uppercase tracking-wider text-[10px] text-ink-mute">Inverter</th>
+            <th className="px-3 py-2 text-left font-medium uppercase tracking-wider text-[10px] text-ink-mute">Provider</th>
+            <th className="px-3 py-2 text-left font-medium uppercase tracking-wider text-[10px] text-ink-mute">Status</th>
+            <th className="px-3 py-2 text-left font-medium uppercase tracking-wider text-[10px] text-ink-mute">Last real data</th>
+            <th className="px-3 py-2 text-right font-medium uppercase tracking-wider text-[10px] text-ink-mute"></th>
           </tr>
         </thead>
         <tbody>
@@ -1025,16 +1032,16 @@ function InvertersTable({ devices }: { devices: ConnectivityDevice[] }) {
                 onClick={() => window.open(href, '_blank', 'noopener')}
                 className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer"
               >
-                <td className="px-3 py-2 text-slate-900 font-medium truncate max-w-[200px]">{d.plantName}</td>
-                <td className="px-3 py-2 text-slate-700 font-mono truncate max-w-[160px]">{d.inverterName}</td>
-                <td className="px-3 py-2 text-slate-500 uppercase text-[10px] font-bold">{d.provider}</td>
+                <td className="px-3 py-2 text-ink font-medium truncate max-w-[200px]">{d.plantName}</td>
+                <td className="px-3 py-2 text-ink-secondary tabular-nums truncate max-w-[160px]">{d.inverterName}</td>
+                <td className="px-3 py-2 text-ink-mute uppercase text-[10px] font-medium">{d.provider}</td>
                 <td className="px-3 py-2">
-                  <span className={cn('inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider', style.fg)}>
+                  <span className={cn('inline-flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider', style.fg)}>
                     <span className={cn('w-1.5 h-1.5 rounded-full', style.dot)} />
                     {style.label}
                   </span>
                 </td>
-                <td className="px-3 py-2 font-mono tabular-nums text-slate-600">
+                <td className="px-3 py-2 tabular-nums tabular-nums text-ink-secondary">
                   {d.effectiveFreshAt ? `${sinceLabel(d.effectiveFreshAt)} ago` : '—'}
                 </td>
                 <td className="px-3 py-2 text-right">
@@ -1043,7 +1050,7 @@ function InvertersTable({ devices }: { devices: ConnectivityDevice[] }) {
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
-                    className="inline-flex items-center text-slate-400 hover:text-slate-900"
+                    className="inline-flex items-center text-ink-mute hover:text-ink"
                     aria-label={`Open ${d.plantName} in new tab`}
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
@@ -1064,15 +1071,15 @@ function StringsTable({ rows, frozenDeviceIds }: { rows: PerStringRow[]; frozenD
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs">
-        <thead className="bg-slate-50 border-b border-slate-200">
+        <thead className="bg-slate-50 border-b border-hairline">
           <tr>
-            <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[10px] text-slate-500">Org</th>
-            <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[10px] text-slate-500">Plant</th>
-            <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[10px] text-slate-500">Inverter</th>
-            <th className="px-3 py-2 text-right font-bold uppercase tracking-wider text-[10px] text-slate-500">String</th>
-            <th className="px-3 py-2 text-right font-bold uppercase tracking-wider text-[10px] text-slate-500">Score</th>
-            <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[10px] text-slate-500">Status</th>
-            <th className="px-3 py-2 text-right font-bold uppercase tracking-wider text-[10px] text-slate-500"></th>
+            <th className="px-3 py-2 text-left font-medium uppercase tracking-wider text-[10px] text-ink-mute">Org</th>
+            <th className="px-3 py-2 text-left font-medium uppercase tracking-wider text-[10px] text-ink-mute">Plant</th>
+            <th className="px-3 py-2 text-left font-medium uppercase tracking-wider text-[10px] text-ink-mute">Inverter</th>
+            <th className="px-3 py-2 text-right font-medium uppercase tracking-wider text-[10px] text-ink-mute">String</th>
+            <th className="px-3 py-2 text-right font-medium uppercase tracking-wider text-[10px] text-ink-mute">Score</th>
+            <th className="px-3 py-2 text-left font-medium uppercase tracking-wider text-[10px] text-ink-mute">Status</th>
+            <th className="px-3 py-2 text-right font-medium uppercase tracking-wider text-[10px] text-ink-mute"></th>
           </tr>
         </thead>
         <tbody>
@@ -1107,14 +1114,14 @@ function TableRow({ row, frozenFeed }: { row: PerStringRow; frozenFeed: boolean 
       onClick={() => linkRef.current?.click()}
       className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer focus:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/40"
     >
-      <td className="px-3 py-2 text-slate-700 truncate max-w-[140px]">{row.orgName}</td>
-      <td className="px-3 py-2 text-slate-900 font-medium truncate max-w-[180px]">{row.plantName}</td>
-      <td className="px-3 py-2 text-slate-700 max-w-[200px]">
+      <td className="px-3 py-2 text-ink-secondary truncate max-w-[140px]">{row.orgName}</td>
+      <td className="px-3 py-2 text-ink font-medium truncate max-w-[180px]">{row.plantName}</td>
+      <td className="px-3 py-2 text-ink-secondary max-w-[200px]">
         <span className="inline-flex items-center gap-1.5 max-w-full">
           <span className="truncate">{row.inverterName}</span>
           {frozenFeed && (
             <span
-              className="inline-flex items-center gap-0.5 flex-shrink-0 bg-amber-100 border border-amber-300 text-amber-800 rounded-sm px-1 py-px text-[9px] font-bold uppercase tracking-wide"
+              className="inline-flex items-center gap-0.5 flex-shrink-0 bg-amber-100 border border-amber-300 text-amber-800 rounded-sm px-1 py-px text-[9px] font-medium uppercase tracking-wide"
               title="This inverter's vendor feed is frozen (replaying old data). The score shown was computed before the feed stalled."
             >
               <Snowflake className="w-2.5 h-2.5" /> frozen feed
@@ -1122,12 +1129,12 @@ function TableRow({ row, frozenFeed }: { row: PerStringRow; frozenFeed: boolean 
           )}
         </span>
       </td>
-      <td className="px-3 py-2 text-right font-mono tabular-nums text-slate-900">{row.stringNumber}</td>
-      <td className="px-3 py-2 text-right font-mono tabular-nums text-slate-900">
+      <td className="px-3 py-2 text-right tabular-nums tabular-nums text-ink">{row.stringNumber}</td>
+      <td className="px-3 py-2 text-right tabular-nums tabular-nums text-ink">
         {row.healthScore === null ? '—' : row.healthScore.toFixed(1)}
       </td>
       <td className="px-3 py-2">
-        <span className="inline-flex items-center gap-1.5 text-slate-700">
+        <span className="inline-flex items-center gap-1.5 text-ink-secondary">
           <span className={cn('w-1.5 h-1.5 rounded-full', BUCKET_DOT_CLASS[row.bucket])} />
           {BUCKET_LABEL[row.bucket]}
         </span>
@@ -1139,7 +1146,7 @@ function TableRow({ row, frozenFeed }: { row: PerStringRow; frozenFeed: boolean 
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className="inline-flex items-center text-slate-400 hover:text-slate-900"
+          className="inline-flex items-center text-ink-mute hover:text-ink"
           aria-label={`Open ${row.plantName} in new tab`}
         >
           <ExternalLink className="w-3.5 h-3.5" />
@@ -1164,8 +1171,8 @@ function Pagination({
   const start = (page - 1) * pageSize + 1
   const end = Math.min(page * pageSize, total)
   return (
-    <div className="px-4 py-2.5 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-600">
-      <span className="font-mono tabular-nums">
+    <div className="px-4 py-2.5 border-t border-hairline flex items-center justify-between text-[11px] text-ink-secondary">
+      <span className="tabular-nums tabular-nums">
         {start.toLocaleString()}–{end.toLocaleString()} of {total.toLocaleString()}
       </span>
       <div className="flex items-center gap-1">
@@ -1173,18 +1180,18 @@ function Pagination({
           type="button"
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
-          className="px-2 py-1 border border-slate-300 rounded-sm font-semibold hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="px-2 py-1 border border-hairline rounded-sm font-semibold hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Prev
         </button>
-        <span className="px-2 font-mono tabular-nums">
+        <span className="px-2 tabular-nums tabular-nums">
           {page} / {maxPage}
         </span>
         <button
           type="button"
           disabled={page >= maxPage}
           onClick={() => onPageChange(page + 1)}
-          className="px-2 py-1 border border-slate-300 rounded-sm font-semibold hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="px-2 py-1 border border-hairline rounded-sm font-semibold hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Next
         </button>
@@ -1207,13 +1214,13 @@ function sinceLabel(iso: string | null): string {
 
 function AttentionPanel({ attention, mode }: { attention: AttentionPlant[]; mode: NocMode }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-sm shadow-card overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-2">
+    <div className="bg-canvas border border-hairline rounded-sm shadow-card overflow-hidden">
+      <div className="px-4 py-3 border-b border-hairline flex items-center gap-2">
         <Flame className="w-4 h-4 text-orange-600" strokeWidth={2} />
-        <h2 className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
+        <h2 className="text-[11px] font-medium uppercase tracking-widest text-ink-mute">
           Needs attention
         </h2>
-        <span className="text-[11px] text-slate-400">
+        <span className="text-[11px] text-ink-mute">
           {mode === 'today'
             ? '— all sites, unaffected by filters'
             : '— yesterday’s settled scores · critical strings only'}
@@ -1234,15 +1241,15 @@ function AttentionPanel({ attention, mode }: { attention: AttentionPlant[]; mode
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
               >
-                <span className="text-[11px] font-mono tabular-nums text-slate-400 w-5">{i + 1}.</span>
-                <span className="text-xs font-semibold text-slate-900 truncate max-w-[220px]">{p.plantName}</span>
-                <span className="text-[11px] text-slate-600 truncate flex-1">{parts.join(' · ')}</span>
+                <span className="text-[11px] tabular-nums tabular-nums text-ink-mute w-5">{i + 1}.</span>
+                <span className="text-xs font-semibold text-ink truncate max-w-[220px]">{p.plantName}</span>
+                <span className="text-[11px] text-ink-secondary truncate flex-1">{parts.join(' · ')}</span>
                 {since && (
-                  <span className="text-[11px] font-mono tabular-nums text-slate-500" title="Oldest data among this plant's frozen/offline inverters">
+                  <span className="text-[11px] tabular-nums tabular-nums text-ink-mute" title="Oldest data among this plant's frozen/offline inverters">
                     since {since}
                   </span>
                 )}
-                <ExternalLink className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                <ExternalLink className="w-3.5 h-3.5 text-ink-mute flex-shrink-0" />
               </a>
             </li>
           )
@@ -1257,10 +1264,10 @@ function AttentionPanel({ attention, mode }: { attention: AttentionPlant[]; mode
 function EmptyTable({ hasFacets, onClearAll }: { hasFacets: boolean; onClearAll: () => void }) {
   return (
     <div className="px-4 py-10 text-center">
-      <p className="text-sm font-bold text-slate-700 mb-1">
+      <p className="text-sm font-medium text-ink-secondary mb-1">
         {hasFacets ? 'No strings match these filters' : 'No matching strings'}
       </p>
-      <p className="text-xs text-slate-500 mb-3">
+      <p className="text-xs text-ink-mute mb-3">
         {hasFacets
           ? 'The active filter combination matches nothing — remove a filter or clear them all.'
           : 'No string data available for this view.'}
@@ -1269,7 +1276,7 @@ function EmptyTable({ hasFacets, onClearAll }: { hasFacets: boolean; onClearAll:
         <button
           type="button"
           onClick={onClearAll}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded-sm text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-hairline rounded-sm text-xs font-semibold text-ink-secondary hover:bg-slate-50"
         >
           Clear all filters
         </button>
@@ -1292,7 +1299,7 @@ function SkeletonDonut() {
   return (
     <div className="flex flex-col items-center gap-4 animate-pulse">
       <div className="w-[240px] h-[240px] rounded-full bg-slate-100 flex items-center justify-center">
-        <div className="w-[170px] h-[170px] rounded-full bg-white" />
+        <div className="w-[170px] h-[170px] rounded-full bg-canvas" />
       </div>
       <div className="space-y-2 w-full">
         {Array.from({ length: 3 }).map((_, i) => (
