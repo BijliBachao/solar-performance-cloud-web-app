@@ -493,10 +493,46 @@ fi
 echo ""
 
 # ═══════════════════════════════════════════════════════════════════════
+# SECTION 6: Design Token Discipline (WARN during /admin re-skin migration)
+# ═══════════════════════════════════════════════════════════════════════
+# Single source of truth = globals.css :root + tailwind var() mappings +
+# lib/design-tokens.ts. Components must use semantic tokens, never raw hex
+# or legacy ramp names. WARN mode while the admin re-skin is in progress;
+# flip to hard-fail once /admin is migrated (ADMIN-REDESIGN-PLAN Task 26).
+# Excludes the landing page's self-contained styled-jsx system (components/landing/);
+# *.css and lib/*.ts token sources are already outside this *.tsx scan.
+
+echo "── Section 6: Design Token Discipline (warn) ─────────"
+echo ""
+
+set +e
+HEXCOUNT=$(grep -rhoE '#[0-9a-fA-F]{3,8}' app/ components/ $EXCLUDE --exclude-dir=landing --include="*.tsx" 2>/dev/null | wc -l | tr -d ' ')
+LEGACYCOUNT=$(grep -rhoE 'solar-gold|spc-green|warm-cream|warm-text|warm-body|warm-muted|warm-divider' app/ components/ $EXCLUDE --exclude-dir=landing --include="*.tsx" 2>/dev/null | wc -l | tr -d ' ')
+set -e
+
+if [ "${HEXCOUNT:-0}" -gt 0 ]; then
+  echo -e "${YELLOW}WARN [6.1]: ${HEXCOUNT} raw hex colour(s) in app/+components — migrate to semantic tokens${NC}"
+  echo ""
+  WARNINGS=$((WARNINGS + 1))
+else
+  echo -e "${GREEN}PASS [6.1]: No raw hex in components${NC}"
+fi
+
+if [ "${LEGACYCOUNT:-0}" -gt 0 ]; then
+  echo -e "${YELLOW}WARN [6.2]: ${LEGACYCOUNT} legacy token usage(s) — migrate to primary/ink/canvas/hairline${NC}"
+  echo ""
+  WARNINGS=$((WARNINGS + 1))
+else
+  echo -e "${GREEN}PASS [6.2]: No legacy tokens${NC}"
+fi
+
+echo ""
+
+# ═══════════════════════════════════════════════════════════════════════
 # SUMMARY
 # ═══════════════════════════════════════════════════════════════════════
 
-TOTAL_CHECKS=20
+TOTAL_CHECKS=22
 PASSED=$((TOTAL_CHECKS - ERRORS - WARNINGS))
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
