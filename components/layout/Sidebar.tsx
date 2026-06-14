@@ -60,28 +60,28 @@ export function Sidebar({ role, userFullName, userRole, orgName, plantCount }: S
 
   const roleCls =
     userRole === 'SUPER_ADMIN'
-      ? 'bg-solar-gold/10 text-solar-gold-700'
-      : 'bg-slate-100 text-slate-600'
+      ? 'bg-primary-subtle text-primary-press'
+      : 'bg-canvas-soft text-ink-mute'
 
   return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-60 bg-white border-r border-slate-200 flex flex-col">
+    <aside className="fixed left-0 top-0 z-40 h-screen w-60 bg-canvas border-r border-hairline flex flex-col">
 
       {/* ── Logo ──────────────────────────────────────── */}
-      <div className="flex h-14 items-center gap-2.5 border-b border-slate-200 px-5 shrink-0">
-        <div className="flex items-center justify-center w-8 h-8 rounded-md bg-solar-gold-50">
-          <Sun className="h-5 w-5 text-solar-gold-600" strokeWidth={2} />
+      <div className="flex h-14 items-center gap-2.5 border-b border-hairline px-5 shrink-0">
+        <div className="flex items-center justify-center w-8 h-8 rounded-card bg-gradient-to-br from-primary-soft via-primary to-primary-press shadow-card">
+          <Sun className="h-[18px] w-[18px] text-on-primary" strokeWidth={1.8} />
         </div>
         <div>
-          <h1 className="text-sm font-bold leading-tight text-slate-900">Solar Performance</h1>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-solar-gold-600">Cloud</p>
+          <h1 className="text-sm font-medium leading-tight tracking-tight text-ink">Solar Performance</h1>
+          <p className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">Cloud</p>
         </div>
       </div>
 
       {/* ── Plant count stat ──────────────────────────── */}
       {typeof plantCount === 'number' && plantCount > 0 && (
-        <div className="flex items-center gap-2 px-5 py-2 border-b border-slate-100 bg-slate-50/70 shrink-0">
+        <div className="flex items-center gap-2 px-5 py-2 border-b border-hairline bg-canvas-soft shrink-0">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-          <span className="text-[11px] font-semibold text-slate-500">
+          <span className="text-[11px] font-medium text-ink-mute tabular-nums">
             {plantCount} plant{plantCount !== 1 ? 's' : ''} monitored
           </span>
         </div>
@@ -91,7 +91,7 @@ export function Sidebar({ role, userFullName, userRole, orgName, plantCount }: S
       <nav className="flex-1 overflow-y-auto py-3 px-3">
         {sections.map((section, si) => (
           <div key={section.label} className={cn(si > 0 && 'mt-5')}>
-            <p className="px-3 mb-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400 select-none">
+            <p className="px-3 mb-1.5 text-[9px] font-medium uppercase tracking-[0.12em] text-ink-mute select-none">
               {section.label}
             </p>
             <ul className="space-y-0.5">
@@ -105,21 +105,21 @@ export function Sidebar({ role, userFullName, userRole, orgName, plantCount }: S
                     <Link
                       href={item.href}
                       className={cn(
-                        'flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-semibold transition-colors relative',
+                        'flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] transition-colors relative',
                         isActive
-                          ? 'bg-solar-gold-50 text-solar-gold-700 font-bold'
-                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
+                          ? 'bg-primary-subtle text-primary-press font-medium'
+                          : 'text-ink-secondary font-normal hover:bg-canvas-soft hover:text-ink',
                       )}
                     >
                       {isActive && (
-                        <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r bg-solar-gold" />
+                        <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r bg-primary" />
                       )}
                       <item.icon
                         className={cn(
                           'h-[18px] w-[18px] shrink-0',
-                          isActive ? 'text-solar-gold-600' : 'text-slate-500',
+                          isActive ? 'text-primary' : 'text-ink-mute',
                         )}
-                        strokeWidth={2}
+                        strokeWidth={1.8}
                       />
                       {item.label}
                     </Link>
@@ -132,20 +132,20 @@ export function Sidebar({ role, userFullName, userRole, orgName, plantCount }: S
       </nav>
 
       {/* ── User card (bottom) ────────────────────────── */}
-      <div className="shrink-0 border-t border-slate-200 px-4 py-3">
+      <div className="shrink-0 border-t border-hairline px-4 py-3">
         {userFullName ? (
           <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="text-[12px] font-bold text-slate-800 truncate leading-tight">
+            <span className="text-[12px] font-medium text-ink truncate leading-tight">
               {userFullName}
             </span>
             {orgName && (
-              <span className="text-[10px] font-semibold text-slate-400 truncate leading-tight">
+              <span className="text-[10px] font-normal text-ink-mute truncate leading-tight">
                 {orgName}
               </span>
             )}
             {roleLabel && (
               <span className={cn(
-                'text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm w-fit mt-0.5',
+                'text-[9px] font-medium uppercase tracking-wider px-2 py-0.5 rounded-pill w-fit mt-0.5',
                 roleCls,
               )}>
                 {roleLabel}
@@ -154,8 +154,8 @@ export function Sidebar({ role, userFullName, userRole, orgName, plantCount }: S
           </div>
         ) : (
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Powered by</p>
-            <p className="text-xs font-bold text-slate-700">Bijli Bachao</p>
+            <p className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">Powered by</p>
+            <p className="text-xs font-medium text-ink">Bijli Bachao</p>
           </div>
         )}
       </div>
