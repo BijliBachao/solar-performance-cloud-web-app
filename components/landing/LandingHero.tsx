@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import Link from 'next/link'
 import { ArrowRight, Lock, MessageCircle, Mail } from 'lucide-react'
 
 /**
@@ -130,11 +129,11 @@ export default function LandingHero({ signedIn }: { signedIn: boolean }) {
 
           <div className="cta r2 d4">
             {signedIn ? (
-              <Link className="btn btn-primary" href="/auth-redirect">Go to Dashboard <ArrowRight size={15} /></Link>
+              <a className="btn btn-primary" href="/auth-redirect">Go to Dashboard <ArrowRight size={15} /></a>
             ) : (
               <>
-                <Link className="btn btn-primary" href="/sign-in">Log in <ArrowRight size={15} /></Link>
-                <Link className="btn btn-secondary" href="/sign-up">Sign up</Link>
+                <a className="btn btn-primary" href="/sign-in">Log in <ArrowRight size={15} /></a>
+                <a className="btn btn-secondary" href="/sign-up">Sign up</a>
               </>
             )}
           </div>
