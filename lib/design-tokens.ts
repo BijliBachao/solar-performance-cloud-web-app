@@ -122,16 +122,16 @@ export const STATUS_STYLES: Record<StatusKey, StatusStyle> = {
     fullDesc: 'An informational signal, typically mild underperformance (less than 10-25 percent below peer average) that may resolve on its own.',
     whatToCheck: 'Monitor trend. If persistent, schedule a routine cleaning or inspection.',
   },
-  // Indigo — distinct from healthy/warning/critical (status) and from offline
-  // (no data). Conveys "intentionally out of peer pool" — admin flagged this
-  // string as non-standard install (wall, east/west, shaded). Producing real
-  // energy; just not peer-comparable.
+  // Violet — distinct from healthy/warning/critical (status) and from offline
+  // (no data). Moved off indigo (indigo is now the brand CTA colour). Conveys
+  // "intentionally out of peer pool" — admin flagged this string as non-standard
+  // install (wall, east/west, shaded). Producing real energy; just not peer-comparable.
   'peer-excluded': {
-    fg: 'text-indigo-700',
-    bg: 'bg-indigo-50',
-    border: 'border-indigo-200',
-    solid: 'bg-indigo-600 text-white',
-    dot: 'bg-indigo-500',
+    fg: 'text-violet-700',
+    bg: 'bg-violet-50',
+    border: 'border-violet-200',
+    solid: 'bg-violet-600 text-white',
+    dot: 'bg-violet-500',
     label: 'Non-standard',
     shortDesc: 'Excluded from peer comparison — non-standard orientation or shaded.',
     fullDesc: 'Admin has flagged this string as a non-standard install (wall mount, east/west tilt, partial shade). Lower output is expected by design, so it is removed from the peer-comparison pool. Hardware alarms, dead-string detection, and stale-data detection remain active. Peer-relative scoring resumes when Performance Ratio (Phase 2) lands.',
@@ -295,10 +295,10 @@ export const PERF_BAND_STYLES: Record<PerfBand, PerfBandStyle> = {
     label: 'Unused',
   },
   peer_excluded: {
-    fg: 'text-indigo-700',
-    bg: 'bg-indigo-50',
-    cell: 'bg-indigo-50 text-indigo-700',
-    dot: 'bg-indigo-500',
+    fg: 'text-violet-700',
+    bg: 'bg-violet-50',
+    cell: 'bg-violet-50 text-violet-700',
+    dot: 'bg-violet-500',
     label: 'Non-standard',
   },
 }
@@ -473,3 +473,20 @@ export function providerBadge(provider?: string | null): ProviderBadgeStyle | nu
   const key = provider.toLowerCase() as ProviderKey
   return PROVIDER_BADGE_STYLES[key] ?? null
 }
+
+/**
+ * Centralized chart palette — single source for decorative chart/series colours.
+ * Charts/SVG read these `var(--chart-N)` strings (defined in globals.css :root),
+ * so changing a chart colour is a one-line edit there. Replaces the old
+ * gold-containing INVERTER_COLORS / TREND_LINE_COLORS arrays.
+ *
+ * NOTE: status arcs (healthy/warning/critical) do NOT use this — they stay
+ * semantic via STATUS_STYLES / the --status-* vars.
+ */
+export const CHART_SERIES = [
+  'var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)',
+  'var(--chart-5)', 'var(--chart-6)', 'var(--chart-7)', 'var(--chart-8)',
+] as const
+
+/** Dashed reference bands / baseline lines on charts (neutral, not brand). */
+export const CHART_REFERENCE = 'var(--color-hairline)'
