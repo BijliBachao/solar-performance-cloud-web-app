@@ -129,7 +129,15 @@
     background-color: var(--bg-page);
     color: var(--text-primary);
     font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    font-weight: 300;
+    font-feature-settings: 'ss01' 1, 'cv02' 1, 'cv03' 1, 'cv04' 1, 'cv11' 1;
+  }
+
+  /* Editorial display headings — thin weight + negative tracking (Stripe signature).
+     Per-element Tailwind weight/tracking utilities still override these defaults. */
+  h1, h2, h3, h4 {
+    font-weight: 300;
+    letter-spacing: -0.02em;
   }
 
   /* Tabular numerals by default when font-mono is applied */
