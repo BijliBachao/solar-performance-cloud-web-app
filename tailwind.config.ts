@@ -24,17 +24,52 @@ const config: Config = {
         // ━━━ SOLAR GOLD — the brand (v3 canonical) ━━━━━━━━━━━
         // Used as primary CTAs, active states, focus rings, brand accent.
         // Class names: bg-solar-gold, text-solar-gold-600, border-solar-gold-200
+        // ━━━ SEMANTIC TOKENS → CSS vars (single source: globals.css :root) ━━━
+        primary: {
+          DEFAULT: 'var(--color-primary)',
+          hover: 'var(--color-primary-hover)',
+          press: 'var(--color-primary-press)',
+          soft: 'var(--color-primary-soft)',
+          subtle: 'var(--color-primary-subtle)',
+          50: 'var(--color-primary-subtle)',
+          100: 'var(--color-primary-subtle)',
+          500: 'var(--color-primary)',
+          600: 'var(--color-primary-hover)',
+          700: 'var(--color-primary-press)',
+          900: '#1c1e54',
+        },
+        ink: {
+          DEFAULT: 'var(--color-ink)',
+          secondary: 'var(--color-ink-secondary)',
+          mute: 'var(--color-ink-mute)',
+        },
+        canvas: {
+          DEFAULT: 'var(--color-canvas)',
+          soft: 'var(--color-canvas-soft)',
+        },
+        cream: 'var(--color-cream)',
+        hairline: {
+          DEFAULT: 'var(--color-hairline)',
+          input: 'var(--color-hairline-input)',
+        },
+        'on-primary': 'var(--color-on-primary)',
+        chart: {
+          1: 'var(--chart-1)', 2: 'var(--chart-2)', 3: 'var(--chart-3)', 4: 'var(--chart-4)',
+          5: 'var(--chart-5)', 6: 'var(--chart-6)', 7: 'var(--chart-7)', 8: 'var(--chart-8)',
+        },
+
+        // solar-gold — legacy brand name, now → indigo via vars
         'solar-gold': {
-          DEFAULT: '#F59E0B',
-          50: '#FFFBEB',
-          100: '#FEF3C7',
-          200: '#FDE68A',
-          400: '#FBBF24',
-          500: '#F59E0B',
-          600: '#D97706',
-          700: '#B45309',
-          800: '#92400E',
-          900: '#78350F',
+          DEFAULT: 'var(--color-primary)',
+          50: 'var(--color-primary-subtle)',
+          100: 'var(--color-primary-subtle)',
+          200: '#d9d4ff',
+          400: 'var(--color-primary-soft)',
+          500: 'var(--color-primary)',
+          600: 'var(--color-primary-hover)',
+          700: 'var(--color-primary-press)',
+          800: 'var(--color-primary-press)',
+          900: '#1c1e54',
         },
 
         // ━━━ BB-GREEN — LANDING PAGE ONLY (secondary signal) ━━━
@@ -73,27 +108,26 @@ const config: Config = {
         // they now render as Solar Gold. Gradual migration; new code should
         // use `solar-gold` directly for clarity.
         spc: {
-          green: '#F59E0B',
-          'green-light': '#FBBF24',
-          'green-dark': '#D97706',
-          'green-tint': '#FEF3C7',
-          // Forward-compatible aliases
-          gold: '#F59E0B',
-          'gold-light': '#FBBF24',
-          'gold-dark': '#D97706',
-          'gold-tint': '#FEF3C7',
+          green: 'var(--color-primary)',
+          'green-light': 'var(--color-primary-soft)',
+          'green-dark': 'var(--color-primary-hover)',
+          'green-tint': 'var(--color-primary-subtle)',
+          gold: 'var(--color-primary)',
+          'gold-light': 'var(--color-primary-soft)',
+          'gold-dark': 'var(--color-primary-hover)',
+          'gold-tint': 'var(--color-primary-subtle)',
         },
 
         // ━━━ SURFACES — white canvas discipline ━━━━━━━━━━━━━
         // Canvas is pure white (Vodafone discipline).
         // Institutional dark is reserved for footer / auth / optional data panels.
         surface: {
-          page: '#FFFFFF',
-          card: '#FFFFFF',
-          subtle: '#F8FAFC', // slate-50 — alt rows, disabled surfaces
+          page: 'var(--color-canvas)',
+          card: 'var(--color-canvas)',
+          subtle: 'var(--color-canvas-soft)',
           hover: '#F1F5F9', // slate-100 — row/item hover
-          sidebar: '#FFFFFF', // white sidebar (Vodafone discipline)
-          'sidebar-hover': '#F8FAFC',
+          sidebar: 'var(--color-canvas)',
+          'sidebar-hover': 'var(--color-canvas-soft)',
           institutional: '#0F172A', // slate-900 — footer/auth only
           'institutional-alt': '#1E293B', // slate-800
         },
@@ -109,14 +143,7 @@ const config: Config = {
         // ━━━ LEGACY primary — now maps to solar-gold ━━━━━━━━━━
         // shadcn and other primitives still reference `primary-*`; redefining
         // the ramp keeps them working while delivering the new brand visually.
-        primary: {
-          50: '#FFFBEB',
-          100: '#FEF3C7',
-          500: '#F59E0B',
-          600: '#D97706',
-          700: '#B45309',
-          900: '#78350F',
-        },
+        // (primary is defined above as a semantic token → CSS vars)
 
         // ━━━ LEGACY accent / gray (DEPRECATED — use slate-*) ━━━━
         // Kept to avoid breaking un-migrated files; do NOT use in new code.
@@ -159,13 +186,18 @@ const config: Config = {
       },
 
       boxShadow: {
-        // Slate-tinted shadows — never pure black.
-        card: '0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.02)',
-        hover: '0 4px 12px rgba(15, 23, 42, 0.08)',
-        modal: '0 20px 40px rgba(15, 23, 42, 0.15)',
-        featured:
-          '0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 30px rgba(15, 23, 42, 0.08)',
-        'focus-ring': '0 0 0 3px rgba(245, 158, 11, 0.25)',
+        // Blue-tinted shadows via CSS vars (single source: globals.css).
+        card: 'var(--shadow-card)',
+        hover: 'var(--shadow-hover)',
+        modal: 'var(--shadow-modal)',
+        featured: 'var(--shadow-featured)',
+        'focus-ring': 'var(--shadow-focus-ring)',
+      },
+
+      borderRadius: {
+        input: 'var(--radius-input)',
+        card: 'var(--radius-card)',
+        pill: 'var(--radius-pill)',
       },
 
       animation: {
